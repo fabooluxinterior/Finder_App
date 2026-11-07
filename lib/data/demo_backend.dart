@@ -10,6 +10,7 @@ import '../core/sanitizer.dart';
 import '../models/follow_request.dart';
 import '../models/message.dart';
 import '../models/profile.dart';
+import '../models/security.dart';
 import 'backend.dart';
 import 'memory_images.dart';
 
@@ -82,7 +83,7 @@ class DemoBackend implements FinderBackend {
   Future<PrivateProfile> myPrivateProfile() async => _myPrivate;
 
   @override
-  Future<void> saveProfile(ProfileDraft d) async {
+  Future<int> saveProfile(ProfileDraft d) async {
     await _latency();
     if (ContactSanitizer.containsContactInfo(d.bio)) {
       throw const AppException(AppErrorCode.contactInfo, 'Phone numbers, @handles and links are not allowed.');
@@ -102,6 +103,7 @@ class DemoBackend implements FinderBackend {
       interests: d.interests,
       gallery: [..._myPrivate.gallery, ...d.newGalleryWebp.map(MemoryImages.put)].take(9).toList(),
     );
+    return 0;
   }
 
   @override
@@ -296,7 +298,7 @@ class DemoBackend implements FinderBackend {
   }
 
   @override
-  Future<void> sendVoice(String peerId, Uint8List aacBytes, {String? localPath}) async {
+  Future<void> sendVoice(String peerId, Uint8List aacBytes, {String? localPath, Duration duration = Duration.zero}) async {
     if (!_connected(meId, peerId)) {
       throw const AppException(AppErrorCode.notConnected, 'Chat unlocks once the follow request is accepted.');
     }
@@ -317,7 +319,7 @@ class DemoBackend implements FinderBackend {
           senderId: m.senderId,
           receiverId: m.receiverId,
           content: m.content,
-          audioUrl: m.audioUrl,
+          localAudioPath: m.localAudioPath,
           isRead: true,
           createdAt: m.createdAt,
         );
@@ -331,7 +333,125 @@ class DemoBackend implements FinderBackend {
   }
 
   @override
-  Future<String> playableAudioUrl(ChatMessage message) async => message.audioUrl ?? '';
+  bool get isEndToEndEncrypted => false;
+
+  @override
+  Future<VoicePlayback> voicePlayback(ChatMessage message) async => VoicePlayback.url(message.localAudioPath ?? '');
+
+  @override
+  Future<String?> safetyNumber(String peerId) async => null;
+
+  void _endConnection(String peerId) {
+    for (final key in [(meId, peerId), (peerId, meId)]) {
+      final row = _swipes[key];
+      if (row != null && row.action == 'accepted') row.action = 'rejected';
+    }
+    _threads.remove(peerId);
+    _social.add(null);
+  }
+
+  @override
+  Future<void> unmatch(String peerId) async => _endConnection(peerId);
+
+  @override
+  Future<void> blockUser(String peerId) async {
+    _endConnection(peerId);
+    _swipes.remove((peerId, meId));
+    _swipes[(meId, peerId)] = _Swipe(meId, peerId, 'rejected', null);
+    _social.add(null);
+  }
+
+  @override
+  Future<void> report(String peerId, ReportReason reason,
+      {String? details, List<ChatMessage> evidence = const [], bool block = true}) async {
+    await _latency();
+    if (block) await blockUser(peerId);
+  }
+
+  final _demoSessionStart = DateTime.now();
+
+  @override
+  Future<List<SessionInfo>> sessions() async => [
+        SessionInfo(id: 's1', createdAt: _demoSessionStart, lastActive: DateTime.now(), userAgent: 'This device', isCurrent: true, aal: _mfaVerified ? 'aal2' : 'aal1'),
+      ];
+
+  @override
+  Future<void> revokeSession(String sessionId) async {}
+
+  @override
+  Future<void> signOutOtherSessions() async {}
+
+  @override
+  Future<List<DeviceInfo>> devices() async => [
+        DeviceInfo(id: 'd1', label: 'Android phone', platform: 'android', createdAt: _demoSessionStart, lastSeen: DateTime.now(), isThisDevice: true),
+      ];
+
+  @override
+  Future<void> revokeDevice(String deviceId) async {}
+
+  bool _mfaVerified = false;
+  String? _mfaFactor;
+
+  @override
+  Future<MfaState> mfaState() async => MfaState(
+        verifiedFactorIds: [if (_mfaVerified && _mfaFactor != null) _mfaFactor!],
+        sessionIsAal2: _mfaVerified,
+        needsChallenge: false,
+      );
+
+  @override
+  Future<TotpEnrollment> enrollTotp() async {
+    _mfaFactor = 'demo-factor';
+    return const TotpEnrollment(
+      factorId: 'demo-factor',
+      secret: 'DEMODEMODEMODEMO',
+      uri: 'otpauth://totp/Finder:demo?secret=DEMODEMODEMODEMO&issuer=Finder',
+    );
+  }
+
+  @override
+  Future<void> verifyTotp(String factorId, String code) async {
+    await _latency();
+    if (!RegExp(r'^\d{6}$').hasMatch(code)) {
+      throw const AppException(AppErrorCode.mfaRequired, 'Enter the 6-digit code (any digits work in demo).');
+    }
+    _mfaVerified = true;
+  }
+
+  @override
+  Future<void> removeTotp(String factorId) async {
+    _mfaVerified = false;
+    _mfaFactor = null;
+  }
+
+  @override
+  Future<void> deleteAccount() async {
+    await _latency();
+    _me = null;
+    await signOut();
+  }
+
+  @override
+  Future<String?> staffRole() async => null;
+
+  @override
+  Future<Map<String, dynamic>> securityOverview() async =>
+      throw const AppException(AppErrorCode.unknown, 'Not available in demo');
+
+  @override
+  Future<List<ReportSummary>> openReports() async => const [];
+
+  @override
+  Future<Map<String, dynamic>> openReportEvidence(String reportId, String accessReason) async => const {};
+
+  @override
+  Future<void> resolveReport(String reportId, {required bool actioned, required String resolution}) async {}
+
+  @override
+  Future<List<PendingMedia>> pendingMedia() async => const [];
+
+  @override
+  Future<void> reviewMedia(String mediaId, {required bool approve}) async {}
 
   // ------------------------------------------------------------- helpers ----
 
@@ -343,7 +463,7 @@ class DemoBackend implements FinderBackend {
         senderId: from,
         receiverId: to,
         content: content,
-        audioUrl: audio,
+        localAudioPath: audio,
         isRead: false,
         createdAt: at ?? DateTime.now(),
       );

@@ -6,6 +6,7 @@ import 'core/theme.dart';
 import 'features/auth/auth_screen.dart';
 import 'features/home/home_shell.dart';
 import 'features/onboarding/profile_setup_screen.dart';
+import 'features/security/mfa_screens.dart';
 import 'providers.dart';
 
 class FinderApp extends StatelessWidget {
@@ -41,6 +42,11 @@ class _AuthGate extends ConsumerWidget {
       error: (e, _) => Scaffold(body: Center(child: Text('$e'))),
       data: (id) {
         if (id == null) return const AuthScreen();
+        // Accounts with two-step verification must complete it first.
+        final mfa = ref.watch(mfaStateProvider);
+        if (mfa.isLoading) return const _Splash();
+        final m = mfa.value;
+        if (m != null && m.needsChallenge) return MfaChallengeScreen(factorId: m.verifiedFactorIds.first);
         final profile = ref.watch(myProfileProvider);
         return profile.when(
           loading: () => const _Splash(),

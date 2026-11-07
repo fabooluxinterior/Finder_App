@@ -8,4 +8,16 @@ class AppException implements Exception {
   String toString() => message;
 }
 
-enum AppErrorCode { swipeLimit, premiumRequired, notConnected, contactInfo, network, unknown }
+enum AppErrorCode {
+  swipeLimit,
+  premiumRequired,
+  notConnected,
+  contactInfo,
+  rateLimited,
+  mfaRequired,
+  deviceLimit,
+  imageRejected,
+  encryption,
+  network,
+  unknown,
+}

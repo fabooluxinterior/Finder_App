@@ -8,6 +8,7 @@ import '../onboarding/profile_setup_screen.dart';
 import '../paywall/paywall_sheet.dart';
 import '../../providers.dart';
 import 'profile_detail_screen.dart';
+import '../security/security_center_screen.dart';
 
 class MyProfileScreen extends ConsumerWidget {
   const MyProfileScreen({super.key});
@@ -84,10 +85,12 @@ class MyProfileScreen extends ConsumerWidget {
               subtitle: Text('Manage or cancel in Google Play › Subscriptions'),
             ),
           const SizedBox(height: 12),
-          const ListTile(
-            leading: Icon(Icons.shield_outlined),
-            title: Text('Privacy protection'),
-            subtitle: Text('Screenshots & screen recording are blocked. Contact details are filtered from bios, notes and opening messages.'),
+          ListTile(
+            leading: const Icon(Icons.shield_outlined),
+            title: const Text('Privacy & security'),
+            subtitle: const Text('Two-step verification, devices, sessions, encryption, delete account'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SecurityCenterScreen())),
           ),
           if (AppConfig.isDemo)
             const ListTile(

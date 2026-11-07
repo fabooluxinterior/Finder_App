@@ -46,3 +46,13 @@ app.*.map.json
 
 # Widget Preview related
 .widget_preview/
+
+# Rust build output
+rust/target/
+
+# Local secrets (never commit)
+.env
+.env.*
+!.env.example
+supabase/.env
+supabase/functions/.env

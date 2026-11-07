@@ -10,30 +10,43 @@ import 'package:uuid/uuid.dart';
 import '../core/config.dart';
 
 class MediaService {
-  static const maxImageBytes = 100 * 1024;
-  static const _imageSide = 800;
+  /// Upload size cap. The server re-encodes every photo to an 800×800 WebP
+  /// (≤100 KB) after validation and moderation, so the client only needs to
+  /// send a reasonably sized JPEG.
+  static const maxUploadBytes = 2 * 1024 * 1024;
+  static const _uploadSide = 1600;
 
   final _picker = ImagePicker();
 
-  /// Picks a photo and compresses it to WebP, 800x800 bounds, quality 70,
-  /// stepping quality down only if the result is still over 100 KB.
+  /// Picks a photo and compresses it to a JPEG (≤1600 px, EXIF dropped)
+  /// for upload. Client-side checks are a convenience: the server validates
+  /// the real file type, strips metadata, moderates and re-encodes anyway.
   Future<Uint8List?> pickCompressedPhoto() async {
-    final file = await _picker.pickImage(source: ImageSource.gallery, maxWidth: 1600, maxHeight: 1600);
+    final file = await _picker.pickImage(
+      source: ImageSource.gallery,
+      maxWidth: _uploadSide.toDouble(),
+      maxHeight: _uploadSide.toDouble(),
+      requestFullMetadata: false,
+    );
     if (file == null) return null;
     final raw = await file.readAsBytes();
-    if (kIsWeb) return raw; // Web is demo-only; nothing is uploaded.
-
-    for (var quality = 70; quality >= 30; quality -= 10) {
+    if (kIsWeb) {
+      // Browsers already re-encode via image_picker; the server does the rest.
+      if (raw.lengthInBytes > maxUploadBytes) throw StateError('Photo is larger than 2 MB. Try another one.');
+      return raw;
+    }
+    for (var quality = 85; quality >= 50; quality -= 10) {
       final out = await FlutterImageCompress.compressWithList(
         raw,
-        minWidth: _imageSide,
-        minHeight: _imageSide,
+        minWidth: _uploadSide,
+        minHeight: _uploadSide,
         quality: quality,
-        format: CompressFormat.webp,
+        format: CompressFormat.jpeg,
+        keepExif: false,
       );
-      if (out.lengthInBytes <= maxImageBytes) return out;
+      if (out.lengthInBytes <= maxUploadBytes) return out;
     }
-    throw StateError('Photo is too detailed to compress under 100 KB. Try another one.');
+    throw StateError('Photo is too large. Try another one.');
   }
 }
 

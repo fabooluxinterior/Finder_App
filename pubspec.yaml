@@ -46,6 +46,10 @@ dependencies:
   uuid: ^4.6.0
   intl: ^0.20.3
   cross_file: ^0.3.5+5
+  flutter_rust_bridge: 2.13.0
+  finder_crypto:
+    path: rust_builder
+  flutter_secure_storage: ^11.2.0
 
 dev_dependencies:
   flutter_test:

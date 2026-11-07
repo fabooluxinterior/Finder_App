@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../data/memory_images.dart';
+import 'media_auth.dart';
 import 'theme.dart';
 
 /// Displays network URLs, signed storage URLs, or demo `mem:` images,
@@ -27,6 +28,7 @@ class ProfilePhoto extends StatelessWidget {
     }
     return Image.network(
       u,
+      headers: MediaAuth.isMediaUrl(u) ? MediaAuth.headers?.call() : null,
       fit: fit,
       gaplessPlayback: true,
       loadingBuilder: (c, child, progress) =>

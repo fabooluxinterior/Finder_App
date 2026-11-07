@@ -3,6 +3,7 @@ import 'dart:typed_data';
 import '../models/follow_request.dart';
 import '../models/message.dart';
 import '../models/profile.dart';
+import '../models/security.dart';
 
 enum OtpChannel { email, phone }
 
@@ -23,10 +24,11 @@ class ProfileDraft {
   final String bio;
   final List<String> interests;
 
-  /// Compressed WebP bytes; null keeps the current primary photo.
+  /// Client-compressed JPEG; the server validates, strips metadata,
+  /// moderates, re-encodes to WebP and encrypts it. Null keeps the current one.
   final Uint8List? primaryPhotoWebp;
 
-  /// Compressed WebP bytes appended to the locked gallery.
+  /// Client-compressed JPEGs appended to the locked gallery (same pipeline).
   final List<Uint8List> newGalleryWebp;
 }
 
@@ -42,7 +44,8 @@ abstract class FinderBackend {
 
   Future<PublicProfile?> myProfile();
   Future<PrivateProfile> myPrivateProfile();
-  Future<void> saveProfile(ProfileDraft draft);
+  /// Returns how many uploaded photos are held for manual review.
+  Future<int> saveProfile(ProfileDraft draft);
 
   Future<List<PublicProfile>> fetchFeed();
 
@@ -57,11 +60,45 @@ abstract class FinderBackend {
   /// Locked gallery + interests; empty unless connected (enforced by RLS).
   Future<PrivateProfile> privateProfileOf(String userId);
 
+  /// True when chats are end-to-end encrypted (false in offline demo mode).
+  bool get isEndToEndEncrypted;
+
   Stream<List<ChatMessage>> watchMessages(String peerId);
   Future<void> sendText(String peerId, String text);
-  Future<void> sendVoice(String peerId, Uint8List aacBytes, {String? localPath});
+  Future<void> sendVoice(String peerId, Uint8List aacBytes, {String? localPath, Duration duration});
   Future<void> markThreadRead(String peerId);
-  Future<String> playableAudioUrl(ChatMessage message);
+  Future<VoicePlayback> voicePlayback(ChatMessage message);
+
+  /// 60-digit number to compare in person; null when not available.
+  Future<String?> safetyNumber(String peerId);
+
+  // Safety
+  Future<void> unmatch(String peerId);
+  Future<void> blockUser(String peerId);
+
+  /// [evidence] is decrypted on this device and shared only with explicit consent.
+  Future<void> report(String peerId, ReportReason reason, {String? details, List<ChatMessage> evidence, bool block});
+
+  // Account security
+  Future<List<SessionInfo>> sessions();
+  Future<void> revokeSession(String sessionId);
+  Future<void> signOutOtherSessions();
+  Future<List<DeviceInfo>> devices();
+  Future<void> revokeDevice(String deviceId);
+  Future<MfaState> mfaState();
+  Future<TotpEnrollment> enrollTotp();
+  Future<void> verifyTotp(String factorId, String code);
+  Future<void> removeTotp(String factorId);
+  Future<void> deleteAccount();
+
+  // Staff (moderator / admin); every call is authorised server-side.
+  Future<String?> staffRole();
+  Future<Map<String, dynamic>> securityOverview();
+  Future<List<ReportSummary>> openReports();
+  Future<Map<String, dynamic>> openReportEvidence(String reportId, String accessReason);
+  Future<void> resolveReport(String reportId, {required bool actioned, required String resolution});
+  Future<List<PendingMedia>> pendingMedia();
+  Future<void> reviewMedia(String mediaId, {required bool approve});
 
   /// Fires when requests/connections change (realtime).
   Stream<void> socialChanges();

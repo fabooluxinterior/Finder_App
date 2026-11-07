@@ -7,6 +7,7 @@ A private social connection network for Kerala: Bumble-style swiping on top of I
 - Chat (text + 45 s voice notes) unlocks only after the receiver taps **Accept Follow**, or when both people request each other.
 - `FLAG_SECURE` is set on the Android window, so screenshots, screen recording and Recents previews are blocked everywhere in the app.
 - Phone numbers, @handles and URLs are stripped from bios, notes and opening messages on the client. The database rejects them in bios and notes too.
+- **Chats are end-to-end encrypted** (Olm / Double Ratchet via the audited `vodozemac` Rust library). Photos are validated, stripped of EXIF/GPS, moderated, and stored AES-256-GCM encrypted. Two-step verification, device and session management, block/report with consent-based evidence, and a staff dashboard with an audit trail are included. See **[SECURITY.md](SECURITY.md)** for the full architecture, its known limitations, and the tests. It has not yet been independently audited.
 
 ## Try it on your phone (no store publishing)
 
@@ -15,6 +16,10 @@ The app runs in a **demo mode** with offline sample data whenever it's built wit
 1. **Android APK:** every push runs the `Android APK` workflow (`.github/workflows/android-apk.yml`). Open the run under **Actions**, download the `finder-apk` artifact, unzip it, and install `finder-demo-arm64.apk`. Your phone will ask you to allow installs from your browser or file manager. Use `finder-demo-armv7.apk` on older 32-bit phones.
 2. **Locally:** `flutter run` with a phone plugged in (USB debugging on), or `flutter build apk --release`.
 
+## Building
+
+You need Flutter 3.47 and a Rust toolchain (`rustup`). The Android build compiles the Rust crypto core automatically through cargokit (`rust_builder/`). For the web app, also run `flutter_rust_bridge_codegen build-web --release` and serve with the headers in `web/_headers`.
+
 ## Project layout
 
 ```
@@ -22,13 +27,15 @@ lib/
   main.dart                    picks the Supabase or demo backend
   app.dart                     auth gate: login → profile setup → home
   providers.dart               Riverpod providers (feed, requests, premium, chat)
-  core/                        config, theme, contact sanitizer, shared widgets
+  core/                        config, theme, contact sanitizer, shared widgets, media auth headers
+  security/                    E2EE engine, keystore-backed storage, encrypted local message vault
+  src/rust/                    generated Dart bindings for the Rust crypto core
   models/                      PublicProfile, PrivateProfile, FollowRequest, ChatMessage
   data/
     backend.dart               FinderBackend interface
-    supabase_backend.dart      production: RPCs, RLS-backed queries, Realtime, signed Storage URLs
+    supabase_backend.dart      production: RPCs, RLS-backed queries, Realtime, E2EE messaging, secure uploads
     demo_backend.dart          offline demo that mirrors the server rules
-    media_service.dart         WebP compression (800×800, q70, ≤100 KB) and AAC-LC voice recorder
+    media_service.dart         JPEG pre-compression (server re-encodes to 800×800 WebP) and AAC-LC voice recorder
     purchases_service.dart     RevenueCat (fast_track_79_monthly), plus a demo stub
   features/
     auth/                      phone / email OTP
@@ -38,9 +45,18 @@ lib/
     chat/                      real-time thread, voice recorder with waveform, playback
     paywall/                   ₹79 Fast-Track bottom sheet
     profile/                   private profile view, own profile
+    security/                  MFA, devices & sessions, delete account, safety numbers
+    safety/                    block, unmatch, report (with consent screen)
+    admin/                     staff dashboard: security events, reports, photo review
+rust/                          finder_crypto: vodozemac + AES-256-GCM wrapper (with tests)
 supabase/
   migrations/20261107000000_init_finder.sql   schema, RLS, RPCs, storage, realtime
-  functions/revenuecat-webhook/index.ts       keeps profiles.is_premium in sync
+  migrations/20261108000000_security.sql      E2EE keys/envelopes, encrypted media, blocks, reports, staff, audit, rate limits
+  functions/process-image/                    upload validation, EXIF strip, moderation, encryption
+  functions/media/                            authorised, decrypting image delivery
+  functions/delete-account/, media-maintenance/, revenuecat-webhook/
+  tests/                                      SQL attack-scenario suites (run.sh)
+  config.toml                                 auth hardening: token TTL, rotation, MFA, rate limits
 android/app/src/main/kotlin/com/finderapp/finder/MainActivity.kt   FLAG_SECURE
 ```
 
@@ -50,9 +66,13 @@ android/app/src/main/kotlin/com/finderapp/finder/MainActivity.kt   FLAG_SECURE
 
 ```bash
 supabase link --project-ref <ref>
-supabase db push                                    # applies the migration
+supabase db push                                    # applies both migrations
+supabase secrets set --env-file supabase/functions/.env   # values per .env.example
+supabase functions deploy process-image
+supabase functions deploy media
+supabase functions deploy delete-account
+supabase functions deploy media-maintenance
 supabase functions deploy revenuecat-webhook --no-verify-jwt
-supabase secrets set REVENUECAT_WEBHOOK_AUTH=<random string>
 ```
 
 In the dashboard: enable **Phone** (with an SMS provider such as Twilio or MSG91) and/or **Email OTP** under Auth → Providers. The email template must include `{{ .Token }}` so users get a 6-digit code.
@@ -93,7 +113,7 @@ Before a Play Store release, replace the debug signing config in `android/app/bu
 | Users can't grant themselves premium | column-level `UPDATE` grant excludes `is_premium` |
 | Kerala City Boost | `get_feed` ordering: premium + same city first |
 
-These were checked against Postgres 16 with Supabase's `auth` / `storage` schemas stubbed.
+These rules and the security layer are covered by the SQL suites in `supabase/tests/`, which run against Postgres 16 with Supabase's `auth` / `storage` schemas stubbed. CI runs them on every push.
 
 ### Note on voice-note size
 

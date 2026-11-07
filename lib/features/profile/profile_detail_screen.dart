@@ -7,6 +7,7 @@ import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../models/profile.dart';
 import '../../providers.dart';
+import '../safety/safety_actions.dart';
 
 /// Instagram-private-style profile: public header always visible; photo grid
 /// and interests come from `profile_private`, which RLS returns only to
@@ -28,6 +29,21 @@ class ProfileDetailScreen extends ConsumerWidget {
             pinned: true,
             foregroundColor: Colors.white,
             backgroundColor: AppColors.ink,
+            actions: [
+              if (profile.id != ref.watch(backendProvider).currentUserId)
+                PopupMenuButton<String>(
+                  onSelected: (v) async {
+                    final done = v == 'report'
+                        ? await showReportSheet(context, profile)
+                        : await confirmBlock(context, ref, profile);
+                    if (done && context.mounted) Navigator.pop(context);
+                  },
+                  itemBuilder: (_) => const [
+                    PopupMenuItem(value: 'report', child: Text('Report')),
+                    PopupMenuItem(value: 'block', child: Text('Block')),
+                  ],
+                ),
+            ],
             flexibleSpace: FlexibleSpaceBar(
               background: Stack(fit: StackFit.expand, children: [
                 ProfilePhoto(url: profile.primaryPhoto, name: profile.fullName),

@@ -78,7 +78,7 @@ class _ProfileSetupScreenState extends ConsumerState<ProfileSetupScreen> {
     }
     setState(() => _busy = true);
     try {
-      await ref.read(backendProvider).saveProfile(ProfileDraft(
+      final pendingReview = await ref.read(backendProvider).saveProfile(ProfileDraft(
             fullName: _name.text.trim(),
             age: int.parse(_age.text),
             city: _city,
@@ -88,7 +88,12 @@ class _ProfileSetupScreenState extends ConsumerState<ProfileSetupScreen> {
             newGalleryWebp: _newGallery,
           ));
       ref.invalidate(myProfileProvider);
+      ref.invalidate(myPrivateProfileProvider);
       ref.invalidate(feedProvider);
+      if (mounted && pendingReview > 0) {
+        showSnack(context, '$pendingReview photo${pendingReview == 1 ? ' is' : 's are'} being reviewed. They’ll appear once approved.',
+            icon: Icons.hourglass_top_rounded);
+      }
       if (mounted && !widget.isOnboarding) Navigator.pop(context);
     } catch (e) {
       if (mounted) showSnack(context, '$e', icon: Icons.error_outline);

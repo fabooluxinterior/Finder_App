@@ -11,6 +11,8 @@ import '../../models/message.dart';
 import '../../models/profile.dart';
 import '../../providers.dart';
 import '../profile/profile_detail_screen.dart';
+import '../safety/safety_actions.dart';
+import '../security/safety_number_screen.dart';
 import 'voice_bubble.dart';
 import 'voice_recorder_bar.dart';
 
@@ -94,7 +96,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     }
     setState(() => _sending = true);
     try {
-      await ref.read(backendProvider).sendVoice(widget.peer.id, note.bytes, localPath: note.path);
+      await ref.read(backendProvider).sendVoice(widget.peer.id, note.bytes, localPath: note.path, duration: note.duration);
       _scrollToLatest();
     } catch (e) {
       if (mounted) showSnack(context, '$e', icon: Icons.error_outline);
@@ -136,15 +138,47 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
               child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                 Text(widget.peer.firstName, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w800)),
                 Row(children: [
-                  Icon(Icons.shield_rounded, size: 12, color: Colors.green.shade600),
+                  Icon(backend.isEndToEndEncrypted ? Icons.lock_rounded : Icons.lock_open_rounded,
+                      size: 12, color: backend.isEndToEndEncrypted ? Colors.green.shade600 : Colors.orange.shade700),
                   const SizedBox(width: 3),
-                  Text('Private · screenshots blocked',
-                      style: TextStyle(fontSize: 11, color: Colors.green.shade700, fontWeight: FontWeight.w600)),
+                  Flexible(
+                    child: Text(
+                      backend.isEndToEndEncrypted ? 'End-to-end encrypted · screenshots blocked' : 'Demo · not encrypted',
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        color: backend.isEndToEndEncrypted ? Colors.green.shade700 : Colors.orange.shade800,
+                      ),
+                    ),
+                  ),
                 ]),
               ]),
             ),
           ]),
         ),
+        actions: [
+          PopupMenuButton<String>(
+            onSelected: (v) async {
+              switch (v) {
+                case 'verify':
+                  Navigator.push(context, MaterialPageRoute(builder: (_) => SafetyNumberScreen(peer: widget.peer)));
+                case 'report':
+                  if (await showReportSheet(context, widget.peer, thread: thread) && context.mounted) Navigator.pop(context);
+                case 'block':
+                  if (await confirmBlock(context, ref, widget.peer) && context.mounted) Navigator.pop(context);
+                case 'unmatch':
+                  if (await confirmUnmatch(context, ref, widget.peer) && context.mounted) Navigator.pop(context);
+              }
+            },
+            itemBuilder: (_) => [
+              if (backend.isEndToEndEncrypted) const PopupMenuItem(value: 'verify', child: Text('Verify encryption')),
+              const PopupMenuItem(value: 'report', child: Text('Report')),
+              const PopupMenuItem(value: 'block', child: Text('Block')),
+              const PopupMenuItem(value: 'unmatch', child: Text('Unmatch')),
+            ],
+          ),
+        ],
       ),
       body: Column(
         children: [
@@ -342,8 +376,15 @@ class _ThreadIntro extends StatelessWidget {
             Text('You and ${peer.firstName} are connected',
                 style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
             const SizedBox(height: 6),
-            Text('Text and voice notes are free. Messages here can’t be screenshotted.',
-                textAlign: TextAlign.center, style: TextStyle(color: Colors.grey.shade600)),
+            Consumer(
+              builder: (context, ref, _) => Text(
+                ref.watch(backendProvider).isEndToEndEncrypted
+                    ? 'Messages and voice notes are end-to-end encrypted: only you and ${peer.firstName} can read them. Screenshots are blocked.'
+                    : 'Text and voice notes are free. Screenshots are blocked.',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: Colors.grey.shade600),
+              ),
+            ),
           ]),
         ),
       );
