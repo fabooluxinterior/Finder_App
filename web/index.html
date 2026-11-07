@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="description" content="Finder: a private social connection network for Kerala.">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Finder">
+  <link rel="icon" type="image/png" href="favicon.png">
+  <title>Finder</title>
+  <style>
+    html, body { margin: 0; height: 100%; background: #F7F7FA; }
+    #boot { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px;
+            font: 600 15px system-ui, sans-serif; color: #14161F; }
+    #boot .logo { width: 64px; height: 64px; border-radius: 20px; background: linear-gradient(135deg, #FF4F6D, #D7265A); }
+    #boot .bar { width: 120px; height: 4px; border-radius: 2px; background: #e6e6ee; overflow: hidden; }
+    #boot .bar::after { content: ""; display: block; width: 40%; height: 100%; background: #FF4F6D; animation: s 1s ease-in-out infinite alternate; }
+    @keyframes s { from { transform: translateX(-10%); } to { transform: translateX(160%); } }
+  </style>
+</head>
+<body>
+  <div id="boot"><div class="logo"></div><div>Loading Finder demo…</div><div class="bar"></div></div>
+  <script>
+    window.addEventListener('flutter-first-frame', function () { var b = document.getElementById('boot'); if (b) b.remove(); });
+  </script>
+  <script src="flutter_bootstrap.js" async></script>
+</body>
+</html>
