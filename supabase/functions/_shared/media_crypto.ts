@@ -80,6 +80,23 @@ export async function rewrapDek(mediaId: string, wrappedDek: string, kekId: stri
   return { wrappedDek: `${b64(wrapIv)}.${b64(wrapped)}`, kekId: active };
 }
 
+/** Small secrets (e.g. OAuth refresh tokens): AES-256-GCM directly under the
+ *  active KEK, AAD-bound to a context string such as `music:<user id>`. */
+export async function sealSecret(context: string, plaintext: string): Promise<{ sealed: string; kekId: string }> {
+  const { active, keys } = await keyring();
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const ct = await gcm("encrypt", keys.get(active)!, iv, enc.encode(plaintext), `secret:${context}:${active}`);
+  return { sealed: `${b64(iv)}.${b64(ct)}`, kekId: active };
+}
+
+export async function openSecret(context: string, sealed: string, kekId: string): Promise<string> {
+  const { keys } = await keyring();
+  const kek = keys.get(kekId);
+  if (!kek) throw new Error("unknown KEK version");
+  const [iv, ct] = sealed.split(".");
+  return new TextDecoder().decode(await gcm("decrypt", kek, unb64(iv), unb64(ct), `secret:${context}:${kekId}`));
+}
+
 export function resetKeyringForTests() {
   ring = null;
 }

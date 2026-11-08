@@ -15,6 +15,11 @@ insert into public.profiles (id, full_name, age, city, bio, avatar_urls) values 
 alter table public.profiles enable trigger profiles_age_from_dob;
 select 'age computed from DOB, not client value (expect not 99):', age from public.profiles where id = '00000000-0000-0000-0000-000000000001';
 insert into public.profile_private (id, interests, gallery_urls) values ('00000000-0000-0000-0000-000000000001', '{music}', '{bbbbbbbb-0000-0000-0000-000000000001}');
+-- Fixtures go live in Discover: onboarded with 4 photos (primary + gallery kept first).
+update public.profiles p set is_onboarded = true,
+  photo_urls = (p.avatar_urls || coalesce((select pp.gallery_urls from public.profile_private pp where pp.id = p.id), '{}')
+                || array[gen_random_uuid()::text, gen_random_uuid()::text, gen_random_uuid()::text])[1:4]
+ where cardinality(p.avatar_urls) > 0;
 insert into auth.mfa_factors (user_id, status) values ('00000000-0000-0000-0000-000000000003', 'verified');
 insert into public.staff_roles (user_id, role) values ('00000000-0000-0000-0000-000000000003', 'moderator');
 insert into public.media_objects (id, owner_id, kind, status, storage_path, wrapped_dek, kek_id, nonce, sha256, width, height, bytes) values

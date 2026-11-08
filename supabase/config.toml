@@ -66,3 +66,17 @@ verify_jwt = true
 
 [functions.revenuecat-webhook]
 verify_jwt = false
+
+[functions.photo-remove]
+verify_jwt = true
+
+[functions.music-connect]
+verify_jwt = true
+
+# Spotify redirects the browser here without a Supabase JWT; the one-time
+# `state` row (10-minute life) authenticates the request instead.
+[functions.music-callback]
+verify_jwt = false
+
+[functions.music-sync]
+verify_jwt = true

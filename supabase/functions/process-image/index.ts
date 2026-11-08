@@ -1,4 +1,6 @@
-// POST { path, kind: "primary" | "gallery" | "selfie", request_id? }
+// POST { path, kind: "photo" | "primary" | "gallery" | "selfie", replaces?, request_id? }
+//   kind "photo": one of the 6 profile slots; `replaces` swaps a slot in place
+//   and the old encrypted object is deleted from storage immediately.
 // Secure upload pipeline: quarantine -> validate -> decode/re-encode (strips
 // EXIF/GPS) -> moderate -> encrypt (AES-256-GCM envelope) -> publish.
 import { admin, rateLimit, requireUser, securityEvent } from "../_shared/auth.ts";
@@ -7,7 +9,7 @@ import { RejectedImage, sanitizeImage } from "../_shared/image.ts";
 import { sealMedia } from "../_shared/media_crypto.ts";
 import { moderate } from "../_shared/moderation.ts";
 
-const PATH = /^[0-9a-f-]{36}\/[0-9a-f-]{36}\.(jpg|png)$/;
+const PATH = /^[0-9a-f-]{36}\/[0-9a-f-]{36}\.(jpg|png|webp)$/;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
 Deno.serve((req) =>
@@ -18,9 +20,11 @@ Deno.serve((req) =>
 
     const body = await req.json().catch(() => ({}));
     const path = String(body.path ?? "");
-    const kind = ["primary", "gallery", "selfie"].includes(body.kind) ? (body.kind as string) : null;
+    const kind = ["photo", "primary", "gallery", "selfie"].includes(body.kind) ? (body.kind as string) : null;
     const requestId = String(body.request_id ?? "");
-    if (!kind || !PATH.test(path) || !path.startsWith(`${user.id}/`) || (kind === "selfie" && !UUID.test(requestId))) {
+    const replaces = body.replaces == null ? null : String(body.replaces);
+    if (!kind || !PATH.test(path) || !path.startsWith(`${user.id}/`) || (kind === "selfie" && !UUID.test(requestId))
+        || (replaces !== null && (kind !== "photo" || !UUID.test(replaces)))) {
       await securityEvent(user.id, "upload_path_rejected", "warning", {});
       throw new HttpError(400, "bad_request", "Invalid upload.");
     }
@@ -59,6 +63,7 @@ Deno.serve((req) =>
       wrapped_dek: sealed.wrappedDek, kek_id: sealed.kekId, nonce: sealed.nonce, sha256: sealed.sha256,
       width: clean.width, height: clean.height, bytes: clean.webp.length, moderation: verdict.labels,
       reviewed_at: verdict.status === "approved" ? new Date().toISOString() : null,
+      replaces,
     });
     if (insErr) {
       await admin.storage.from("media_encrypted").remove([storagePath]);
@@ -76,10 +81,31 @@ Deno.serve((req) =>
       return json(req, { media_id: mediaId, status: "pending" });
     }
 
+    if (kind === "photo" && replaces) {
+      // Only the owner's own published photo can be replaced.
+      const { data: old } = await admin.from("media_objects").select("owner_id, status").eq("id", replaces).maybeSingle();
+      if (!old || old.owner_id !== user.id || old.status === "deleted") {
+        await discard(mediaId, storagePath);
+        throw new HttpError(404, "not_found", "That photo is no longer on your profile.");
+      }
+    }
+
     if (verdict.status === "approved") {
-      const { error } = await admin.rpc("attach_media", { p_media: mediaId });
-      if (error) throw error;
+      const { data: dead, error } = await admin.rpc("attach_media", { p_media: mediaId });
+      if (error) {
+        await discard(mediaId, storagePath);
+        if (error.hint === "PHOTO_SLOTS_FULL") throw new HttpError(409, "slots_full", "All 6 photo slots are full.");
+        throw error;
+      }
+      // Storage hygiene: a replaced photo's object is deleted right away.
+      const paths = (dead as string[] | null) ?? [];
+      if (paths.length) await admin.storage.from("media_encrypted").remove(paths);
     }
     return json(req, { media_id: mediaId, status: verdict.status });
   })
 );
+
+async function discard(mediaId: string, storagePath: string) {
+  await admin.from("media_objects").update({ status: "deleted" }).eq("id", mediaId);
+  await admin.storage.from("media_encrypted").remove([storagePath]);
+}

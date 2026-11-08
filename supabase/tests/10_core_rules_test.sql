@@ -6,6 +6,11 @@ insert into public.profiles (id, full_name, age, city, bio, avatar_urls)
   select id, 'User '||right(id::text,2), 25, case when right(id::text,2)::int % 2 = 0 then 'Kochi' else 'Kozhikode' end, '', array[gen_random_uuid()::text] from auth.users;
 update public.profiles set is_premium = true where id = '00000000-0000-0000-0000-000000000003';
 insert into public.profile_private (id, interests, gallery_urls) values ('00000000-0000-0000-0000-000000000001', '{music}', '{x/gallery/1.webp}');
+-- Fixtures go live in Discover: onboarded with 4 photos (primary + gallery kept first).
+update public.profiles p set is_onboarded = true,
+  photo_urls = (p.avatar_urls || coalesce((select pp.gallery_urls from public.profile_private pp where pp.id = p.id), '{}')
+                || array[gen_random_uuid()::text, gen_random_uuid()::text, gen_random_uuid()::text])[1:4]
+ where cardinality(p.avatar_urls) > 0;
 
 create or replace function pg_temp.expect_fail(sql text, label text) returns text language plpgsql as $$
 begin
