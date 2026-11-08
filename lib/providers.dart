@@ -97,3 +97,24 @@ final privateProfileProvider = FutureProvider.family<PrivateProfile, String>((re
 final messagesProvider = StreamProvider.autoDispose.family<List<ChatMessage>, String>(
   (ref, peerId) => ref.watch(backendProvider).watchMessages(peerId),
 );
+
+/// The owner's photo slots (in order, including uploads still in review).
+final photoSlotsProvider = FutureProvider<List<PhotoSlot>>((ref) async {
+  ref.watch(myProfileProvider);
+  return ref.watch(backendProvider).photoSlots();
+});
+
+/// The owner's music connection. Cached for the session; the server caches
+/// the Spotify import for 12 h, so swipes and feeds never hit Spotify.
+final musicStateProvider = FutureProvider<MusicState>((ref) async {
+  ref.watch(authUserProvider);
+  return ref.watch(backendProvider).musicState();
+});
+
+/// Full profile cards (with shared artists/interests), kept for the session
+/// so reopening a profile doesn't refetch.
+final profileCardProvider = FutureProvider.family<PublicProfile, String>((ref, userId) async {
+  final link = ref.keepAlive();
+  Future<void>.delayed(const Duration(minutes: 10), link.close);
+  return ref.watch(backendProvider).profileCard(userId);
+});

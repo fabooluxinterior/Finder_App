@@ -33,11 +33,8 @@ void main() {
     test('demo backend mirrors the server: 18+, locked, required before profile', () async {
       final b = DemoBackend();
       await b.verifyOtp(OtpChannel.phone, '+919876543210', '123456');
-      final draft = ProfileDraft(fullName: 'Asha', city: 'Kochi', bio: '', interests: const []);
-      await expectLater(
-        b.saveProfile(draft),
-        throwsA(isA<AppException>().having((e) => e.code, 'code', AppErrorCode.dobRequired)),
-      );
+      Future<void> create() => b.createProfile(fullName: 'Asha', city: 'Kochi', details: const ProfilePatch({}));
+      await expectLater(create(), throwsA(isA<AppException>().having((e) => e.code, 'code', AppErrorCode.dobRequired)));
       final minor = DateTime.now().subtract(const Duration(days: 365 * 17));
       await expectLater(b.setDob(minor), throwsA(isA<AppException>().having((e) => e.code, 'code', AppErrorCode.underage)));
       expect(await b.setDob(DateTime(1999, 5, 20)), greaterThanOrEqualTo(26));
@@ -45,7 +42,7 @@ void main() {
         b.setDob(DateTime(1990, 1, 1)),
         throwsA(isA<AppException>().having((e) => e.code, 'code', AppErrorCode.dobLocked)),
       );
-      await b.saveProfile(draft);
+      await create();
       expect((await b.myProfile())!.age, ageOn(DateTime(1999, 5, 20)));
     });
   });

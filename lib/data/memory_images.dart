@@ -14,5 +14,6 @@ class MemoryImages {
   }
 
   static Uint8List? get(String key) => _store[key];
+  static void remove(String key) => _store.remove(key);
   static bool isMemory(String url) => url.startsWith('mem:');
 }

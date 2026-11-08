@@ -16,6 +16,8 @@ import '../../core/widgets.dart';
 import '../../data/media_service.dart';
 import '../../models/message.dart';
 import '../../models/profile.dart';
+import '../../models/profile_catalog.dart';
+import '../requests/requests_screen.dart' show IntroQuote;
 import '../../providers.dart';
 import '../paywall/paywall_sheet.dart';
 import '../profile/profile_detail_screen.dart';
@@ -153,6 +155,15 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     final thread = messages.value ?? const <ChatMessage>[];
     if (_initialIds == null && messages.hasValue) _initialIds = thread.map((m) => m.id).toSet();
 
+    final conn = ref.watch(connectionsProvider).value?.where((x) => x.profile.id == widget.peer.id).firstOrNull;
+    final intro = conn?.introText == null
+        ? null
+        : IntroQuote(
+            question: promptById(conn!.introPromptId ?? '')?.question,
+            text: conn.introText!,
+            label: conn.introFromMe ? 'You replied to their prompt' : '${widget.peer.firstName} replied to your prompt',
+            note: 'Sent with the request, before this chat was encrypted.',
+          );
     return Scaffold(
       appBar: PreferredSize(
         preferredSize: const Size.fromHeight(64),
@@ -246,14 +257,27 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
               loading: () => const SizedBox.shrink(),
               error: (e, _) => Center(child: Text('$e')),
               data: (list) => list.isEmpty
-                  ? _ThreadIntro(peer: widget.peer, encrypted: backend.isEndToEndEncrypted)
+                  ? ListView(
+                      padding: const EdgeInsets.all(16),
+                      children: [
+                        _ThreadIntro(peer: widget.peer, encrypted: backend.isEndToEndEncrypted),
+                        ?intro,
+                      ],
+                    )
                   : ListView.builder(
                       controller: _scroll,
                       reverse: true,
                       padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
                       itemCount: list.length + 1,
                       itemBuilder: (_, i) {
-                        if (i == list.length) return _PrivacyPill(encrypted: backend.isEndToEndEncrypted);
+                        if (i == list.length) {
+                          return Column(
+                            children: [
+                              _PrivacyPill(encrypted: backend.isEndToEndEncrypted),
+                              if (intro != null) Padding(padding: const EdgeInsets.only(top: 8), child: intro),
+                            ],
+                          );
+                        }
                         final m = list[list.length - 1 - i];
                         final older = i + 1 < list.length ? list[list.length - 2 - i] : null;
                         final newer = i > 0 ? list[list.length - i] : null;

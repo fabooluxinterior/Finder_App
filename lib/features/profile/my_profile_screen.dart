@@ -8,9 +8,9 @@ import '../../core/config.dart';
 import '../../core/feedback.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
-import '../../models/profile.dart';
 import '../../providers.dart';
-import '../onboarding/profile_setup_screen.dart';
+import 'profile_editor_screen.dart';
+import '../profile_builder/completion_meter.dart';
 import '../paywall/paywall_sheet.dart';
 import '../security/security_center_screen.dart';
 import '../legal/policy_screen.dart';
@@ -114,10 +114,7 @@ class _MyProfileScreenState extends ConsumerState<MyProfileScreen> {
                       ),
                       const SizedBox(height: 10),
                       Pressable(
-                        onTap: () => Navigator.push(
-                          context,
-                          MaterialPageRoute(builder: (_) => const ProfileSetupScreen(isOnboarding: false)),
-                        ),
+                        onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ProfileEditorScreen())),
                         child: Container(
                           height: 36,
                           padding: const EdgeInsets.symmetric(horizontal: 14),
@@ -190,7 +187,10 @@ class _MyProfileScreenState extends ConsumerState<MyProfileScreen> {
               ),
             ),
             const SizedBox(height: 14),
-            _Completeness(profile: me),
+            CompletionMeter(
+              profile: me,
+              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ProfileEditorScreen())),
+            ),
             if (me.bio.isNotEmpty) ...[
               const SizedBox(height: 14),
               Container(
@@ -284,74 +284,6 @@ class _MyProfileScreenState extends ConsumerState<MyProfileScreen> {
             ),
           ],
         ),
-      ),
-    );
-  }
-}
-
-/// How complete the profile is, and the one next thing that would help.
-class _Completeness extends StatelessWidget {
-  const _Completeness({required this.profile});
-  final PublicProfile profile;
-
-  @override
-  Widget build(BuildContext context) {
-    final c = context.fc;
-    final steps = [
-      (profile.primaryPhoto != null, 'Add a photo so people can see you.'),
-      (profile.photoCount >= 3, 'Add at least 3 photos so people get a feel for you.'),
-      (profile.bio.isNotEmpty, 'Add a bio so people have an easy way to start talking.'),
-      (profile.isVerified, 'Get verified to earn the blue tick.'),
-    ];
-    final done = steps.where((s) => s.$1).length;
-    if (done == steps.length) return const SizedBox.shrink();
-    final pct = (done / steps.length * 100).round();
-    final next = steps.firstWhere((s) => !s.$1).$2;
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: c.surface,
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: c.hair),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  'Profile $pct% complete',
-                  style: TextStyle(fontSize: 15, height: 20 / 15, fontWeight: FontWeight.w600, color: c.ink),
-                ),
-              ),
-              Pressable(
-                onTap: () => Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => profile.isVerified || done < 3
-                        ? const ProfileSetupScreen(isOnboarding: false)
-                        : const VerificationScreen(),
-                  ),
-                ),
-                child: const Text(
-                  'Finish',
-                  style: TextStyle(fontSize: 15, height: 20 / 15, fontWeight: FontWeight.w600, color: Color(0xFFFF7A62)),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 10),
-          ClipRRect(
-            borderRadius: BorderRadius.circular(999),
-            child: LinearProgressIndicator(value: done / steps.length, minHeight: 6, backgroundColor: c.hair, color: c.accent),
-          ),
-          const SizedBox(height: 10),
-          Text(
-            next,
-            style: TextStyle(fontSize: 14, height: 20 / 14, color: c.ink3),
-          ),
-        ],
       ),
     );
   }

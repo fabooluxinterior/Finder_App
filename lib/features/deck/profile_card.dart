@@ -1,14 +1,45 @@
 import 'package:flutter/material.dart';
 
+import 'package:flutter/services.dart';
+
 import '../../core/brand.dart';
 
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../models/profile.dart';
 
-/// Discover card: white rim, full-bleed photo, frosted fade carrying the
-/// text, and the two actions inside the card.
-class ProfileCard extends StatelessWidget {
+/// One page of the browsing stack: a photo, or a prompt card placed between
+/// photos.
+sealed class CardPage {
+  const CardPage();
+}
+
+class PhotoPage extends CardPage {
+  const PhotoPage(this.url);
+  final String? url;
+}
+
+class PromptPage extends CardPage {
+  const PromptPage(this.prompt);
+  final ProfilePrompt prompt;
+}
+
+/// photo, prompt, photo, prompt, photo, prompt, then the remaining photos.
+List<CardPage> cardPages(PublicProfile p) {
+  final photos = p.allPhotos;
+  final out = <CardPage>[];
+  for (var i = 0; i < photos.length || i < p.prompts.length; i++) {
+    if (i < photos.length) out.add(PhotoPage(photos[i]));
+    if (i < p.prompts.length) out.add(PromptPage(p.prompts[i]));
+  }
+  if (out.isEmpty) out.add(const PhotoPage(null));
+  return out;
+}
+
+/// Discover card: framed photo stack with prompt cards between photos (tap
+/// the left/right side to move through it), the details and both actions in
+/// the card. Tapping a prompt answer starts a reply to that answer.
+class ProfileCard extends StatefulWidget {
   const ProfileCard({
     super.key,
     required this.profile,
@@ -16,6 +47,7 @@ class ProfileCard extends StatelessWidget {
     required this.onTap,
     required this.onPass,
     required this.onRequest,
+    this.onReply,
     this.interactive = true,
   });
 
@@ -26,41 +58,83 @@ class ProfileCard extends StatelessWidget {
   final VoidCallback onTap;
   final VoidCallback onPass;
   final VoidCallback onRequest;
+  final ValueChanged<ProfilePrompt>? onReply;
 
-  /// False for the card underneath (cheaper: no blur, no buttons).
+  /// False for the card underneath (cheaper: no buttons).
   final bool interactive;
 
   static String heroTag(String id) => 'photo-$id';
 
   @override
+  State<ProfileCard> createState() => _ProfileCardState();
+}
+
+class _ProfileCardState extends State<ProfileCard> {
+  int _page = 0;
+  late List<CardPage> _pages = cardPages(widget.profile);
+
+  @override
+  void didUpdateWidget(ProfileCard old) {
+    super.didUpdateWidget(old);
+    if (old.profile.id != widget.profile.id) {
+      _pages = cardPages(widget.profile);
+      _page = 0;
+    }
+  }
+
+  void _step(int d) {
+    final next = (_page + d).clamp(0, _pages.length - 1);
+    if (next == _page) {
+      HapticFeedback.lightImpact(); // edge of the stack
+      return;
+    }
+    HapticFeedback.selectionClick();
+    setState(() => _page = next);
+  }
+
+  @override
   Widget build(BuildContext context) {
     final c = context.fc;
+    final profile = widget.profile;
     // Intent reveals itself as you drag: 0 at rest, 1 at ~45% of the threshold travel.
-    final progress = (dragX.abs() / 45).clamp(0.0, 1.0);
-    final requesting = dragX > 0;
-    final bars = profile.photoCount.clamp(1, 7);
+    final progress = (widget.dragX.abs() / 45).clamp(0.0, 1.0);
+    final requesting = widget.dragX > 0;
+    final page = _pages[_page];
+    final interactive = widget.interactive;
 
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.all(6),
-        decoration: BoxDecoration(
-          color: c.surface,
-          borderRadius: BorderRadius.circular(40),
-          border: Border.all(color: c.hair),
-        ),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(34),
-          child: Stack(
-            fit: StackFit.expand,
-            children: [
-              RepaintBoundary(
-                child: Hero(
-                  tag: heroTag(profile.id),
-                  child: ProfilePhoto(url: profile.primaryPhoto, name: profile.fullName),
-                ),
+    return Container(
+      padding: const EdgeInsets.all(6),
+      decoration: BoxDecoration(
+        color: c.surface,
+        borderRadius: BorderRadius.circular(40),
+        border: Border.all(color: c.hair),
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(34),
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            RepaintBoundary(
+              child: AnimatedSwitcher(
+                duration: Motion.of(context, const Duration(milliseconds: 160)),
+                layoutBuilder: (current, previous) => Stack(fit: StackFit.expand, children: [...previous, ?current]),
+                child: switch (page) {
+                  PhotoPage(:final url) when _page == 0 => Hero(
+                    key: const ValueKey('p0'),
+                    tag: ProfileCard.heroTag(profile.id),
+                    child: ProfilePhoto(url: url, name: profile.fullName),
+                  ),
+                  PhotoPage(:final url) => ProfilePhoto(key: ValueKey('p$_page'), url: url, name: profile.fullName),
+                  PromptPage(:final prompt) => _PromptFace(
+                    key: ValueKey('q$_page'),
+                    prompt: prompt,
+                    onReply: interactive && widget.onReply != null ? () => widget.onReply!(prompt) : null,
+                  ),
+                },
               ),
-              // Night fade carrying the text (static: cached as one layer).
+            ),
+            // Night fade carrying the text (static: cached as one layer).
+            if (page is PhotoPage)
               const IgnorePointer(
                 child: DecoratedBox(
                   decoration: BoxDecoration(
@@ -73,67 +147,184 @@ class ProfileCard extends StatelessWidget {
                   ),
                 ),
               ),
-              if (bars > 1)
-                Positioned(
-                  top: 12,
-                  left: 16,
-                  right: 16,
-                  child: ExcludeSemantics(
-                    child: Row(
-                      children: [
-                        for (var i = 0; i < bars; i++) ...[
-                          if (i > 0) const SizedBox(width: 4),
-                          Expanded(
-                            child: Container(
-                              height: 3,
-                              decoration: BoxDecoration(
-                                color: Colors.white.withValues(alpha: i == 0 ? 1 : 0.4),
-                                borderRadius: BorderRadius.circular(99),
-                              ),
+            // Tap left / right to move through photos and prompts. On a prompt
+            // page only the edges flip, so the answer and Reply stay tappable.
+            if (interactive && _pages.length > 1 && page is PhotoPage)
+              Positioned.fill(
+                bottom: 260,
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: _TapZone(label: 'Previous', onTap: () => _step(-1)),
+                    ),
+                    Expanded(
+                      child: _TapZone(label: 'Next', onTap: () => _step(1)),
+                    ),
+                  ],
+                ),
+              ),
+            if (interactive && _pages.length > 1 && page is PromptPage) ...[
+              Positioned(
+                left: 0,
+                top: 0,
+                bottom: 260,
+                width: 56,
+                child: _TapZone(label: 'Previous', onTap: () => _step(-1)),
+              ),
+              Positioned(
+                right: 0,
+                top: 0,
+                bottom: 260,
+                width: 56,
+                child: _TapZone(label: 'Next', onTap: () => _step(1)),
+              ),
+            ],
+            if (_pages.length > 1)
+              Positioned(
+                top: 12,
+                left: 16,
+                right: 16,
+                child: ExcludeSemantics(
+                  child: Row(
+                    children: [
+                      for (var i = 0; i < _pages.length; i++) ...[
+                        if (i > 0) const SizedBox(width: 4),
+                        Expanded(
+                          child: Container(
+                            height: 3,
+                            decoration: BoxDecoration(
+                              color: Colors.white.withValues(alpha: i == _page ? 1 : 0.35),
+                              borderRadius: BorderRadius.circular(99),
                             ),
                           ),
-                        ],
+                        ),
                       ],
-                    ),
+                    ],
                   ),
                 ),
-              if (interactive) ...[
-                // Swipe intent: a transparent ring with an icon, no text.
-                Align(
-                  alignment: const Alignment(0, -0.3),
-                  child: IgnorePointer(
-                    child: Opacity(
-                      opacity: progress,
-                      child: Transform.scale(
-                        scale: 0.85 + 0.15 * progress,
-                        child: _SwipeIcon(
-                          icon: requesting ? VIcons.plus : VIcons.close,
-                          color: requesting ? c.accent : Colors.white,
-                        ),
+              ),
+            if (interactive) ...[
+              // Swipe intent: a transparent ring with an icon, no text.
+              Align(
+                alignment: const Alignment(0, -0.3),
+                child: IgnorePointer(
+                  child: Opacity(
+                    opacity: progress,
+                    child: Transform.scale(
+                      scale: 0.85 + 0.15 * progress,
+                      child: _SwipeIcon(
+                        icon: requesting ? VIcons.plus : VIcons.close,
+                        color: requesting ? c.accent : Colors.white,
                       ),
                     ),
                   ),
                 ),
-                Positioned(
-                  left: 20,
-                  right: 20,
-                  bottom: 20,
-                  child: RepaintBoundary(
-                    child: _Details(profile: profile, onPass: onPass, onRequest: onRequest),
+              ),
+              Positioned(
+                left: 20,
+                right: 20,
+                bottom: 20,
+                child: RepaintBoundary(
+                  child: GestureDetector(
+                    behavior: HitTestBehavior.translucent,
+                    onTap: widget.onTap,
+                    child: _Details(
+                      profile: profile,
+                      compact: page is PromptPage,
+                      onPass: widget.onPass,
+                      onRequest: widget.onRequest,
+                    ),
                   ),
                 ),
-              ],
+              ),
             ],
-          ),
+          ],
         ),
       ),
     );
   }
 }
 
+class _TapZone extends StatelessWidget {
+  const _TapZone({required this.label, required this.onTap});
+  final String label;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) => Semantics(
+    button: true,
+    label: label,
+    child: GestureDetector(behavior: HitTestBehavior.opaque, onTap: onTap),
+  );
+}
+
+/// A prompt between photos: the question, the answer, and a reply action.
+class _PromptFace extends StatelessWidget {
+  const _PromptFace({super.key, required this.prompt, this.onReply});
+  final ProfilePrompt prompt;
+  final VoidCallback? onReply;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.fc;
+    return Container(
+      color: c.surface,
+      padding: const EdgeInsets.fromLTRB(28, 56, 28, 220),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            prompt.question,
+            style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600, color: c.ink3),
+          ),
+          const SizedBox(height: 12),
+          Semantics(
+            button: onReply != null,
+            label: 'Answer: ${prompt.answer}. ${onReply != null ? 'Double tap to reply' : ''}',
+            excludeSemantics: true,
+            child: GestureDetector(
+              onTap: onReply,
+              child: Text(
+                prompt.answer,
+                style: TextStyle(fontSize: 28, height: 1.25, fontWeight: FontWeight.w700, letterSpacing: -0.6, color: c.ink),
+              ),
+            ),
+          ),
+          if (onReply != null) ...[
+            const SizedBox(height: 18),
+            Pressable(
+              onTap: onReply,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(999),
+                  border: Border.all(color: c.accent),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    VIcon(VIcons.chat, size: 18, color: c.accent),
+                    const SizedBox(width: 8),
+                    Text(
+                      'Reply to this',
+                      style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: c.accent),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
 class _Details extends StatelessWidget {
-  const _Details({required this.profile, required this.onPass, required this.onRequest});
+  const _Details({required this.profile, required this.onPass, required this.onRequest, this.compact = false});
   final PublicProfile profile;
+  final bool compact;
   final VoidCallback onPass;
   final VoidCallback onRequest;
 
@@ -185,7 +376,11 @@ class _Details extends StatelessWidget {
             ),
           ],
         ),
-        if (profile.bio.isNotEmpty) ...[
+        if (profile.sharedArtists.isNotEmpty || profile.topArtists.isNotEmpty) ...[
+          const SizedBox(height: 10),
+          MusicAffinityTag(profile: profile),
+        ],
+        if (profile.bio.isNotEmpty && !compact) ...[
           const SizedBox(height: 10),
           Text(
             profile.bio,
@@ -270,4 +465,61 @@ class _SwipeIcon extends StatelessWidget {
     alignment: Alignment.center,
     child: VIcon(icon, size: 38, color: color, stroke: 2.6),
   );
+}
+
+/// "You both listen to …" when there's an overlap; otherwise their top
+/// artists in one line. Both come from stored data (no Spotify call).
+class MusicAffinityTag extends StatelessWidget {
+  const MusicAffinityTag({super.key, required this.profile});
+  final PublicProfile profile;
+
+  static const green = Color(0xFF1ED760);
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.fc;
+    final shared = profile.sharedArtists;
+    if (shared.isNotEmpty) {
+      final more = shared.length - 1;
+      return Container(
+        padding: const EdgeInsets.fromLTRB(10, 7, 14, 7),
+        decoration: BoxDecoration(
+          color: green.withValues(alpha: 0.14),
+          borderRadius: BorderRadius.circular(999),
+          border: Border.all(color: green.withValues(alpha: 0.5)),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.music_note_rounded, size: 16, color: green),
+            const SizedBox(width: 6),
+            Flexible(
+              child: Text(
+                'You both listen to ${shared.first.name}${more > 0 ? ' +$more' : ''}',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: c.ink),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+    final names = profile.topArtists.take(2).map((a) => a.name).join(', ');
+    final more = profile.topArtists.length - 2;
+    return Row(
+      children: [
+        Icon(Icons.music_note_rounded, size: 16, color: c.muted),
+        const SizedBox(width: 6),
+        Flexible(
+          child: Text(
+            '$names${more > 0 ? ' +$more' : ''}',
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(fontSize: 14.5, color: c.ink2),
+          ),
+        ),
+      ],
+    );
+  }
 }

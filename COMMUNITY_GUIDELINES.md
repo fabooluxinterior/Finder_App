@@ -1,6 +1,6 @@
 # Vouby Community Guidelines
 
-**Version 2026-11-10.** Draft: have this reviewed by a lawyer before publishing.
+**Version 2026-11-11.** Draft: have this reviewed by a lawyer before publishing.
 
 Vouby is a private place to meet people in Kerala. These guidelines keep it respectful and safe. They're part of our [Terms of Service](TERMS_OF_SERVICE.md). Breaking them can get content removed or your account banned.
 

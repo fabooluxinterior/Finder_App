@@ -7,28 +7,30 @@ import '../models/security.dart';
 
 enum OtpChannel { email, phone }
 
-class ProfileDraft {
-  const ProfileDraft({
-    required this.fullName,
-    required this.city,
-    required this.bio,
-    required this.interests,
-    this.primaryPhotoWebp,
-    this.newGalleryWebp = const [],
-  });
+/// Partial profile update. Only the keys present are written; the server
+/// validates every value (catalog options, lengths, no contact details).
+class ProfilePatch {
+  const ProfilePatch(this.fields);
+  final Map<String, Object?> fields;
 
-  final String fullName;
-  final String city;
-  final String bio;
-  final List<String> interests;
+  ProfilePatch merge(ProfilePatch o) => ProfilePatch({...fields, ...o.fields});
 
-  /// Client-compressed JPEG; the server validates, strips metadata,
-  /// moderates, re-encodes to WebP and encrypts it. Null keeps the current one.
-  final Uint8List? primaryPhotoWebp;
-
-  /// Client-compressed JPEGs appended to the locked gallery (same pipeline).
-  final List<Uint8List> newGalleryWebp;
+  static const fullName = 'full_name';
+  static const city = 'city';
+  static const bio = 'bio';
+  static const occupation = 'occupation';
+  static const education = 'education';
+  static const heightCm = 'height_cm';
+  static const gender = 'gender';
+  static const pronouns = 'pronouns';
+  static const languages = 'languages';
+  static const lifestyle = 'lifestyle_attributes';
+  static const interestTags = 'interest_tags';
+  static const prompts = 'prompts';
+  static const onboardingStage = 'onboarding_stage';
 }
+
+enum MusicSyncResult { synced, cached, reauthRequired, disconnected }
 
 /// Everything the UI needs from the server. Implemented by
 /// [SupabaseBackend] (production) and [DemoBackend] (offline demo).
@@ -57,8 +59,43 @@ abstract class FinderBackend {
   Future<PublicProfile?> myProfile();
   Future<PrivateProfile> myPrivateProfile();
 
-  /// Returns how many uploaded photos are held for manual review.
-  Future<int> saveProfile(ProfileDraft draft);
+  // Onboarding & profile builder
+  /// Stage 1: community standards acknowledgement (before the profile exists).
+  Future<void> acknowledgeStandards(String version);
+
+  /// Stage 2: creates the profile row (needs the DOB first).
+  Future<void> createProfile({required String fullName, required String city, required ProfilePatch details});
+  Future<void> updateProfile(ProfilePatch patch);
+
+  /// Flags the profile live; throws listing what's missing.
+  Future<void> completeOnboarding();
+
+  /// The owner's photo slots in order (including uploads in review).
+  Future<List<PhotoSlot>> photoSlots();
+
+  /// Uploads an already-optimised photo (≤100 KB WebP) into the next free
+  /// slot, or in place of [replaces]. The replaced photo is deleted.
+  Future<ImageUploadStatus> uploadPhoto(Uint8List bytes, {required String mime, String? replaces});
+  Future<void> removePhoto(String mediaId);
+  Future<void> reorderPhotos(List<String> mediaIds);
+
+  /// Full card for one profile, with shared artists/interests vs. the viewer.
+  Future<PublicProfile> profileCard(String userId);
+
+  /// Icebreaker: a reply anchored to one of their prompt answers, sent with a
+  /// follow request (chat stays locked until they accept).
+  Future<SwipeOutcome> replyToPrompt(String targetId, String promptId, String text);
+
+  // Music connector (Spotify)
+  Future<MusicState> musicState();
+
+  /// Spotify consent page to open in the browser.
+  Future<Uri> musicAuthorizeUrl();
+
+  /// Re-imports top artists at most every 12 h (or when [force]d).
+  Future<MusicSyncResult> syncMusic({bool force = false});
+  Future<void> setArtistVisibility(String artistId, {required bool visible});
+  Future<void> disconnectMusic();
 
   Future<List<PublicProfile>> fetchFeed();
 

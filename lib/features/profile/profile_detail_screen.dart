@@ -7,14 +7,23 @@ import '../../core/widgets.dart';
 import '../../models/profile.dart';
 import '../../providers.dart';
 import '../deck/profile_card.dart';
+import '../onboarding/onboarding_flow.dart' show lifestyleIcon;
+import '../profile_builder/icebreaker_sheet.dart';
+import '../profile_builder/music_panel.dart' show ArtistAvatar;
+import '../../core/phosphor.dart';
+import '../../models/profile_catalog.dart';
 import '../safety/safety_actions.dart';
 
 /// Profile visit: photos and interests are visible to every signed-in user
 /// (not blocked). Contact details and exact location are never part of a
 /// profile; only the district/city is shown.
 class ProfileDetailScreen extends ConsumerStatefulWidget {
-  const ProfileDetailScreen({super.key, required this.profile, this.onPass, this.onRequest});
+  const ProfileDetailScreen({super.key, required this.profile, this.onPass, this.onRequest, this.onReplied});
   final PublicProfile profile;
+
+  /// Called after a prompt reply was sent from this screen (the deck then
+  /// moves on without sending a second request).
+  final VoidCallback? onReplied;
 
   /// Provided when opened from the Discover deck.
   final VoidCallback? onPass;
@@ -27,7 +36,17 @@ class ProfileDetailScreen extends ConsumerStatefulWidget {
 class _ProfileDetailScreenState extends ConsumerState<ProfileDetailScreen> {
   int _photo = 0;
 
-  PublicProfile get profile => widget.profile;
+  PublicProfile get profile => ref.watch(profileCardProvider(widget.profile.id)).value ?? widget.profile;
+
+  Future<void> _reply(ProfilePrompt prompt) async {
+    final outcome = await showIcebreakerSheet(context, profile, prompt);
+    if (outcome == null || !mounted) return;
+    Navigator.pop(context);
+    if (widget.onReplied != null) {
+      Future.delayed(const Duration(milliseconds: 120), widget.onReplied);
+    }
+    ref.invalidate(feedProvider);
+  }
 
   void _act(VoidCallback? f) {
     Navigator.pop(context);
@@ -47,20 +66,35 @@ class _ProfileDetailScreenState extends ConsumerState<ProfileDetailScreen> {
   Widget build(BuildContext context) {
     final c = context.fc;
     final backend = ref.watch(backendProvider);
-    final priv = ref.watch(privateProfileProvider(profile.id)).value ?? PrivateProfile.empty;
     final myId = backend.currentUserId;
     final isMe = profile.id == myId;
-    final mine = isMe || myId == null ? null : ref.watch(privateProfileProvider(myId)).value;
+    final mine = isMe ? null : ref.watch(myProfileProvider).value;
     final connected = ref.watch(connectionsProvider).value?.any((x) => x.profile.id == profile.id) ?? false;
     final fromDeck = widget.onPass != null && widget.onRequest != null;
     final showActions = fromDeck && !connected && !isMe;
     final top = MediaQuery.paddingOf(context).top;
     final screen = MediaQuery.sizeOf(context);
 
-    final photos = <String?>[profile.primaryPhoto, ...priv.gallery.where((u) => u != profile.primaryPhoto)];
+    // The first photo leads; the rest alternate with prompts below.
+    final all = profile.allPhotos;
+    final photos = <String?>[all.isEmpty ? null : all.first];
     final index = _photo.clamp(0, photos.length - 1);
-    final common = mine == null ? <String>{} : priv.interests.toSet().intersection(mine.interests.toSet());
-    final extra = photos.skip(1).toList();
+    final common = mine == null ? <String>{} : profile.interestTags.toSet().intersection(mine.interestTags.toSet());
+    final extra = all.skip(1).toList();
+    final canReply = !isMe && !connected;
+    final prompts = profile.prompts;
+
+    Widget promptCard(ProfilePrompt p) => _PromptCard(prompt: p, onReply: canReply ? () => _reply(p) : null);
+    final interleaved = <Widget>[
+      for (var i = 0; i < prompts.length || i < extra.length; i++) ...[
+        if (i < prompts.length) promptCard(prompts[i]),
+        if (i == 0) _BasicsSection(profile: profile),
+        if (i < extra.length) _PhotoCard(url: extra[i], name: profile.fullName),
+        if (i == 1 && profile.topArtists.isNotEmpty) _MusicSection(profile: profile),
+      ],
+      if (prompts.isEmpty && extra.isEmpty) _BasicsSection(profile: profile),
+      if (profile.topArtists.isNotEmpty && prompts.length < 2 && extra.length < 2) _MusicSection(profile: profile),
+    ];
 
     return Scaffold(
       body: Stack(
@@ -78,6 +112,7 @@ class _ProfileDetailScreenState extends ConsumerState<ProfileDetailScreen> {
                     children: [
                       AnimatedSwitcher(
                         duration: Motion.of(context, const Duration(milliseconds: 220)),
+                        layoutBuilder: (current, previous) => Stack(fit: StackFit.expand, children: [...previous, ?current]),
                         child: index == 0
                             ? Hero(
                                 key: const ValueKey(0),
@@ -228,8 +263,8 @@ class _ProfileDetailScreenState extends ConsumerState<ProfileDetailScreen> {
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     if (profile.bio.isNotEmpty) _Section(title: 'About', child: _Body(profile.bio)),
-                    if (extra.isNotEmpty) _PhotoCard(url: extra[0], name: profile.fullName),
-                    if (priv.interests.isNotEmpty)
+                    ...interleaved,
+                    if (profile.interestTags.isNotEmpty)
                       _Section(
                         title: 'Interests',
                         trailing: common.isEmpty ? null : '${common.length} in common',
@@ -237,7 +272,7 @@ class _ProfileDetailScreenState extends ConsumerState<ProfileDetailScreen> {
                           spacing: 8,
                           runSpacing: 8,
                           children: [
-                            for (final i in priv.interests)
+                            for (final i in profile.interestTags)
                               Container(
                                 padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
                                 decoration: BoxDecoration(
@@ -257,7 +292,6 @@ class _ProfileDetailScreenState extends ConsumerState<ProfileDetailScreen> {
                           ],
                         ),
                       ),
-                    for (final u in extra.skip(1)) _PhotoCard(url: u, name: profile.fullName),
                     _Section(
                       title: null,
                       child: Row(
@@ -475,4 +509,156 @@ class _PhotoCard extends StatelessWidget {
       ),
     ),
   );
+}
+
+class _PromptCard extends StatelessWidget {
+  const _PromptCard({required this.prompt, this.onReply});
+  final ProfilePrompt prompt;
+  final VoidCallback? onReply;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.fc;
+    return GestureDetector(
+      onTap: onReply,
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 12),
+        padding: const EdgeInsets.fromLTRB(20, 20, 16, 16),
+        decoration: BoxDecoration(
+          color: c.surface,
+          borderRadius: BorderRadius.circular(24),
+          border: Border.all(color: c.hair),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              prompt.question,
+              style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: c.ink3),
+            ),
+            const SizedBox(height: 10),
+            Text(
+              prompt.answer,
+              style: TextStyle(fontSize: 24, height: 1.3, fontWeight: FontWeight.w700, letterSpacing: -0.4, color: c.ink),
+            ),
+            if (onReply != null)
+              Align(
+                alignment: Alignment.centerRight,
+                child: Semantics(
+                  button: true,
+                  label: 'Reply to this answer',
+                  child: Container(
+                    margin: const EdgeInsets.only(top: 10),
+                    width: 44,
+                    height: 44,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      border: Border.all(color: c.accent),
+                    ),
+                    child: Center(child: VIcon(VIcons.chat, size: 20, color: c.accent)),
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Height, work, education, pronouns, languages and lifestyle as badges.
+class _BasicsSection extends StatelessWidget {
+  const _BasicsSection({required this.profile});
+  final PublicProfile profile;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.fc;
+    final items = <(IconData, String)>[
+      if (profile.heightCm != null) (PhosphorIconsRegular.ruler, '${profile.heightCm} cm'),
+      if (profile.occupation != null) (PhosphorIconsRegular.briefcase, profile.occupation!),
+      if (profile.education != null) (PhosphorIconsRegular.graduationCap, profile.education!),
+      if (profile.pronouns != null) (PhosphorIconsRegular.identificationBadge, profile.pronouns!),
+      if (profile.languages.isNotEmpty) (PhosphorIconsRegular.translate, profile.languages.join(', ')),
+      for (final f in lifestyleFields)
+        if (f.labelOf(profile.lifestyle[f.key]) != null) (lifestyleIcon(f.key), f.labelOf(profile.lifestyle[f.key])!),
+    ];
+    if (items.isEmpty) return const SizedBox.shrink();
+    return _Section(
+      title: 'Basics',
+      child: Wrap(
+        spacing: 8,
+        runSpacing: 8,
+        children: [
+          for (final (icon, label) in items)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: c.paper,
+                borderRadius: BorderRadius.circular(99),
+                border: Border.all(color: c.hair),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(icon, size: 16, color: c.ink3),
+                  const SizedBox(width: 6),
+                  Flexible(
+                    child: Text(label, style: TextStyle(fontSize: 14.5, color: c.ink)),
+                  ),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Their visible top artists; shared ones get a green ring and the tag.
+class _MusicSection extends StatelessWidget {
+  const _MusicSection({required this.profile});
+  final PublicProfile profile;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.fc;
+    final shared = profile.sharedArtistIds.toSet();
+    return _Section(
+      title: 'Top artists on Spotify',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (shared.isNotEmpty) ...[MusicAffinityTag(profile: profile), const SizedBox(height: 14)],
+          SizedBox(
+            height: 96,
+            child: ListView.separated(
+              scrollDirection: Axis.horizontal,
+              itemCount: profile.topArtists.length,
+              separatorBuilder: (_, _) => const SizedBox(width: 14),
+              itemBuilder: (_, i) {
+                final a = profile.topArtists[i];
+                return SizedBox(
+                  width: 68,
+                  child: Column(
+                    children: [
+                      ArtistAvatar(artist: a, size: 60, highlight: shared.contains(a.id)),
+                      const SizedBox(height: 6),
+                      Text(
+                        a.name,
+                        maxLines: 2,
+                        textAlign: TextAlign.center,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(fontSize: 12, height: 1.2, color: shared.contains(a.id) ? c.ink : c.ink3),
+                      ),
+                    ],
+                  ),
+                );
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }

@@ -16,6 +16,7 @@ import '../match/match_screen.dart';
 import '../paywall/paywall_sheet.dart';
 import '../profile/profile_detail_screen.dart';
 import 'profile_card.dart';
+import '../profile_builder/icebreaker_sheet.dart';
 
 class DeckScreen extends ConsumerStatefulWidget {
   const DeckScreen({super.key});
@@ -29,6 +30,10 @@ class _DeckScreenState extends ConsumerState<DeckScreen> {
   List<PublicProfile>? _cards;
   int _top = 0;
   bool _exhausted = false;
+
+  /// Profiles that already got a request (via a prompt reply): the card
+  /// leaves the deck without sending a second request.
+  final _alreadyRequested = <String>{};
 
   @override
   void dispose() {
@@ -71,7 +76,7 @@ class _DeckScreenState extends ConsumerState<DeckScreen> {
     _top = current ?? _cards!.length;
     if (current == null) setState(() => _exhausted = true);
     _prefetch(_top + 1);
-    _commit(profile, follow: follow);
+    if (!_alreadyRequested.remove(profile.id)) _commit(profile, follow: follow);
     return true;
   }
 
@@ -89,6 +94,20 @@ class _DeckScreenState extends ConsumerState<DeckScreen> {
     }
   }
 
+  Future<void> _reply(PublicProfile p, ProfilePrompt prompt) async {
+    final outcome = await showIcebreakerSheet(context, p, prompt);
+    if (outcome == null || !mounted) return;
+    _alreadyRequested.add(p.id);
+    _controller.swipe(CardSwiperDirection.right);
+    if (outcome == SwipeOutcome.matched) {
+      ref.invalidate(connectionsProvider);
+      final me = await ref.read(myProfileProvider.future);
+      if (mounted) await showMatch(context, me: me, them: p);
+    } else {
+      showSnack(context, 'Reply sent with your request to ${p.firstName}', icon: PhosphorIconsFill.paperPlaneTilt);
+    }
+  }
+
   void _openProfile(PublicProfile p) {
     Navigator.of(context).push(
       PageRouteBuilder<void>(
@@ -96,6 +115,10 @@ class _DeckScreenState extends ConsumerState<DeckScreen> {
         reverseTransitionDuration: Motion.of(context, Motion.medium),
         pageBuilder: (_, _, _) => ProfileDetailScreen(
           profile: p,
+          onReplied: () {
+            _alreadyRequested.add(p.id);
+            _controller.swipe(CardSwiperDirection.right);
+          },
           onPass: () => _controller.swipe(CardSwiperDirection.left),
           onRequest: () => _controller.swipe(CardSwiperDirection.right),
         ),
@@ -201,6 +224,7 @@ class _DeckScreenState extends ConsumerState<DeckScreen> {
                           onTap: () => _openProfile(p),
                           onPass: () => _controller.swipe(CardSwiperDirection.left),
                           onRequest: () => _controller.swipe(CardSwiperDirection.right),
+                          onReply: (prompt) => _reply(p, prompt),
                         );
                       },
                     ),

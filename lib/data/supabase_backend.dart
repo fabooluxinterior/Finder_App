@@ -227,57 +227,172 @@ class SupabaseBackend implements FinderBackend {
   Future<PublicProfile?> myProfile() => _guard(() async {
     final row = await _db.from('profiles').select().eq('id', _me).maybeSingle();
     if (row == null) return null;
-    final p = PublicProfile.fromProfileRow(row);
-    return p.copyWith(primaryPhoto: p.primaryPhoto == null ? null : _mediaUrl(p.primaryPhoto!));
+    return PublicProfile.fromProfileRow(row, resolve: _mediaUrl);
   });
 
   @override
   Future<PrivateProfile> myPrivateProfile() => privateProfileOf(_me);
 
   @override
-  Future<int> saveProfile(ProfileDraft d) => _guard(() async {
+  Future<void> acknowledgeStandards(String version) =>
+      _guard(() => _db.rpc('acknowledge_standards', params: {'p_version': version}));
+
+  @override
+  Future<void> createProfile({required String fullName, required String city, required ProfilePatch details}) => _guard(() async {
     final me = _me;
-    // Age is computed server-side from the (locked) date of birth.
-    final fields = {'full_name': d.fullName, 'city': d.city, 'bio': d.bio};
     final exists = await _db.from('profiles').select('id').eq('id', me).maybeSingle();
+    final fields = {ProfilePatch.fullName: fullName, ProfilePatch.city: city, ...details.fields};
     if (exists == null) {
+      // Age is computed server-side from the (locked) date of birth.
       await _db.from('profiles').insert({'id': me, ...fields});
     } else {
       await _db.from('profiles').update(fields).eq('id', me);
     }
-    final priv = await _db.from('profile_private').select('id').eq('id', me).maybeSingle();
-    if (priv == null) {
-      await _db.from('profile_private').insert({'id': me, 'interests': d.interests});
-    } else {
-      await _db.from('profile_private').update({'interests': d.interests}).eq('id', me);
-    }
-
-    var pending = 0;
-    if (d.primaryPhotoWebp != null && await _uploadPhoto(d.primaryPhotoWebp!, 'primary') == ImageUploadStatus.pending) {
-      pending++;
-    }
-    for (final bytes in d.newGalleryWebp) {
-      if (await _uploadPhoto(bytes, 'gallery') == ImageUploadStatus.pending) pending++;
-    }
     unawaited(_ready().catchError((_) {}));
-    return pending;
+  });
+
+  @override
+  Future<void> updateProfile(ProfilePatch patch) => _guard(() async {
+    if (patch.fields.isEmpty) return;
+    await _db.from('profiles').update(patch.fields).eq('id', _me);
+  });
+
+  @override
+  Future<void> completeOnboarding() => _guard(() => _db.rpc('complete_onboarding'));
+
+  @override
+  Future<List<PhotoSlot>> photoSlots() => _guard(() async {
+    final rows = (await _db.rpc('my_photo_slots') as List).cast<Map<String, dynamic>>();
+    return [
+      for (final r in rows)
+        PhotoSlot(mediaId: r['media_id'] as String, url: _mediaUrl(r['media_id'] as String), pending: r['status'] == 'pending'),
+    ];
+  });
+
+  @override
+  Future<ImageUploadStatus> uploadPhoto(Uint8List bytes, {required String mime, String? replaces}) =>
+      _guard(() => _uploadPhoto(bytes, 'photo', mime: mime, replaces: replaces));
+
+  @override
+  Future<void> removePhoto(String mediaId) => _guard(() async {
+    try {
+      // Deletes the stored object immediately (storage hygiene).
+      await _db.functions.invoke('photo-remove', body: {'media_id': mediaId});
+    } on FunctionException {
+      throw const AppException(AppErrorCode.unknown, 'That photo couldn’t be removed. Try again.');
+    }
+  });
+
+  @override
+  Future<void> reorderPhotos(List<String> mediaIds) => _guard(() => _db.rpc('reorder_photos', params: {'p_order': mediaIds}));
+
+  @override
+  Future<PublicProfile> profileCard(String userId) => _guard(() async {
+    final rows = (await _db.rpc('get_profile_card', params: {'p_id': userId}) as List).cast<Map<String, dynamic>>();
+    if (rows.isEmpty) throw const AppException(AppErrorCode.notConnected, 'This profile isn’t available.');
+    return PublicProfile.fromFeedRow(rows.first, resolve: _mediaUrl);
+  });
+
+  @override
+  Future<SwipeOutcome> replyToPrompt(String targetId, String promptId, String text) => _guard(() async {
+    final result =
+        await _db.rpc('send_prompt_reply', params: {'p_receiver': targetId, 'p_prompt_id': promptId, 'p_text': text}) as String;
+    if (result == 'matched') {
+      // Already mutual: the reply becomes a real (end-to-end encrypted) message.
+      try {
+        await sendText(targetId, text);
+      } catch (_) {}
+      return SwipeOutcome.matched;
+    }
+    return SwipeOutcome.requested;
+  });
+
+  // ------------------------------------------------------------- music ----
+
+  @override
+  Future<MusicState> musicState() => _guard(() async {
+    final rows = (await _db.rpc('my_music') as List).cast<Map<String, dynamic>>();
+    if (rows.isEmpty) return MusicState.disconnected;
+    final r = rows.first;
+    return MusicState(
+      status: r['status'] == 'reauth_required' ? MusicStatus.reauthRequired : MusicStatus.active,
+      artists: ((r['artists'] as List?) ?? const [])
+          .map((e) => MusicArtist.fromJson((e as Map).cast<String, dynamic>()))
+          .toList(),
+      syncedAt: r['synced_at'] == null ? null : DateTime.parse(r['synced_at'] as String).toLocal(),
+    );
+  });
+
+  @override
+  Future<Uri> musicAuthorizeUrl() => _guard(() async {
+    try {
+      final res = await _db.functions.invoke('music-connect', body: const {});
+      return Uri.parse((res.data as Map)['url'] as String);
+    } on FunctionException catch (e) {
+      throw AppException(
+        e.status == 429 ? AppErrorCode.rateLimited : AppErrorCode.unknown,
+        e.status == 503 ? 'Spotify isn’t available right now.' : 'Couldn’t start Spotify. Try again.',
+      );
+    }
+  });
+
+  @override
+  Future<MusicSyncResult> syncMusic({bool force = false}) => _guard(() async {
+    try {
+      final res = await _db.functions.invoke('music-sync', body: {'action': 'sync', 'force': force});
+      return switch ((res.data as Map)['status']) {
+        'synced' => MusicSyncResult.synced,
+        'reauth_required' => MusicSyncResult.reauthRequired,
+        'disconnected' => MusicSyncResult.disconnected,
+        _ => MusicSyncResult.cached,
+      };
+    } on FunctionException {
+      return MusicSyncResult.cached; // keep showing the stored list
+    }
+  });
+
+  @override
+  Future<void> setArtistVisibility(String artistId, {required bool visible}) =>
+      _guard(() => _db.rpc('set_music_artist_visibility', params: {'p_artist_id': artistId, 'p_visible': visible}));
+
+  @override
+  Future<void> disconnectMusic() => _guard(() async {
+    await _db.functions.invoke('music-sync', body: {'action': 'disconnect'});
   });
 
   /// Upload to quarantine, then the server validates, strips metadata,
   /// moderates, encrypts and publishes. The original is deleted.
-  Future<ImageUploadStatus> _uploadPhoto(Uint8List jpeg, String kind, {String? requestId}) async {
-    final path = '$_me/${_uuid.v4()}.jpg';
+  Future<ImageUploadStatus> _uploadPhoto(
+    Uint8List bytes,
+    String kind, {
+    String? requestId,
+    String mime = 'image/jpeg',
+    String? replaces,
+  }) async {
+    final ext = switch (mime) {
+      'image/webp' => 'webp',
+      'image/png' => 'png',
+      _ => 'jpg',
+    };
+    final path = '$_me/${_uuid.v4()}.$ext';
     await _db.storage
         .from('uploads_quarantine')
-        .uploadBinary(path, jpeg, fileOptions: const FileOptions(contentType: 'image/jpeg', upsert: false));
+        .uploadBinary(path, bytes, fileOptions: FileOptions(contentType: mime, upsert: false));
     try {
-      final res = await _db.functions.invoke('process-image', body: {'path': path, 'kind': kind, 'request_id': ?requestId});
+      final res = await _db.functions.invoke(
+        'process-image',
+        body: {'path': path, 'kind': kind, 'request_id': ?requestId, 'replaces': ?replaces},
+      );
       final status = (res.data as Map)['status'];
       return status == 'approved' ? ImageUploadStatus.approved : ImageUploadStatus.pending;
     } on FunctionException catch (e) {
       final details = e.details is Map ? (e.details as Map)['message'] as String? : null;
       throw AppException(
-        e.status == 429 ? AppErrorCode.rateLimited : AppErrorCode.imageRejected,
+        e.status == 429
+            ? AppErrorCode.rateLimited
+            : e.status == 409
+            ? AppErrorCode.photoSlotsFull
+            : AppErrorCode.imageRejected,
         details ?? 'This photo couldn’t be uploaded.',
       );
     }
@@ -332,13 +447,10 @@ class SupabaseBackend implements FinderBackend {
 
   // ---------------------------------------------------------------- deck ----
 
-  PublicProfile _withMedia(PublicProfile p) =>
-      p.copyWith(primaryPhoto: p.primaryPhoto == null ? null : _mediaUrl(p.primaryPhoto!));
-
   @override
   Future<List<PublicProfile>> fetchFeed() => _guard(() async {
     final rows = await _db.rpc('get_feed', params: {'p_limit': 20}) as List;
-    return rows.cast<Map<String, dynamic>>().map(PublicProfile.fromFeedRow).map(_withMedia).toList();
+    return rows.cast<Map<String, dynamic>>().map((r) => PublicProfile.fromFeedRow(r, resolve: _mediaUrl)).toList();
   });
 
   @override
@@ -364,7 +476,7 @@ class SupabaseBackend implements FinderBackend {
     final count = (await _db.rpc('incoming_request_count') as num).toInt();
     final rows = await _db
         .from('swipes_and_requests')
-        .select('id, created_at, $_senderJoin')
+        .select('id, created_at, intro_prompt_id, intro_text, $_senderJoin')
         .eq('receiver_id', _me)
         .eq('action', 'follow_requested')
         .order('created_at', ascending: false);
@@ -375,8 +487,10 @@ class SupabaseBackend implements FinderBackend {
           if (r['sender'] != null)
             FollowRequest(
               id: r['id'] as String,
-              sender: _withMedia(PublicProfile.fromProfileRow(r['sender'] as Map<String, dynamic>)),
+              sender: PublicProfile.fromProfileRow(r['sender'] as Map<String, dynamic>, resolve: _mediaUrl),
               createdAt: DateTime.parse(r['created_at'] as String).toLocal(),
+              introPromptId: r['intro_prompt_id'] as String?,
+              introText: r['intro_text'] as String?,
             ),
       ],
     );
@@ -391,7 +505,7 @@ class SupabaseBackend implements FinderBackend {
     final me = _me;
     final rows = await _db
         .from('swipes_and_requests')
-        .select('created_at, responded_at, sender_id, $_senderJoin, $_receiverJoin')
+        .select('created_at, responded_at, sender_id, intro_prompt_id, intro_text, $_senderJoin, $_receiverJoin')
         .eq('action', 'accepted')
         .or('sender_id.eq.$me,receiver_id.eq.$me')
         .order('responded_at', ascending: false);
@@ -400,7 +514,7 @@ class SupabaseBackend implements FinderBackend {
     for (final r in rows) {
       final peerRow = (r['sender_id'] == me ? r['receiver'] : r['sender']) as Map<String, dynamic>?;
       if (peerRow == null) continue; // blocked: profile hidden by RLS
-      final peer = _withMedia(PublicProfile.fromProfileRow(peerRow));
+      final peer = PublicProfile.fromProfileRow(peerRow, resolve: _mediaUrl);
       final thread = await _vault.load(me, peer.id);
       final last = thread.isEmpty ? null : thread.last;
       out.add(
@@ -409,6 +523,9 @@ class SupabaseBackend implements FinderBackend {
           connectedAt: DateTime.parse((r['responded_at'] ?? r['created_at']) as String).toLocal(),
           lastMessage: last == null ? null : (last.isVoice ? '🎤 Voice note' : last.content),
           unread: thread.where((m) => m.receiverId == me && !m.isRead).length,
+          introPromptId: r['intro_prompt_id'] as String?,
+          introText: r['intro_text'] as String?,
+          introFromMe: r['sender_id'] == me,
         ),
       );
     }
@@ -822,6 +939,10 @@ class SupabaseBackend implements FinderBackend {
         'DOB_LOCKED' => const AppException(AppErrorCode.dobLocked, 'Your date of birth can’t be changed.'),
         'DOB_REQUIRED' => const AppException(AppErrorCode.dobRequired, 'Add your date of birth first.'),
         'VERIFICATION_PENDING' => const AppException(AppErrorCode.verificationPending, 'Your verification is being reviewed.'),
+        'CONTACT_INFO' => const AppException(AppErrorCode.contactInfo, 'Phone numbers, @handles and links are not allowed.'),
+        'ONBOARDING_INCOMPLETE' => AppException(AppErrorCode.onboardingIncomplete, e.message),
+        'PHOTO_SLOTS_FULL' => const AppException(AppErrorCode.photoSlotsFull, 'All 6 photo slots are full.'),
+        _ when e.code == '22023' => AppException(AppErrorCode.invalidInput, e.message),
         _ =>
           e.code == '23514' && e.message.contains('clean')
               ? const AppException(AppErrorCode.contactInfo, 'Phone numbers, @handles and links are not allowed.')

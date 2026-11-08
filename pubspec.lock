@@ -1074,7 +1074,7 @@ packages:
     source: hosted
     version: "1.4.0"
   url_launcher:
-    dependency: transitive
+    dependency: "direct main"
     description:
       name: url_launcher
       sha256: e8cc955c97e06df9879140a1fe301f3d493f01b7c62dec7f46834be31d7e9fda
@@ -1162,7 +1162,7 @@ packages:
     source: hosted
     version: "15.4.0"
   web:
-    dependency: transitive
+    dependency: "direct main"
     description:
       name: web
       sha256: e119e82ac4795c7925103b7cf3768191f33941b99e7ccffbd6c645201d9f606b

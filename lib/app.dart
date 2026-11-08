@@ -7,7 +7,7 @@ import 'features/auth/auth_screen.dart';
 import 'features/home/home_shell.dart';
 import 'features/legal/consent.dart';
 import 'features/onboarding/dob.dart';
-import 'features/onboarding/profile_setup_screen.dart';
+import 'features/onboarding/onboarding_flow.dart';
 import 'features/security/mfa_screens.dart';
 import 'providers.dart';
 
@@ -59,7 +59,9 @@ class _AuthGate extends ConsumerWidget {
             ),
           ),
           data: (p) {
-            if (p == null) return const ProfileSetupScreen(isOnboarding: true);
+            // First run (or an unfinished setup): the 7-stage wizard, resumed
+            // at the saved stage. The server decides when it's complete.
+            if (p == null || !p.isOnboarded) return OnboardingFlow(key: ValueKey(p?.id), profile: p);
             // Accounts created before DOBs were required must add one once.
             final dob = ref.watch(hasDobProvider);
             if (dob.isLoading && !dob.hasValue) return const _Splash();

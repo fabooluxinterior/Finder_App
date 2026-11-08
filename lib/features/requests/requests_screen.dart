@@ -12,6 +12,7 @@ import '../../core/illustrations.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../models/follow_request.dart';
+import '../../models/profile_catalog.dart';
 import '../../providers.dart';
 import '../match/match_screen.dart';
 import '../paywall/paywall_sheet.dart';
@@ -331,6 +332,14 @@ class _RequestTileState extends ConsumerState<_RequestTile> {
               ],
             ),
           ),
+          if (widget.request.introText != null) ...[
+            const SizedBox(height: 12),
+            IntroQuote(
+              question: promptById(widget.request.introPromptId ?? '')?.question,
+              text: widget.request.introText!,
+              label: '${p.firstName} replied to your prompt',
+            ),
+          ],
           const SizedBox(height: 12),
           Row(
             children: [
@@ -369,4 +378,40 @@ String _ago(DateTime t) {
   if (d.inDays == 1) return 'yesterday';
   if (d.inDays < 7) return const ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'][t.weekday - 1];
   return '${t.day}/${t.month}';
+}
+
+/// A prompt reply that came with a request (shown in Requests and at the top
+/// of the chat it opened).
+class IntroQuote extends StatelessWidget {
+  const IntroQuote({super.key, required this.question, required this.text, required this.label, this.note});
+  final String? question;
+  final String text;
+  final String label;
+  final String? note;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.fc;
+    return Container(
+      padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+      decoration: BoxDecoration(
+        color: c.paper,
+        borderRadius: BorderRadius.circular(18),
+        border: Border(left: BorderSide(color: c.accent, width: 3)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            label,
+            style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: c.accent),
+          ),
+          if (question != null) ...[const SizedBox(height: 4), Text(question!, style: TextStyle(fontSize: 13, color: c.muted))],
+          const SizedBox(height: 4),
+          Text('“$text”', style: TextStyle(fontSize: 15.5, height: 1.35, color: c.ink)),
+          if (note != null) ...[const SizedBox(height: 6), Text(note!, style: TextStyle(fontSize: 12, color: c.muted))],
+        ],
+      ),
+    );
+  }
 }

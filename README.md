@@ -155,6 +155,29 @@ These rules and the security layer are covered by the SQL suites in `supabase/te
 
 45 s of AAC-LC at 32 kbps is about 176 KB, so it can't also stay under 120 KB. The recorder uses the requested 32 kbps / 45 s, and the `voice_notes` bucket limit is 192 KB. If the 120 KB cap matters more, set `AppConfig.voiceBitRate` to `20000` and the bucket limit to `122880`.
 
+## Profile builder
+
+**First run: a 7-stage setup** (`lib/features/onboarding/onboarding_flow.dart`), saved after every stage in `profiles.onboarding_stage` so it resumes where you left off:
+1. **Community standards**: four original principles, explicit "I agree" (stored with the other consents).
+2. **About you**: name, birthdate (locked; age derived), gender, height (cm), work, education, district.
+3. **Your everyday**: drawers for what you're looking for, exercise, drinking, smoking, star sign, background, languages.
+4. **Interests**: categorised chips (creative arts, food, active & sports, gaming, reading), at least 5.
+5. **Photos**: the 6-slot grid, at least 4.
+6. **Prompts**: at least 2 from the original catalog, answers up to 150 characters with a writing tip under the active one.
+7. **Music + completion**: Spotify tile and the profile-strength ring, then `complete_onboarding()` flags the profile live.
+
+The server decides "live": `complete_onboarding()` checks every requirement, and Discover only shows onboarded profiles with 4+ photos.
+
+**Photos are optimised on the device** (`lib/core/image_optimizer.dart`): JPEG, PNG, HEIC or WebP in → WebP out, fitted inside 1080 px (aspect ratio kept) and stepped down in quality, then size, until it's under 100 KB. Mobile uses the native encoder; the web build draws into an HTML5 canvas and exports WebP (JPEG on browsers without a WebP encoder; the server converts it). The server still validates every upload: a WebP within limits keeps its pixels but loses EXIF/XMP/ICC chunks; anything else is re-encoded. Replacing or removing a photo deletes the stored object immediately (`process-image`, `photo-remove`), with `media-maintenance` as a backstop.
+
+**Profile strength (0–100)**: photos 7.5 each up to 4 (30), work + education (10), lifestyle selections (20), interests (15), bio of 20+ characters (10), two prompts (10), Spotify linked (5). Computed by a trigger (`profile_completion`) and mirrored in `lib/models/profile_completion.dart`; tests check they agree.
+
+**Prompts and icebreakers**: on Discover, prompt cards sit between photos (tap the sides to move through them). Tapping an answer opens a reply sheet; the reply goes with a follow request and becomes the opening context of the chat if accepted. Chat itself stays locked until then, and the UI says the reply isn't end-to-end encrypted.
+
+**Spotify** (`music-connect`, `music-callback`, `music-sync`): Authorization Code flow with scope `user-top-read`. The code exchange, client secret and tokens stay in edge functions; the refresh token is stored AES-256-GCM encrypted in the service-only `music_accounts` table and rotated when Spotify issues a new one. The top 10 artists (id, name, medium image, genres) are re-imported at most every 12 hours; swipes and feeds read stored data and never call Spotify. A revoked token marks the account "reconnect"; zero listening history is a normal, empty list. Users can hide any artist: `profiles.music_artist_ids` (GIN-indexed) holds visible artists only, so shared-artist matching (`array intersect`, in `get_feed` and `music_affinity`) can never reveal a hidden one.
+
+To enable Spotify: create an app at developer.spotify.com, add the deployed `music-callback` URL as a redirect URI, and set `SPOTIFY_CLIENT_ID`, `SPOTIFY_CLIENT_SECRET`, `SPOTIFY_REDIRECT_URI` (and optionally `MUSIC_RETURN_URL`) as edge-function secrets. New Spotify apps start in development mode (25 allow-listed users) until Spotify approves an extension.
+
 ## Design
 
 The UI follows the Vouby design canvas: near-black ground (`#0B0B0C`), cards on `#161618` with `#28282A` hairlines, one orange (`#FF5A3D`) for everything you can act on, gold for Fast-Track and a blue tick for Verified. Type is Geist.

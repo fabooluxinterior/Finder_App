@@ -23,6 +23,13 @@ class MediaService {
   /// the real file type, strips metadata, moderates and re-encodes anyway.
   Future<Uint8List?> pickCompressedPhoto() => _pick(ImageSource.gallery);
 
+  /// Picks a photo and returns the original bytes (JPEG, PNG, HEIC or WebP),
+  /// for [ImageOptimizer] to convert into a ≤100 KB WebP on the device.
+  Future<Uint8List?> pickOriginalPhoto({bool camera = false}) async {
+    final file = await _picker.pickImage(source: camera ? ImageSource.camera : ImageSource.gallery, requestFullMetadata: false);
+    return file?.readAsBytes();
+  }
+
   /// Live front-camera capture for selfie verification. There is deliberately
   /// no gallery fallback: the photo must be taken now, with the requested pose.
   Future<Uint8List?> takeSelfie() => _pick(ImageSource.camera, camera: CameraDevice.front);

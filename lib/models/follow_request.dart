@@ -3,20 +3,39 @@ import 'profile.dart';
 enum SwipeOutcome { passed, requested, matched }
 
 class FollowRequest {
-  const FollowRequest({required this.id, required this.sender, required this.createdAt});
+  const FollowRequest({required this.id, required this.sender, required this.createdAt, this.introPromptId, this.introText});
 
   final String id;
   final PublicProfile sender;
   final DateTime createdAt;
+
+  /// Set when the request came from a reply to one of your prompts.
+  final String? introPromptId;
+  final String? introText;
 }
 
 class Connection {
-  const Connection({required this.profile, required this.connectedAt, this.lastMessage, this.unread = 0});
+  const Connection({
+    required this.profile,
+    required this.connectedAt,
+    this.lastMessage,
+    this.unread = 0,
+    this.introPromptId,
+    this.introText,
+    this.introFromMe = false,
+  });
 
   final PublicProfile profile;
   final DateTime connectedAt;
   final String? lastMessage;
   final int unread;
+
+  /// The prompt reply that started this connection, if any. It travelled
+  /// with the follow request (before chat unlocked), so it isn't end-to-end
+  /// encrypted; the UI says so.
+  final String? introPromptId;
+  final String? introText;
+  final bool introFromMe;
 }
 
 /// Teaser shown to free users: count only, identities withheld by the server.

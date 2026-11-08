@@ -1,6 +1,6 @@
 # Vouby Privacy Policy
 
-**Version 2026-11-10.** Draft: have this reviewed by a lawyer before publishing (India's Digital Personal Data Protection Act, 2023, and Google Play's User Data policy).
+**Version 2026-11-11.** Draft: have this reviewed by a lawyer before publishing (India's Digital Personal Data Protection Act, 2023, and Google Play's User Data policy).
 
 Vouby ("we", "us") is operated by **<FILL: Company name>**, **<FILL: Registered address>**. This policy explains what we collect, how we protect it, and what control you have.
 
@@ -14,6 +14,11 @@ Vouby ("we", "us") is operated by **<FILL: Company name>**, **<FILL: Registered 
 | Phone number or email | Signing you in with one-time codes | Only you and our systems. Never shown to other users |
 | Date of birth | Confirming you're 18 or older and showing your age | Only you. Other users see your age, never your date of birth |
 | Name, age, district/city, bio, photos, interests | Your profile | Every signed-in Vouby user, except people you've blocked or who blocked you |
+| Gender, pronouns, height, work, education, languages, lifestyle answers (what you're looking for, exercise, drinking, smoking, star sign, background) | Optional profile details you choose to add | Every signed-in Vouby user, as above |
+| Prompt answers (up to 3, 150 characters each) | Conversation starters on your profile | Every signed-in Vouby user, as above |
+| A reply someone sends to one of your prompts, or you send to theirs | Starting a conversation; travels with the follow request | You and the other person. **Not end-to-end encrypted**, because it's sent before the chat opens |
+| If you connect Spotify: your top 10 artists (name, picture, genres) | Showing your music taste and shared artists | Artists you leave visible: every signed-in Vouby user, as above. Hidden artists: only you |
+| If you connect Spotify: an access token from Spotify | Refreshing your top artists | Our systems only (encrypted, never shown to anyone) |
 | Verification selfie and the pose you were asked to make | Confirming your photos are really you | Only our trained verification staff. Never other users |
 | Follow requests, passes and matches | Running the app's core features | You and the other person |
 | Messages and voice notes | Chat | **Only you and the other person** (end-to-end encrypted, see §3) |
@@ -32,6 +37,10 @@ Vouby ("we", "us") is operated by **<FILL: Company name>**, **<FILL: Registered 
 - Every stored photo is encrypted with its own key (AES-256-GCM). Those keys are themselves encrypted with a master key kept outside our database.
 - Photos are never available at a public link. Each view checks that the viewer is signed in and allowed to see it, so a copied link doesn't work for anyone else.
 - **Verification selfies** go through the same pipeline but are never shown on your profile. Only verification staff can view them, every view is logged, and they're deleted 30 days after the review.
+
+**Photos are optimised on your phone.** Before any upload, the app resizes each photo to at most 1080 pixels and converts it to a compact WebP file (under 100 KB). When you replace or remove a photo, we delete the stored file straight away.
+
+**Spotify.** Connecting Spotify asks Spotify for permission to read your top artists (scope `user-top-read`) and nothing else: we can't see your playlists, individual plays, followers, email or account details. We refresh the list at most twice a day. You can hide any artist; hidden artists are never shown or used to find shared artists. Disconnecting deletes the token and every imported artist from our systems. You can also remove Vouby's access in your Spotify account under Apps.
 
 ## 3. How your conversations are protected
 
@@ -58,6 +67,8 @@ Because chats are end-to-end encrypted, moderators can't see them unless **you c
 | Verification selfies | 30 days after the review |
 | Undelivered encrypted messages | Until delivered, or at most 30 days |
 | Message metadata | Until you or the other person unmatches or blocks, or either account is deleted |
+| Prompt replies sent with a request | Same as message metadata, or until the request is declined |
+| Spotify token and imported artists | Until you disconnect Spotify or delete your account |
 | Removed photos | Unavailable immediately; deleted from storage within 24 hours |
 | Report evidence | 90 days after the report is resolved |
 | Security logs | 1 year |
@@ -77,6 +88,7 @@ We don't sell your data or use it for advertising. We share only with:
 - **Service providers** that process data for us under contract:
   - Supabase: database, storage and authentication, hosted in region <FILL: Supabase region>.
   - Google Cloud Vision: photo safety checks.
+  - Spotify: only if you connect it. We receive your top artists; Spotify learns that you authorised Vouby.
   - RevenueCat and Google Play: subscriptions.
   - SMS and email providers: sign-in codes.
 - **Authorities**, when the law requires it. We can only provide what we hold. We can't provide message contents because we don't have them.
