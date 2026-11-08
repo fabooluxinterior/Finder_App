@@ -196,6 +196,7 @@ class _ProfileSetupScreenState extends ConsumerState<ProfileSetupScreen> {
             TextFormField(
               controller: _name,
               textCapitalization: TextCapitalization.words,
+              textInputAction: TextInputAction.next,
               decoration: const InputDecoration(labelText: 'Full name'),
               validator: (v) => (v == null || v.trim().isEmpty)
                   ? 'Required'

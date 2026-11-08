@@ -115,4 +115,50 @@ void main() {
     expect((await b.fetchFeed()).map((p) => p.id), isNot(contains(first.id)));
     expect(ReportReason.underage.label, 'Appears under 18');
   });
+
+  group('sign-in keyboard', () {
+    Future<DemoBackend> pumpAuth(WidgetTester tester, {double keyboard = 0}) async {
+      SignupConsent.accepted = false;
+      tester.view.physicalSize = const Size(1080, 2340);
+      tester.view.devicePixelRatio = 2.625;
+      tester.view.viewInsets = FakeViewPadding(bottom: keyboard * 2.625);
+      addTearDown(tester.view.reset);
+      final backend = DemoBackend();
+      await tester.pumpWidget(ProviderScope(
+        overrides: [backendProvider.overrideWithValue(backend)],
+        child: MaterialApp(theme: buildTheme(Brightness.light), home: const AuthScreen()),
+      ));
+      await tester.pump(const Duration(seconds: 1));
+      return backend;
+    }
+
+    testWidgets('number field and Continue sit above an open keyboard', (tester) async {
+      await pumpAuth(tester, keyboard: 320);
+      final screenHeight = tester.view.physicalSize.height / tester.view.devicePixelRatio;
+      final keyboardTop = screenHeight - 320;
+      expect(tester.getRect(find.byType(TextField)).bottom, lessThanOrEqualTo(keyboardTop));
+      expect(tester.getRect(find.widgetWithText(PillButton, 'Continue')).bottom, lessThanOrEqualTo(keyboardTop));
+      expect(tester.takeException(), isNull, reason: 'no layout overflow');
+    });
+
+    testWidgets('Enter on the keyboard sends the code, then verifies', (tester) async {
+      final backend = await pumpAuth(tester);
+      await tester.enterText(find.byType(TextField), '9876543210');
+      await tester.testTextInput.receiveAction(TextInputAction.go);
+      await tester.pump(const Duration(seconds: 1));
+      expect(find.textContaining('Tick the box'), findsOneWidget, reason: 'consent still required');
+
+      await tester.tap(find.byType(Checkbox));
+      await tester.pump();
+      await tester.showKeyboard(find.byType(TextField));
+      await tester.testTextInput.receiveAction(TextInputAction.go);
+      await tester.pump(const Duration(seconds: 1));
+      expect(find.textContaining('Enter the code sent to'), findsOneWidget);
+
+      await tester.enterText(find.byType(TextField), '123456');
+      await tester.testTextInput.receiveAction(TextInputAction.done);
+      await tester.pump(const Duration(seconds: 1));
+      expect(backend.currentUserId, isNotNull, reason: 'signed in via the enter key');
+    });
+  });
 }

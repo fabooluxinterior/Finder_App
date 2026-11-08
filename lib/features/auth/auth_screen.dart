@@ -49,6 +49,28 @@ class _AuthScreenState extends ConsumerState<AuthScreen> with SingleTickerProvid
     }
   }
 
+  /// Shared by the Continue button and the keyboard's enter key.
+  void _sendCode() {
+    if (_busy) return;
+    if (!_targetValid) {
+      showSnack(context, _channel == OtpChannel.phone ? 'Enter a valid 10-digit mobile number.' : 'Enter a valid email address.');
+      return;
+    }
+    if (!_agreed) {
+      showSnack(context, 'Tick the box to confirm you’re 18+ and agree to the policies.');
+      return;
+    }
+    _run(() async {
+      await ref.read(backendProvider).sendOtp(_channel, _normalizedTarget);
+      setState(() => _codeSent = true);
+    });
+  }
+
+  void _verify() {
+    if (_busy || _code.text.length != 6) return;
+    _run(() => ref.read(backendProvider).verifyOtp(_channel, _normalizedTarget, _code.text));
+  }
+
   @override
   void dispose() {
     _target.dispose();
@@ -61,105 +83,137 @@ class _AuthScreenState extends ConsumerState<AuthScreen> with SingleTickerProvid
   Widget build(BuildContext context) {
     final c = context.fc;
     final t = Theme.of(context).textTheme;
-    final backend = ref.read(backendProvider);
+    // While the keyboard is open the screen shrinks (resizeToAvoidBottomInset)
+    // and the welcome art folds away, so the field and button sit right
+    // above the keyboard. The page also scrolls if space is still tight.
+    final keyboardOpen = MediaQuery.viewInsetsOf(context).bottom > 0;
 
     return Scaffold(
       resizeToAvoidBottomInset: true,
       body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(24, 0, 24, 20),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Expanded(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    AppConfig.isDemo ? _PortraitFan(animation: _intro) : _AbstractFan(animation: _intro),
-                    const SizedBox(height: 32),
-                    const Wordmark(size: 44),
-                    const SizedBox(height: 14),
-                    Text(
-                      'Real people, real profiles. Chat when you both say yes.',
-                      style: t.headlineSmall?.copyWith(fontWeight: FontWeight.w500),
-                    ),
-                    const SizedBox(height: 10),
-                    Text('Kochi · Kozhikode · Thiruvananthapuram', style: t.bodyMedium?.copyWith(color: c.muted)),
-                  ],
-                ),
-              ),
-              if (!_codeSent) ...[
-                _TargetField(channel: _channel, controller: _target, onChanged: () => setState(() {})),
-                const SizedBox(height: 12),
-                ConsentCheckbox(value: _agreed, onChanged: (v) => setState(() => _agreed = SignupConsent.accepted = v)),
-                const SizedBox(height: 12),
-                PillButton(
-                  label: 'Continue',
-                  trailingIcon: PhosphorIconsBold.arrowRight,
-                  busy: _busy,
-                  // OTP can't be requested until the user is 18+ and has agreed.
-                  onTap: _targetValid && _agreed
-                      ? () => _run(() async {
-                          await backend.sendOtp(_channel, _normalizedTarget);
-                          setState(() => _codeSent = true);
-                        })
-                      : null,
-                ),
-                TextButton(
-                  onPressed: () => setState(() {
-                    _channel = _channel == OtpChannel.phone ? OtpChannel.email : OtpChannel.phone;
-                    _target.clear();
-                  }),
-                  child: Text(
-                    _channel == OtpChannel.phone ? 'Use email instead' : 'Use phone instead',
-                    style: t.labelMedium?.copyWith(color: c.ink2),
-                  ),
-                ),
-              ] else ...[
-                Text('Enter the code sent to $_normalizedTarget', style: t.bodyMedium),
-                const SizedBox(height: 10),
-                TextField(
-                  controller: _code,
-                  autofocus: true,
-                  keyboardType: TextInputType.number,
-                  autofillHints: const [AutofillHints.oneTimeCode],
-                  inputFormatters: [FilteringTextInputFormatter.digitsOnly, LengthLimitingTextInputFormatter(6)],
-                  textAlign: TextAlign.center,
-                  style: t.headlineSmall?.copyWith(letterSpacing: 12),
-                  decoration: InputDecoration(
-                    hintText: '••••••',
-                    helperText: AppConfig.isDemo ? 'Demo: any 6 digits work' : null,
-                  ),
-                  onChanged: (_) => setState(() {}),
-                ),
-                const SizedBox(height: 10),
-                PillButton(
-                  label: 'Verify',
-                  busy: _busy,
-                  onTap: _code.text.length == 6
-                      ? () => _run(() => backend.verifyOtp(_channel, _normalizedTarget, _code.text))
-                      : null,
-                ),
-                TextButton(
-                  onPressed: _busy
-                      ? null
-                      : () => setState(() {
-                          _codeSent = false;
-                          _code.clear();
-                        }),
-                  child: Text('Change number', style: t.labelMedium?.copyWith(color: c.ink2)),
-                ),
-              ],
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
+        child: LayoutBuilder(
+          builder: (context, box) => SingleChildScrollView(
+            keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+            padding: const EdgeInsets.fromLTRB(24, 0, 24, 20),
+            child: ConstrainedBox(
+              constraints: BoxConstraints(minHeight: box.maxHeight - 20),
+              // A column with a minimum height (not IntrinsicHeight + Expanded):
+              // fills the screen when there's room, scrolls when there isn't.
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Icon(PhosphorIconsFill.lockSimple, size: 13, color: c.muted),
-                  const SizedBox(width: 5),
-                  Text('End-to-end encrypted chats · No screenshots', style: t.bodySmall?.copyWith(color: c.muted)),
+                  ConstrainedBox(
+                    // Welcome block keeps ~55% of the screen and centres in it.
+                    constraints: BoxConstraints(minHeight: (box.maxHeight - 20) * (keyboardOpen ? 0.0 : 0.55)),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        AnimatedSize(
+                          duration: Motion.of(context, Motion.medium),
+                          curve: Motion.easeOut,
+                          alignment: Alignment.topLeft,
+                          child: keyboardOpen
+                              ? const SizedBox(width: double.infinity)
+                              : Padding(
+                                  padding: const EdgeInsets.only(top: 24, bottom: 32),
+                                  child: AppConfig.isDemo ? _PortraitFan(animation: _intro) : _AbstractFan(animation: _intro),
+                                ),
+                        ),
+                        const Wordmark(size: 44),
+                        const SizedBox(height: 14),
+                        Text(
+                          'Real people, real profiles. Chat when you both say yes.',
+                          style: t.headlineSmall?.copyWith(fontWeight: FontWeight.w500),
+                        ),
+                        const SizedBox(height: 10),
+                        Text('Kochi · Kozhikode · Thiruvananthapuram', style: t.bodyMedium?.copyWith(color: c.muted)),
+                        const SizedBox(height: 24),
+                      ],
+                    ),
+                  ),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (!_codeSent) ...[
+                        _TargetField(
+                          channel: _channel,
+                          controller: _target,
+                          onChanged: () => setState(() {}),
+                          onSubmitted: _sendCode,
+                        ),
+                        const SizedBox(height: 12),
+                        ConsentCheckbox(value: _agreed, onChanged: (v) => setState(() => _agreed = SignupConsent.accepted = v)),
+                        const SizedBox(height: 12),
+                        PillButton(
+                          label: 'Continue',
+                          trailingIcon: PhosphorIconsBold.arrowRight,
+                          busy: _busy,
+                          // OTP can't be requested until the user is 18+ and has agreed.
+                          onTap: _targetValid && _agreed ? _sendCode : null,
+                        ),
+                        TextButton(
+                          onPressed: () => setState(() {
+                            _channel = _channel == OtpChannel.phone ? OtpChannel.email : OtpChannel.phone;
+                            _target.clear();
+                          }),
+                          child: Text(
+                            _channel == OtpChannel.phone ? 'Use email instead' : 'Use phone instead',
+                            style: t.labelMedium?.copyWith(color: c.ink2),
+                          ),
+                        ),
+                      ] else ...[
+                        Text('Enter the code sent to $_normalizedTarget', style: t.bodyMedium),
+                        const SizedBox(height: 10),
+                        TextField(
+                          controller: _code,
+                          autofocus: true,
+                          keyboardType: TextInputType.number,
+                          autofillHints: const [AutofillHints.oneTimeCode],
+                          inputFormatters: [FilteringTextInputFormatter.digitsOnly, LengthLimitingTextInputFormatter(6)],
+                          textAlign: TextAlign.center,
+                          style: t.headlineSmall?.copyWith(letterSpacing: 12),
+                          textInputAction: TextInputAction.done,
+                          decoration: InputDecoration(
+                            hintText: '••••••',
+                            helperText: AppConfig.isDemo ? 'Demo: any 6 digits work' : null,
+                          ),
+                          onChanged: (_) => setState(() {}),
+                          onSubmitted: (_) => _verify(),
+                        ),
+                        const SizedBox(height: 10),
+                        PillButton(label: 'Verify', busy: _busy, onTap: _code.text.length == 6 ? _verify : null),
+                        TextButton(
+                          onPressed: _busy
+                              ? null
+                              : () => setState(() {
+                                  _codeSent = false;
+                                  _code.clear();
+                                }),
+                          child: Text('Change number', style: t.labelMedium?.copyWith(color: c.ink2)),
+                        ),
+                      ],
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(PhosphorIconsFill.lockSimple, size: 13, color: c.muted),
+                          const SizedBox(width: 5),
+                          Flexible(
+                            child: Text(
+                              'End-to-end encrypted chats · No screenshots',
+                              textAlign: TextAlign.center,
+                              style: t.bodySmall?.copyWith(color: c.muted),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ], // bottom group
+                  ),
                 ],
               ),
-            ],
+            ),
           ),
         ),
       ),
@@ -248,10 +302,11 @@ class Wordmark extends StatelessWidget {
 }
 
 class _TargetField extends StatelessWidget {
-  const _TargetField({required this.channel, required this.controller, required this.onChanged});
+  const _TargetField({required this.channel, required this.controller, required this.onChanged, required this.onSubmitted});
   final OtpChannel channel;
   final TextEditingController controller;
   final VoidCallback onChanged;
+  final VoidCallback onSubmitted;
 
   @override
   Widget build(BuildContext context) {
@@ -279,7 +334,10 @@ class _TargetField extends StatelessWidget {
               )
             : Icon(PhosphorIconsRegular.envelopeSimple, color: c.muted),
       ),
+      // Enter / Go on the keyboard sends the code (same checks as the button).
+      textInputAction: TextInputAction.go,
       onChanged: (_) => onChanged(),
+      onSubmitted: (_) => onSubmitted(),
     );
   }
 }
