@@ -5,7 +5,7 @@
     "display": "standalone",
     "background_color": "#0B0B0C",
     "theme_color": "#0B0B0C",
-    "description": "A new Flutter project.",
+    "description": "Vouby: a private social connection network for Kerala.",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [
