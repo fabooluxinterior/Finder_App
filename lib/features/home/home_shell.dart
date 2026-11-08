@@ -1,7 +1,6 @@
-import 'dart:ui';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
 import '../../core/phosphor.dart';
 
 import '../../core/feedback.dart';
@@ -46,10 +45,7 @@ class _HomeShellState extends ConsumerState<HomeShell> {
 
     return Scaffold(
       extendBody: true,
-      body: IndexedStack(
-        index: _tab,
-        children: const [DeckScreen(), RequestsScreen(), ChatsScreen(), MyProfileScreen()],
-      ),
+      body: IndexedStack(index: _tab, children: const [DeckScreen(), RequestsScreen(), ChatsScreen(), MyProfileScreen()]),
       bottomNavigationBar: _TabBar(
         index: _tab,
         badges: [0, pending, unread, 0],
@@ -77,31 +73,33 @@ class _TabBar extends StatelessWidget {
   Widget build(BuildContext context) {
     final c = context.fc;
     final bottom = MediaQuery.paddingOf(context).bottom;
-    return ClipRect(
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
-        child: Container(
-          padding: EdgeInsets.fromLTRB(16, 8, 16, bottom > 0 ? bottom : 10),
-          decoration: BoxDecoration(
-            color: c.paper.withValues(alpha: 0.84),
-            border: Border(top: BorderSide(color: c.hair)),
-          ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceAround,
-            children: [
-              for (var i = 0; i < _items.length; i++)
-                Expanded(
-                  child: GestureDetector(
-                    behavior: HitTestBehavior.opaque,
-                    onTap: () {
-                      if (i != index) Fx.instance.tap();
-                      onTap(i);
-                    },
-                    child: Semantics(
-                      selected: i == index,
-                      button: true,
-                      label: _items[i].$1,
-                      child: Column(mainAxisSize: MainAxisSize.min, children: [
+    // A live backdrop blur here re-blurs whatever scrolls underneath on every
+    // frame; a near-opaque bar looks the same and costs nothing.
+    return RepaintBoundary(
+      child: Container(
+        padding: EdgeInsets.fromLTRB(16, 8, 16, bottom > 0 ? bottom : 10),
+        decoration: BoxDecoration(
+          color: c.paper.withValues(alpha: 0.97),
+          border: Border(top: BorderSide(color: c.hair)),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceAround,
+          children: [
+            for (var i = 0; i < _items.length; i++)
+              Expanded(
+                child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: () {
+                    if (i != index) Fx.instance.tap();
+                    onTap(i);
+                  },
+                  child: Semantics(
+                    selected: i == index,
+                    button: true,
+                    label: _items[i].$1,
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
                         Badge(
                           isLabelVisible: badges[i] > 0,
                           label: Text('${badges[i]}', style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w600)),
@@ -109,18 +107,16 @@ class _TabBar extends StatelessWidget {
                           child: Icon(i == index ? _items[i].$3 : _items[i].$2, size: 26, color: i == index ? c.ink : c.muted),
                         ),
                         const SizedBox(height: 3),
-                        Text(_items[i].$1,
-                            style: TextStyle(
-                              fontSize: 10.5,
-                              fontWeight: FontWeight.w500,
-                              color: i == index ? c.ink : c.muted,
-                            )),
-                      ]),
+                        Text(
+                          _items[i].$1,
+                          style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w500, color: i == index ? c.ink : c.muted),
+                        ),
+                      ],
                     ),
                   ),
                 ),
-            ],
-          ),
+              ),
+          ],
         ),
       ),
     );

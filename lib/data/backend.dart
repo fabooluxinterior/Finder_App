@@ -10,7 +10,6 @@ enum OtpChannel { email, phone }
 class ProfileDraft {
   const ProfileDraft({
     required this.fullName,
-    required this.age,
     required this.city,
     required this.bio,
     required this.interests,
@@ -19,7 +18,6 @@ class ProfileDraft {
   });
 
   final String fullName;
-  final int age;
   final String city;
   final String bio;
   final List<String> interests;
@@ -42,8 +40,23 @@ abstract class FinderBackend {
   Future<void> verifyOtp(OtpChannel channel, String target, String code);
   Future<void> signOut();
 
+  // Consent & age
+  /// Oldest accepted version across all policies; null if any is missing.
+  Future<String?> acceptedPolicyVersion();
+  Future<void> recordConsent(String version);
+  Future<bool> hasDob();
+
+  /// Stores the (locked) date of birth; returns the server-computed age.
+  Future<int> setDob(DateTime dob);
+
+  // Selfie verification
+  Future<VerificationStatus> verificationStatus();
+  Future<VerificationStart> startVerification();
+  Future<void> submitVerificationSelfie(String requestId, Uint8List jpeg);
+
   Future<PublicProfile?> myProfile();
   Future<PrivateProfile> myPrivateProfile();
+
   /// Returns how many uploaded photos are held for manual review.
   Future<int> saveProfile(ProfileDraft draft);
 
@@ -98,6 +111,8 @@ abstract class FinderBackend {
   Future<void> resolveReport(String reportId, {required bool actioned, required String resolution});
   Future<List<PendingMedia>> pendingMedia();
   Future<void> reviewMedia(String mediaId, {required bool approve});
+  Future<List<VerificationItem>> verificationQueue();
+  Future<void> reviewVerification(String requestId, {required bool approve});
 
   /// Fires when requests/connections change (realtime).
   Stream<void> socialChanges();

@@ -1,4 +1,4 @@
-// POST { path, kind: "primary" | "gallery" }
+// POST { path, kind: "primary" | "gallery" | "selfie", request_id? }
 // Secure upload pipeline: quarantine -> validate -> decode/re-encode (strips
 // EXIF/GPS) -> moderate -> encrypt (AES-256-GCM envelope) -> publish.
 import { admin, rateLimit, requireUser, securityEvent } from "../_shared/auth.ts";
@@ -8,6 +8,7 @@ import { sealMedia } from "../_shared/media_crypto.ts";
 import { moderate } from "../_shared/moderation.ts";
 
 const PATH = /^[0-9a-f-]{36}\/[0-9a-f-]{36}\.(jpg|png)$/;
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
 Deno.serve((req) =>
   handle(req, async () => {
@@ -17,8 +18,9 @@ Deno.serve((req) =>
 
     const body = await req.json().catch(() => ({}));
     const path = String(body.path ?? "");
-    const kind = body.kind === "gallery" ? "gallery" : body.kind === "primary" ? "primary" : null;
-    if (!kind || !PATH.test(path) || !path.startsWith(`${user.id}/`)) {
+    const kind = ["primary", "gallery", "selfie"].includes(body.kind) ? (body.kind as string) : null;
+    const requestId = String(body.request_id ?? "");
+    if (!kind || !PATH.test(path) || !path.startsWith(`${user.id}/`) || (kind === "selfie" && !UUID.test(requestId))) {
       await securityEvent(user.id, "upload_path_rejected", "warning", {});
       throw new HttpError(400, "bad_request", "Invalid upload.");
     }
@@ -61,6 +63,17 @@ Deno.serve((req) =>
     if (insErr) {
       await admin.storage.from("media_encrypted").remove([storagePath]);
       throw insErr;
+    }
+
+    if (kind === "selfie") {
+      // Verification selfies are never published: linked to the pending
+      // request for staff review and purged 30 days after review.
+      const { error } = await admin.rpc("attach_verification_selfie", { p_user: user.id, p_request: requestId, p_media: mediaId });
+      if (error) {
+        await admin.from("media_objects").update({ status: "deleted" }).eq("id", mediaId);
+        throw new HttpError(409, "expired", "That verification expired. Start again.");
+      }
+      return json(req, { media_id: mediaId, status: "pending" });
     }
 
     if (verdict.status === "approved") {

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
 import '../../core/phosphor.dart';
 
 import '../../core/config.dart';
@@ -8,6 +9,7 @@ import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/backend.dart';
 import '../../providers.dart';
+import '../legal/consent.dart';
 
 class AuthScreen extends ConsumerStatefulWidget {
   const AuthScreen({super.key});
@@ -22,6 +24,7 @@ class _AuthScreenState extends ConsumerState<AuthScreen> with SingleTickerProvid
   final _code = TextEditingController();
   bool _codeSent = false;
   bool _busy = false;
+  bool _agreed = SignupConsent.accepted;
   late final _intro = AnimationController(vsync: this, duration: const Duration(milliseconds: 700))..forward();
 
   String get _normalizedTarget {
@@ -73,33 +76,34 @@ class _AuthScreenState extends ConsumerState<AuthScreen> with SingleTickerProvid
                   mainAxisAlignment: MainAxisAlignment.center,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    _PortraitFan(animation: _intro),
+                    AppConfig.isDemo ? _PortraitFan(animation: _intro) : _AbstractFan(animation: _intro),
                     const SizedBox(height: 32),
                     const Wordmark(size: 44),
                     const SizedBox(height: 14),
-                    Text('Private by default. Open only when you both say yes.',
-                        style: t.headlineSmall?.copyWith(fontWeight: FontWeight.w500)),
+                    Text(
+                      'Real people, real profiles. Chat when you both say yes.',
+                      style: t.headlineSmall?.copyWith(fontWeight: FontWeight.w500),
+                    ),
                     const SizedBox(height: 10),
                     Text('Kochi · Kozhikode · Thiruvananthapuram', style: t.bodyMedium?.copyWith(color: c.muted)),
                   ],
                 ),
               ),
               if (!_codeSent) ...[
-                _TargetField(
-                  channel: _channel,
-                  controller: _target,
-                  onChanged: () => setState(() {}),
-                ),
-                const SizedBox(height: 10),
+                _TargetField(channel: _channel, controller: _target, onChanged: () => setState(() {})),
+                const SizedBox(height: 12),
+                ConsentCheckbox(value: _agreed, onChanged: (v) => setState(() => _agreed = SignupConsent.accepted = v)),
+                const SizedBox(height: 12),
                 PillButton(
                   label: 'Continue',
                   trailingIcon: PhosphorIconsBold.arrowRight,
                   busy: _busy,
-                  onTap: _targetValid
+                  // OTP can't be requested until the user is 18+ and has agreed.
+                  onTap: _targetValid && _agreed
                       ? () => _run(() async {
-                            await backend.sendOtp(_channel, _normalizedTarget);
-                            setState(() => _codeSent = true);
-                          })
+                          await backend.sendOtp(_channel, _normalizedTarget);
+                          setState(() => _codeSent = true);
+                        })
                       : null,
                 ),
                 TextButton(
@@ -107,8 +111,10 @@ class _AuthScreenState extends ConsumerState<AuthScreen> with SingleTickerProvid
                     _channel = _channel == OtpChannel.phone ? OtpChannel.email : OtpChannel.phone;
                     _target.clear();
                   }),
-                  child: Text(_channel == OtpChannel.phone ? 'Use email instead' : 'Use phone instead',
-                      style: t.labelMedium?.copyWith(color: c.ink2)),
+                  child: Text(
+                    _channel == OtpChannel.phone ? 'Use email instead' : 'Use phone instead',
+                    style: t.labelMedium?.copyWith(color: c.ink2),
+                  ),
                 ),
               ] else ...[
                 Text('Enter the code sent to $_normalizedTarget', style: t.bodyMedium),
@@ -139,20 +145,75 @@ class _AuthScreenState extends ConsumerState<AuthScreen> with SingleTickerProvid
                   onPressed: _busy
                       ? null
                       : () => setState(() {
-                            _codeSent = false;
-                            _code.clear();
-                          }),
+                          _codeSent = false;
+                          _code.clear();
+                        }),
                   child: Text('Change number', style: t.labelMedium?.copyWith(color: c.ink2)),
                 ),
               ],
-              Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-                Icon(PhosphorIconsFill.lockSimple, size: 13, color: c.muted),
-                const SizedBox(width: 5),
-                Text('End-to-end encrypted chats · No screenshots', style: t.bodySmall?.copyWith(color: c.muted)),
-              ]),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(PhosphorIconsFill.lockSimple, size: 13, color: c.muted),
+                  const SizedBox(width: 5),
+                  Text('End-to-end encrypted chats · No screenshots', style: t.bodySmall?.copyWith(color: c.muted)),
+                ],
+              ),
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// Production welcome art: no photos of people, just the card motif.
+class _AbstractFan extends StatelessWidget {
+  const _AbstractFan({required this.animation});
+  final Animation<double> animation;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.fc;
+    final tones = [c.goldSoft, c.accentSoft, c.surface, c.hair];
+    final icons = [
+      PhosphorIconsFill.heart,
+      PhosphorIconsFill.chatCircle,
+      PhosphorIconsFill.lockSimple,
+      PhosphorIconsFill.sealCheck,
+    ];
+    return SizedBox(
+      height: 112,
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          for (var i = 0; i < 4; i++)
+            AnimatedBuilder(
+              animation: animation,
+              builder: (context, child) {
+                final p = Motion.easeOut.transform(((animation.value - i * 0.06) / (1 - i * 0.06)).clamp(0.0, 1.0));
+                return Positioned(
+                  left: i * 58.0,
+                  top: [6.0, -4.0, 2.0, 10.0][i] + (1 - p) * 24,
+                  child: Opacity(
+                    opacity: p,
+                    child: Transform.rotate(angle: [-8, -2, 5, 10][i] * 3.14159 / 180, child: child),
+                  ),
+                );
+              },
+              child: Container(
+                width: 76,
+                height: 96,
+                decoration: BoxDecoration(
+                  color: tones[i],
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: c.paper, width: 3),
+                  boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.10), blurRadius: 18, offset: const Offset(0, 8))],
+                ),
+                child: Icon(icons[i], color: c.ink, size: 26),
+              ),
+            ),
+        ],
       ),
     );
   }
@@ -166,11 +227,22 @@ class Wordmark extends StatelessWidget {
   Widget build(BuildContext context) {
     final c = context.fc;
     return Text.rich(
-      TextSpan(children: [
-        const TextSpan(text: 'finder'),
-        TextSpan(text: '.', style: TextStyle(color: c.accent)),
-      ]),
-      style: TextStyle(fontFamily: 'Geist', fontSize: size, fontWeight: FontWeight.w700, letterSpacing: -size * 0.04, color: c.ink),
+      TextSpan(
+        children: [
+          const TextSpan(text: 'finder'),
+          TextSpan(
+            text: '.',
+            style: TextStyle(color: c.accent),
+          ),
+        ],
+      ),
+      style: TextStyle(
+        fontFamily: 'Geist',
+        fontSize: size,
+        fontWeight: FontWeight.w700,
+        letterSpacing: -size * 0.04,
+        color: c.ink,
+      ),
     );
   }
 }
@@ -196,11 +268,14 @@ class _TargetField extends StatelessWidget {
         prefixIcon: phone
             ? Padding(
                 padding: const EdgeInsets.only(left: 18, right: 10),
-                child: Row(mainAxisSize: MainAxisSize.min, children: [
-                  Text('+91', style: t.titleMedium),
-                  const SizedBox(width: 12),
-                  Container(width: 1, height: 22, color: c.hair),
-                ]),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text('+91', style: t.titleMedium),
+                    const SizedBox(width: 12),
+                    Container(width: 1, height: 22, color: c.hair),
+                  ],
+                ),
               )
             : Icon(PhosphorIconsRegular.envelopeSimple, color: c.muted),
       ),
@@ -227,37 +302,42 @@ class _PortraitFan extends StatelessWidget {
     final reduce = MediaQuery.maybeDisableAnimationsOf(context) ?? false;
     return SizedBox(
       height: 112,
-      child: Stack(clipBehavior: Clip.none, children: [
-        for (var i = 0; i < _cards.length; i++)
-          AnimatedBuilder(
-            animation: animation,
-            builder: (context, child) {
-              final start = i * 0.06;
-              final p = reduce ? 1.0 : Motion.easeOut.transform(((animation.value - start) / (1 - start)).clamp(0.0, 1.0));
-              return Positioned(
-                left: i * 58.0,
-                top: _cards[i].$3 + (1 - p) * 24,
-                child: Opacity(
-                  opacity: p,
-                  child: Transform.rotate(angle: _cards[i].$2 * 3.14159 / 180, child: child),
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          for (var i = 0; i < _cards.length; i++)
+            AnimatedBuilder(
+              animation: animation,
+              builder: (context, child) {
+                final start = i * 0.06;
+                final p = reduce ? 1.0 : Motion.easeOut.transform(((animation.value - start) / (1 - start)).clamp(0.0, 1.0));
+                return Positioned(
+                  left: i * 58.0,
+                  top: _cards[i].$3 + (1 - p) * 24,
+                  child: Opacity(
+                    opacity: p,
+                    child: Transform.rotate(angle: _cards[i].$2 * 3.14159 / 180, child: child),
+                  ),
+                );
+              },
+              child: Container(
+                width: 76,
+                height: 96,
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: c.paper, width: 3),
+                  boxShadow: [
+                    BoxShadow(color: Colors.black.withValues(alpha: 0.14), blurRadius: 24, offset: const Offset(0, 10)),
+                  ],
                 ),
-              );
-            },
-            child: Container(
-              width: 76,
-              height: 96,
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: c.paper, width: 3),
-                boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.14), blurRadius: 24, offset: const Offset(0, 10))],
-              ),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(17),
-                child: Image.asset(_cards[i].$1, fit: BoxFit.cover, alignment: const Alignment(0, 0.4)),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(17),
+                  child: Image.asset(_cards[i].$1, fit: BoxFit.cover, alignment: const Alignment(0, 0.4)),
+                ),
               ),
             ),
-          ),
-      ]),
+        ],
+      ),
     );
   }
 }

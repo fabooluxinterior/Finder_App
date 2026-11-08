@@ -88,9 +88,7 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   bool sse_decode_bool(SseDeserializer deserializer);
 
   @protected
-  SignedOneTimeKey sse_decode_box_autoadd_signed_one_time_key(
-    SseDeserializer deserializer,
-  );
+  SignedOneTimeKey sse_decode_box_autoadd_signed_one_time_key(SseDeserializer deserializer);
 
   @protected
   DecryptedMessage sse_decode_decrypted_message(SseDeserializer deserializer);
@@ -114,9 +112,7 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   Uint8List sse_decode_list_prim_u_8_strict(SseDeserializer deserializer);
 
   @protected
-  List<SignedOneTimeKey> sse_decode_list_signed_one_time_key(
-    SseDeserializer deserializer,
-  );
+  List<SignedOneTimeKey> sse_decode_list_signed_one_time_key(SseDeserializer deserializer);
 
   @protected
   OneTimeKeyBatch sse_decode_one_time_key_batch(SseDeserializer deserializer);
@@ -125,9 +121,7 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   String? sse_decode_opt_String(SseDeserializer deserializer);
 
   @protected
-  SignedOneTimeKey? sse_decode_opt_box_autoadd_signed_one_time_key(
-    SseDeserializer deserializer,
-  );
+  SignedOneTimeKey? sse_decode_opt_box_autoadd_signed_one_time_key(SseDeserializer deserializer);
 
   @protected
   SignedOneTimeKey sse_decode_signed_one_time_key(SseDeserializer deserializer);
@@ -145,10 +139,7 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   int sse_decode_i_32(SseDeserializer deserializer);
 
   @protected
-  void sse_encode_AnyhowException(
-    AnyhowException self,
-    SseSerializer serializer,
-  );
+  void sse_encode_AnyhowException(AnyhowException self, SseSerializer serializer);
 
   @protected
   void sse_encode_String(String self, SseSerializer serializer);
@@ -157,31 +148,19 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   void sse_encode_bool(bool self, SseSerializer serializer);
 
   @protected
-  void sse_encode_box_autoadd_signed_one_time_key(
-    SignedOneTimeKey self,
-    SseSerializer serializer,
-  );
+  void sse_encode_box_autoadd_signed_one_time_key(SignedOneTimeKey self, SseSerializer serializer);
 
   @protected
-  void sse_encode_decrypted_message(
-    DecryptedMessage self,
-    SseSerializer serializer,
-  );
+  void sse_encode_decrypted_message(DecryptedMessage self, SseSerializer serializer);
 
   @protected
-  void sse_encode_device_identity(
-    DeviceIdentity self,
-    SseSerializer serializer,
-  );
+  void sse_encode_device_identity(DeviceIdentity self, SseSerializer serializer);
 
   @protected
   void sse_encode_encrypted_blob(EncryptedBlob self, SseSerializer serializer);
 
   @protected
-  void sse_encode_encrypted_message(
-    EncryptedMessage self,
-    SseSerializer serializer,
-  );
+  void sse_encode_encrypted_message(EncryptedMessage self, SseSerializer serializer);
 
   @protected
   void sse_encode_list_String(List<String> self, SseSerializer serializer);
@@ -190,37 +169,22 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   void sse_encode_list_prim_u_8_loose(List<int> self, SseSerializer serializer);
 
   @protected
-  void sse_encode_list_prim_u_8_strict(
-    Uint8List self,
-    SseSerializer serializer,
-  );
+  void sse_encode_list_prim_u_8_strict(Uint8List self, SseSerializer serializer);
 
   @protected
-  void sse_encode_list_signed_one_time_key(
-    List<SignedOneTimeKey> self,
-    SseSerializer serializer,
-  );
+  void sse_encode_list_signed_one_time_key(List<SignedOneTimeKey> self, SseSerializer serializer);
 
   @protected
-  void sse_encode_one_time_key_batch(
-    OneTimeKeyBatch self,
-    SseSerializer serializer,
-  );
+  void sse_encode_one_time_key_batch(OneTimeKeyBatch self, SseSerializer serializer);
 
   @protected
   void sse_encode_opt_String(String? self, SseSerializer serializer);
 
   @protected
-  void sse_encode_opt_box_autoadd_signed_one_time_key(
-    SignedOneTimeKey? self,
-    SseSerializer serializer,
-  );
+  void sse_encode_opt_box_autoadd_signed_one_time_key(SignedOneTimeKey? self, SseSerializer serializer);
 
   @protected
-  void sse_encode_signed_one_time_key(
-    SignedOneTimeKey self,
-    SseSerializer serializer,
-  );
+  void sse_encode_signed_one_time_key(SignedOneTimeKey self, SseSerializer serializer);
 
   @protected
   void sse_encode_u_32(int self, SseSerializer serializer);
@@ -238,14 +202,11 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 // Section: wire_class
 
 class RustLibWire implements BaseWire {
-  factory RustLibWire.fromExternalLibrary(ExternalLibrary lib) =>
-      RustLibWire(lib.ffiDynamicLibrary);
+  factory RustLibWire.fromExternalLibrary(ExternalLibrary lib) => RustLibWire(lib.ffiDynamicLibrary);
 
   /// Holds the symbol lookup function.
-  final ffi.Pointer<T> Function<T extends ffi.NativeType>(String symbolName)
-  _lookup;
+  final ffi.Pointer<T> Function<T extends ffi.NativeType>(String symbolName) _lookup;
 
   /// The symbols are looked up in [dynamicLibrary].
-  RustLibWire(ffi.DynamicLibrary dynamicLibrary)
-    : _lookup = dynamicLibrary.lookup;
+  RustLibWire(ffi.DynamicLibrary dynamicLibrary) : _lookup = dynamicLibrary.lookup;
 }

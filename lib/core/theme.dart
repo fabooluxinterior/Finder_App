@@ -109,13 +109,13 @@ class AppColors {
 TextTheme _type(Color ink, Color ink2) {
   // Size-specific tracking: tight for display, neutral for body.
   TextStyle s(double size, FontWeight w, double tracking, double height, [Color? c]) => TextStyle(
-        fontFamily: 'Geist',
-        fontSize: size,
-        fontWeight: w,
-        letterSpacing: size * tracking,
-        height: height,
-        color: c ?? ink,
-      );
+    fontFamily: 'Geist',
+    fontSize: size,
+    fontWeight: w,
+    letterSpacing: size * tracking,
+    height: height,
+    color: c ?? ink,
+  );
   return TextTheme(
     displaySmall: s(38, FontWeight.w600, -0.035, 1.05),
     headlineMedium: s(30, FontWeight.w600, -0.035, 1.1),
@@ -156,10 +156,12 @@ ThemeData buildTheme(Brightness brightness) {
     splashFactory: NoSplash.splashFactory,
     highlightColor: Colors.transparent,
     // iOS-style push/pop everywhere (spatially consistent, interruptible by edge swipe on iOS).
-    pageTransitionsTheme: const PageTransitionsTheme(builders: {
-      TargetPlatform.android: CupertinoPageTransitionsBuilder(),
-      TargetPlatform.iOS: CupertinoPageTransitionsBuilder(),
-    }),
+    pageTransitionsTheme: const PageTransitionsTheme(
+      builders: {
+        TargetPlatform.android: CupertinoPageTransitionsBuilder(),
+        TargetPlatform.iOS: CupertinoPageTransitionsBuilder(),
+      },
+    ),
     appBarTheme: AppBarTheme(
       backgroundColor: c.paper,
       foregroundColor: c.ink,
@@ -181,9 +183,18 @@ ThemeData buildTheme(Brightness brightness) {
       hintStyle: text.bodyLarge?.copyWith(color: c.muted),
       labelStyle: text.bodyMedium?.copyWith(color: c.muted),
       contentPadding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
-      border: OutlineInputBorder(borderRadius: BorderRadius.circular(18), borderSide: BorderSide(color: c.hair)),
-      enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(18), borderSide: BorderSide(color: c.hair)),
-      focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(18), borderSide: BorderSide(color: c.ink, width: 1.2)),
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(18),
+        borderSide: BorderSide(color: c.hair),
+      ),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(18),
+        borderSide: BorderSide(color: c.hair),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(18),
+        borderSide: BorderSide(color: c.ink, width: 1.2),
+      ),
     ),
     filledButtonTheme: FilledButtonThemeData(
       style: FilledButton.styleFrom(
@@ -242,6 +253,20 @@ ThemeData buildTheme(Brightness brightness) {
       contentTextStyle: text.bodyMedium,
     ),
     progressIndicatorTheme: ProgressIndicatorThemeData(color: c.ink),
+    datePickerTheme: DatePickerThemeData(
+      backgroundColor: c.surface,
+      surfaceTintColor: Colors.transparent,
+      headerForegroundColor: c.ink,
+      dividerColor: c.hair,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
+      todayBorder: BorderSide(color: c.ink),
+      dayForegroundColor: WidgetStateProperty.resolveWith((s) => s.contains(WidgetState.selected) ? c.paper : c.ink),
+      dayBackgroundColor: WidgetStateProperty.resolveWith((s) => s.contains(WidgetState.selected) ? c.ink : null),
+      yearForegroundColor: WidgetStateProperty.resolveWith((s) => s.contains(WidgetState.selected) ? c.paper : c.ink),
+      yearBackgroundColor: WidgetStateProperty.resolveWith((s) => s.contains(WidgetState.selected) ? c.ink : null),
+      cancelButtonStyle: TextButton.styleFrom(foregroundColor: c.ink2),
+      confirmButtonStyle: TextButton.styleFrom(foregroundColor: c.ink),
+    ),
     tabBarTheme: TabBarThemeData(
       labelColor: c.ink,
       unselectedLabelColor: c.muted,

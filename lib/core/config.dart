@@ -1,13 +1,20 @@
 /// Build-time configuration, supplied with --dart-define.
 ///
-/// When SUPABASE_URL / SUPABASE_ANON_KEY are absent the app runs in
-/// self-contained demo mode (seeded profiles, simulated replies, mock billing).
+/// Demo mode (seeded profiles, simulated replies, mock billing) is compiled
+/// in only with --dart-define=DEMO=true. Being a const, the demo backend and
+/// sample data are tree-shaken out of every other build.
 class AppConfig {
   static const supabaseUrl = String.fromEnvironment('SUPABASE_URL');
   static const supabaseAnonKey = String.fromEnvironment('SUPABASE_ANON_KEY');
   static const revenueCatAndroidKey = String.fromEnvironment('REVENUECAT_ANDROID_KEY');
 
-  static bool get isDemo => supabaseUrl.isEmpty || supabaseAnonKey.isEmpty;
+  static const isDemo = bool.fromEnvironment('DEMO');
+  static bool get isConfigured => supabaseUrl.isNotEmpty && supabaseAnonKey.isNotEmpty;
+
+  /// Bump when the Terms, Privacy Policy or Community Guidelines change
+  /// materially; users who accepted an older version must re-consent.
+  static const policyVersion = '2026-11-10';
+  static const minimumAge = 18;
 
   static const productId = 'fast_track_79_monthly';
   static const entitlementId = 'fast_track';

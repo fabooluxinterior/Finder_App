@@ -1,6 +1,7 @@
 \set ON_ERROR_STOP 1
 -- fixtures (as superuser)
 insert into auth.users select ('00000000-0000-0000-0000-0000000000'||lpad(i::text,2,'0'))::uuid from generate_series(1,15) i;
+insert into public.profile_dob (user_id, dob) select id, date '2000-01-15' from auth.users;
 insert into public.profiles (id, full_name, age, city, bio, avatar_urls)
   select id, 'User '||right(id::text,2), 25, case when right(id::text,2)::int % 2 = 0 then 'Kochi' else 'Kozhikode' end, '', array[gen_random_uuid()::text] from auth.users;
 update public.profiles set is_premium = true where id = '00000000-0000-0000-0000-000000000003';
@@ -30,7 +31,7 @@ select pg_temp.expect_fail($$select public.remaining_swipes()$$, 'daily request 
 select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-000000000002', false);
 select 'B (free) sees pending rows (expect 0):', count(*) from public.swipes_and_requests where receiver_id = auth.uid() and action = 'follow_requested';
 select 'B incoming count (expect 1):', public.incoming_request_count();
-select 'B private of A before match (expect 0):', count(*) from public.profile_private where id = '00000000-0000-0000-0000-000000000001';
+select 'B sees A private profile before any match (open profiles, expect 1):', count(*) from public.profile_private where id = '00000000-0000-0000-0000-000000000001';
 select 'B->A', public.swipe_profile('00000000-0000-0000-0000-000000000001', 'follow_requested');
 select 'B private of A after match (expect 1):', count(*) from public.profile_private where id = '00000000-0000-0000-0000-000000000001';
 

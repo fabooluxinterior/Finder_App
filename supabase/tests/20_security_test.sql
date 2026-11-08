@@ -1,5 +1,6 @@
 \set ON_ERROR_STOP 1
 insert into auth.users select ('00000000-0000-0000-0000-0000000000'||lpad(i::text,2,'0'))::uuid from generate_series(1,6) i;
+insert into public.profile_dob (user_id, dob) select id, date '2000-01-15' from auth.users;
 insert into public.profiles (id, full_name, age, city, bio) select id, 'U'||right(id::text,2), 25, 'Kochi', '' from auth.users;
 -- A(01) <-> B(02) connected; C(03) stranger; D(04) has MFA; S(05) staff
 insert into public.swipes_and_requests (sender_id, receiver_id, action) values ('00000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-000000000002','follow_requested');

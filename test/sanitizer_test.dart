@@ -8,6 +8,8 @@ void main() {
       '+91-9847012345',
       'dm @rohan.codes',
       'insta: rohan_99',
+      'my insta is rohan_99',
+      'whatsapp - rohan99',
       'see https://x.co/abc',
       'www.example.com',
       'mysite.in',
@@ -18,7 +20,7 @@ void main() {
   });
 
   test('leaves ordinary text alone', () {
-    for (final s in ['I am 24, love biryani at 8pm', 'Kochi → Munnar trip in 2025!', 'email me? no.']) {
+    for (final s in ['I am 24, love biryani at 8pm', 'I love Instagram photography', 'Snapchat filters are fun', 'Kochi → Munnar trip in 2025!', 'email me? no.']) {
       expect(ContactSanitizer.containsContactInfo(s), isFalse, reason: s);
       expect(ContactSanitizer.sanitize(s), s);
     }

@@ -39,10 +39,7 @@ class RevenueCatPurchases implements PurchasesService {
 
   Future<Package?> _package() async {
     final offerings = await Purchases.getOfferings();
-    final packages = [
-      ...?offerings.current?.availablePackages,
-      for (final o in offerings.all.values) ...o.availablePackages,
-    ];
+    final packages = [...?offerings.current?.availablePackages, for (final o in offerings.all.values) ...o.availablePackages];
     for (final p in packages) {
       // Play subscription ids surface as "<productId>:<basePlanId>".
       if (p.storeProduct.identifier.split(':').first == AppConfig.productId) return p;

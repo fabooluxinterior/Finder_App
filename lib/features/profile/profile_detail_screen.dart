@@ -1,7 +1,6 @@
-import 'dart:ui';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
 import '../../core/phosphor.dart';
 
 import '../../core/theme.dart';
@@ -11,8 +10,8 @@ import '../../providers.dart';
 import '../deck/profile_card.dart';
 import '../safety/safety_actions.dart';
 
-/// Instagram-private-style profile. The photo grid and interests come from
-/// `profile_private`, which the server returns only to accepted connections.
+/// Full profile: photos and interests are visible to every signed-in user
+/// (not blocked). Contact details are never part of a profile.
 class ProfileDetailScreen extends ConsumerWidget {
   const ProfileDetailScreen({super.key, required this.profile, this.onPass, this.onRequest});
   final PublicProfile profile;
@@ -38,104 +37,150 @@ class ProfileDetailScreen extends ConsumerWidget {
     }
 
     return Scaffold(
-      body: Stack(children: [
-        CustomScrollView(slivers: [
-          SliverToBoxAdapter(
-            child: SizedBox(
-              height: height * 0.62,
-              child: Stack(fit: StackFit.expand, children: [
-                Hero(tag: ProfileCard.heroTag(profile.id), child: ProfilePhoto(url: profile.primaryPhoto, name: profile.fullName)),
-                DecoratedBox(
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
-                      stops: const [0, 0.18, 0.55, 1],
-                      colors: [Colors.black.withValues(alpha: 0.25), Colors.transparent, Colors.transparent, c.paper],
-                    ),
+      body: Stack(
+        children: [
+          CustomScrollView(
+            slivers: [
+              SliverToBoxAdapter(
+                child: SizedBox(
+                  height: height * 0.62,
+                  child: Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      Hero(
+                        tag: ProfileCard.heroTag(profile.id),
+                        child: ProfilePhoto(url: profile.primaryPhoto, name: profile.fullName),
+                      ),
+                      DecoratedBox(
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            begin: Alignment.topCenter,
+                            end: Alignment.bottomCenter,
+                            stops: const [0, 0.18, 0.55, 1],
+                            colors: [Colors.black.withValues(alpha: 0.25), Colors.transparent, Colors.transparent, c.paper],
+                          ),
+                        ),
+                      ),
+                      // Name sits inside the photo section: a viewport paints earlier
+                      // slivers above later ones, so overlapping from below is hidden.
+                      Positioned(
+                        left: 22,
+                        right: 22,
+                        bottom: 6,
+                        child: Row(
+                          children: [
+                            Flexible(
+                              child: Text.rich(
+                                TextSpan(
+                                  children: [
+                                    TextSpan(text: profile.firstName),
+                                    TextSpan(
+                                      text: ', ${profile.age}',
+                                      style: TextStyle(fontWeight: FontWeight.w400, color: c.ink2),
+                                    ),
+                                  ],
+                                ),
+                                style: t.displaySmall,
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            if (profile.isVerified) const VerifiedBadge(size: 24),
+                          ],
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-              ]),
-            ),
-          ),
-          SliverToBoxAdapter(
-            child: Transform.translate(
-              offset: const Offset(0, -56),
-              child: Padding(
-                padding: EdgeInsets.fromLTRB(22, 0, 22, fromDeck ? 110 : 40),
-                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Row(children: [
-                    Flexible(
-                      child: Text.rich(
-                        TextSpan(children: [
-                          TextSpan(text: profile.firstName),
-                          TextSpan(text: ', ${profile.age}', style: TextStyle(fontWeight: FontWeight.w400, color: c.ink2)),
-                        ]),
-                        style: t.displaySmall,
+              ),
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: EdgeInsets.fromLTRB(22, 4, 22, fromDeck ? 110 : 40),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: [
+                          InfoChip(icon: PhosphorIconsFill.mapPin, label: profile.city),
+                          if (profile.isPremium)
+                            InfoChip(
+                              icon: PhosphorIconsFill.lightning,
+                              label: 'Fast-Track',
+                              color: c.gold,
+                              background: c.goldSoft,
+                            ),
+                          if (connected) InfoChip(icon: PhosphorIconsFill.userCheck, label: 'Connected', color: c.ok),
+                        ],
                       ),
-                    ),
-                    const SizedBox(width: 8),
-                    const VerifiedBadge(size: 24),
-                  ]),
-                  const SizedBox(height: 12),
-                  Wrap(spacing: 8, runSpacing: 8, children: [
-                    InfoChip(icon: PhosphorIconsFill.mapPin, label: profile.city),
-                    if (profile.isPremium) InfoChip(icon: PhosphorIconsFill.lightning, label: 'Fast-Track', color: c.gold, background: c.goldSoft),
-                    if (connected) InfoChip(icon: PhosphorIconsFill.userCheck, label: 'Connected', color: c.ok),
-                  ]),
-                  if (profile.bio.isNotEmpty) ...[
-                    const SizedBox(height: 16),
-                    Text(profile.bio, style: t.bodyLarge),
-                  ],
-                  const SectionLabel('Photos · Interests', padding: EdgeInsets.fromLTRB(0, 26, 0, 10)),
-                  priv.when(
-                    loading: () => const SizedBox(height: 120),
-                    error: (e, _) => Text('$e'),
-                    data: (p) => isMe || connected || p.gallery.isNotEmpty || p.interests.isNotEmpty
-                        ? _Unlocked(data: p)
-                        : const _Locked(),
+                      if (profile.bio.isNotEmpty) ...[const SizedBox(height: 16), Text(profile.bio, style: t.bodyLarge)],
+                      const SectionLabel('Photos · Interests', padding: EdgeInsets.fromLTRB(0, 26, 0, 10)),
+                      priv.when(
+                        loading: () => const SizedBox(height: 120),
+                        error: (e, _) => Text('$e'),
+                        // Open profiles: everyone signed in sees photos and interests.
+                        data: (p) => _Unlocked(data: p),
+                      ),
+                    ],
                   ),
-                ]),
+                ),
               ),
+            ],
+          ),
+          // Floating top controls over the photo.
+          Positioned(
+            top: MediaQuery.paddingOf(context).top + 8,
+            left: 16,
+            right: 16,
+            child: Row(
+              children: [
+                RoundButton(
+                  icon: PhosphorIconsBold.caretDown,
+                  glass: true,
+                  size: 40,
+                  iconSize: 18,
+                  onTap: () => Navigator.pop(context),
+                  semanticLabel: 'Close',
+                ),
+                const Spacer(),
+                if (!isMe)
+                  PopupMenuButton<String>(
+                    color: c.surface,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+                    onSelected: (v) async {
+                      final done = v == 'report'
+                          ? await showReportSheet(context, profile)
+                          : await confirmBlock(context, ref, profile);
+                      if (done && context.mounted) Navigator.pop(context);
+                    },
+                    itemBuilder: (_) => const [
+                      PopupMenuItem(value: 'report', child: Text('Report')),
+                      PopupMenuItem(value: 'block', child: Text('Block')),
+                    ],
+                    child: const IgnorePointer(
+                      child: RoundButton(icon: PhosphorIconsBold.dotsThree, glass: true, size: 40, iconSize: 20, onTap: _noop),
+                    ),
+                  ),
+              ],
             ),
           ),
-        ]),
-        // Floating top controls over the photo.
-        Positioned(
-          top: MediaQuery.paddingOf(context).top + 8,
-          left: 16,
-          right: 16,
-          child: Row(children: [
-            RoundButton(icon: PhosphorIconsBold.caretDown, glass: true, size: 40, iconSize: 18, onTap: () => Navigator.pop(context), semanticLabel: 'Close'),
-            const Spacer(),
-            if (!isMe)
-              PopupMenuButton<String>(
-                color: c.surface,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
-                onSelected: (v) async {
-                  final done = v == 'report' ? await showReportSheet(context, profile) : await confirmBlock(context, ref, profile);
-                  if (done && context.mounted) Navigator.pop(context);
-                },
-                itemBuilder: (_) => const [
-                  PopupMenuItem(value: 'report', child: Text('Report')),
-                  PopupMenuItem(value: 'block', child: Text('Block')),
+          if (fromDeck && !connected)
+            Positioned(
+              left: 20,
+              right: 20,
+              bottom: MediaQuery.paddingOf(context).bottom + 16,
+              child: Row(
+                children: [
+                  RoundButton(icon: PhosphorIconsBold.x, size: 54, onTap: () => act(onPass), semanticLabel: 'Pass'),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: PillButton(label: 'Request to follow', icon: PhosphorIconsFill.userPlus, onTap: () => act(onRequest)),
+                  ),
                 ],
-                child: const IgnorePointer(child: RoundButton(icon: PhosphorIconsBold.dotsThree, glass: true, size: 40, iconSize: 20, onTap: _noop)),
               ),
-          ]),
-        ),
-        if (fromDeck && !connected)
-          Positioned(
-            left: 20,
-            right: 20,
-            bottom: MediaQuery.paddingOf(context).bottom + 16,
-            child: Row(children: [
-              RoundButton(icon: PhosphorIconsBold.x, size: 54, onTap: () => act(onPass), semanticLabel: 'Pass'),
-              const SizedBox(width: 10),
-              Expanded(child: PillButton(label: 'Request to follow', icon: PhosphorIconsFill.userPlus, onTap: () => act(onRequest))),
-            ]),
-          ),
-      ]),
+            ),
+        ],
+      ),
     );
   }
 }
@@ -149,86 +194,60 @@ class _Unlocked extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final c = context.fc;
-    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      if (data.interests.isNotEmpty) ...[
-        Wrap(spacing: 8, runSpacing: 8, children: [
-          for (final i in data.interests)
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
-              decoration: BoxDecoration(color: c.surface, borderRadius: BorderRadius.circular(99), border: Border.all(color: c.hair)),
-              child: Text(i, style: Theme.of(context).textTheme.labelMedium),
-            ),
-        ]),
-        const SizedBox(height: 16),
-      ],
-      if (data.gallery.isEmpty)
-        Text('No extra photos yet.', style: TextStyle(color: c.muted))
-      else
-        GridView.count(
-          crossAxisCount: 3,
-          shrinkWrap: true,
-          padding: EdgeInsets.zero,
-          physics: const NeverScrollableScrollPhysics(),
-          mainAxisSpacing: 6,
-          crossAxisSpacing: 6,
-          children: [
-            for (final u in data.gallery)
-              Pressable(
-                scale: 0.97,
-                onTap: () => showDialog<void>(
-                  context: context,
-                  builder: (_) => Dialog(
-                    clipBehavior: Clip.antiAlias,
-                    child: AspectRatio(aspectRatio: 1, child: ProfilePhoto(url: u, name: '')),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (data.interests.isNotEmpty) ...[
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              for (final i in data.interests)
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+                  decoration: BoxDecoration(
+                    color: c.surface,
+                    borderRadius: BorderRadius.circular(99),
+                    border: Border.all(color: c.hair),
+                  ),
+                  child: Text(i, style: Theme.of(context).textTheme.labelMedium),
+                ),
+            ],
+          ),
+          const SizedBox(height: 16),
+        ],
+        if (data.gallery.isEmpty)
+          Text('No extra photos yet.', style: TextStyle(color: c.muted))
+        else
+          GridView.count(
+            crossAxisCount: 3,
+            shrinkWrap: true,
+            padding: EdgeInsets.zero,
+            physics: const NeverScrollableScrollPhysics(),
+            mainAxisSpacing: 6,
+            crossAxisSpacing: 6,
+            children: [
+              for (final u in data.gallery)
+                Pressable(
+                  scale: 0.97,
+                  onTap: () => showDialog<void>(
+                    context: context,
+                    builder: (_) => Dialog(
+                      clipBehavior: Clip.antiAlias,
+                      child: AspectRatio(
+                        aspectRatio: 1,
+                        child: ProfilePhoto(url: u, name: ''),
+                      ),
+                    ),
+                  ),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(14),
+                    child: ProfilePhoto(url: u, name: ''),
                   ),
                 ),
-                child: ClipRRect(borderRadius: BorderRadius.circular(14), child: ProfilePhoto(url: u, name: '')),
-              ),
-          ],
-        ),
-    ]);
-  }
-}
-
-class _Locked extends StatelessWidget {
-  const _Locked();
-
-  @override
-  Widget build(BuildContext context) {
-    final c = context.fc;
-    return Stack(alignment: Alignment.center, children: [
-      ImageFiltered(
-        imageFilter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-        child: GridView.count(
-          crossAxisCount: 3,
-          shrinkWrap: true,
-          padding: EdgeInsets.zero,
-          physics: const NeverScrollableScrollPhysics(),
-          mainAxisSpacing: 6,
-          crossAxisSpacing: 6,
-          children: [
-            for (var i = 0; i < 3; i++)
-              ClipRRect(
-                borderRadius: BorderRadius.circular(14),
-                child: Image.asset('assets/demo/g_${(i * 4 + 1) % 12}.jpg', fit: BoxFit.cover),
-              ),
-          ],
-        ),
-      ),
-      Container(
-        height: 38,
-        padding: const EdgeInsets.symmetric(horizontal: 14),
-        decoration: BoxDecoration(
-          color: c.surface,
-          borderRadius: BorderRadius.circular(99),
-          boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.10), blurRadius: 16)],
-        ),
-        child: Row(mainAxisSize: MainAxisSize.min, children: [
-          Icon(PhosphorIconsFill.lockSimple, size: 15, color: c.ink),
-          const SizedBox(width: 6),
-          Text('Private until you connect', style: Theme.of(context).textTheme.labelMedium?.copyWith(color: c.ink)),
-        ]),
-      ),
-    ]);
+            ],
+          ),
+      ],
+    );
   }
 }

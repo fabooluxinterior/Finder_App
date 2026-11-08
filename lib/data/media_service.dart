@@ -21,9 +21,16 @@ class MediaService {
   /// Picks a photo and compresses it to a JPEG (≤1600 px, EXIF dropped)
   /// for upload. Client-side checks are a convenience: the server validates
   /// the real file type, strips metadata, moderates and re-encodes anyway.
-  Future<Uint8List?> pickCompressedPhoto() async {
+  Future<Uint8List?> pickCompressedPhoto() => _pick(ImageSource.gallery);
+
+  /// Live front-camera capture for selfie verification. There is deliberately
+  /// no gallery fallback: the photo must be taken now, with the requested pose.
+  Future<Uint8List?> takeSelfie() => _pick(ImageSource.camera, camera: CameraDevice.front);
+
+  Future<Uint8List?> _pick(ImageSource source, {CameraDevice camera = CameraDevice.rear}) async {
     final file = await _picker.pickImage(
-      source: ImageSource.gallery,
+      source: source,
+      preferredCameraDevice: camera,
       maxWidth: _uploadSide.toDouble(),
       maxHeight: _uploadSide.toDouble(),
       requestFullMetadata: false,

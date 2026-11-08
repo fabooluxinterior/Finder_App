@@ -20,13 +20,17 @@ Future<void> main() async {
 
   if (AppConfig.isDemo) {
     final demo = DemoBackend();
-    runApp(ProviderScope(
-      overrides: [
-        backendProvider.overrideWithValue(demo),
-        purchasesProvider.overrideWithValue(DemoPurchases(demo)),
-      ],
-      child: const FinderApp(),
-    ));
+    runApp(
+      ProviderScope(
+        overrides: [backendProvider.overrideWithValue(demo), purchasesProvider.overrideWithValue(DemoPurchases(demo))],
+        child: const FinderApp(),
+      ),
+    );
+    return;
+  }
+
+  if (!AppConfig.isConfigured) {
+    runApp(const _NotConfiguredApp());
     return;
   }
 
@@ -44,11 +48,36 @@ Future<void> main() async {
     ),
     debug: false,
   );
-  runApp(ProviderScope(
-    overrides: [
-      backendProvider.overrideWithValue(SupabaseBackend(Supabase.instance.client, kv: kv)),
-      purchasesProvider.overrideWithValue(RevenueCatPurchases()),
-    ],
-    child: const FinderApp(),
-  ));
+  runApp(
+    ProviderScope(
+      overrides: [
+        backendProvider.overrideWithValue(SupabaseBackend(Supabase.instance.client, kv: kv)),
+        purchasesProvider.overrideWithValue(RevenueCatPurchases()),
+      ],
+      child: const FinderApp(),
+    ),
+  );
+}
+
+/// Shown by a non-demo build that was compiled without Supabase keys.
+class _NotConfiguredApp extends StatelessWidget {
+  const _NotConfiguredApp();
+
+  @override
+  Widget build(BuildContext context) => const MaterialApp(
+        debugShowCheckedModeBanner: false,
+        home: Scaffold(
+          body: Center(
+            child: Padding(
+              padding: EdgeInsets.all(32),
+              child: Text(
+                'This build has no server configuration.\n\n'
+                'Build with --dart-define=SUPABASE_URL=… --dart-define=SUPABASE_ANON_KEY=…, '
+                'or use the demo: --flavor demo --dart-define=DEMO=true',
+                textAlign: TextAlign.center,
+              ),
+            ),
+          ),
+        ),
+      );
 }

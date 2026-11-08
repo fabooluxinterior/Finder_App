@@ -28,6 +28,23 @@ android {
         versionName = flutter.versionName
     }
 
+    // `demo`: offline sample data (built with --dart-define=DEMO=true) and the
+    // assets/demo/ portraits. `prod`: the real app; demo code and assets are
+    // excluded. Both can be installed side by side.
+    flavorDimensions += "mode"
+    productFlavors {
+        create("demo") {
+            dimension = "mode"
+            applicationIdSuffix = ".demo"
+            versionNameSuffix = "-demo"
+            manifestPlaceholders["appName"] = "Finder Demo"
+        }
+        create("prod") {
+            dimension = "mode"
+            manifestPlaceholders["appName"] = "Finder"
+        }
+    }
+
     buildTypes {
         release {
             // TODO: Add your own signing config for the release build.

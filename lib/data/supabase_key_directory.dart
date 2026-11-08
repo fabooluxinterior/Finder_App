@@ -7,20 +7,22 @@ class SupabaseKeyDirectory implements KeyDirectory {
   final SupabaseClient _db;
 
   RemoteDevice _device(Map<String, dynamic> r) => RemoteDevice(
-        id: r['id'] as String,
-        userId: r['user_id'] as String,
-        curve25519: r['curve25519'] as String,
-        ed25519: r['ed25519'] as String,
-      );
+    id: r['id'] as String,
+    userId: r['user_id'] as String,
+    curve25519: r['curve25519'] as String,
+    ed25519: r['ed25519'] as String,
+  );
 
   @override
-  Future<String> registerDevice({required String curve25519, required String ed25519, required String label, required String platform}) async =>
-      await _db.rpc('register_device', params: {
-        'p_curve25519': curve25519,
-        'p_ed25519': ed25519,
-        'p_label': label,
-        'p_platform': platform,
-      }) as String;
+  Future<String> registerDevice({
+    required String curve25519,
+    required String ed25519,
+    required String label,
+    required String platform,
+  }) async => await _db.rpc(
+    'register_device',
+    params: {'p_curve25519': curve25519, 'p_ed25519': ed25519, 'p_label': label, 'p_platform': platform},
+  ) as String;
 
   @override
   Future<int> uploadOneTimeKeys(String deviceId, List<Map<String, Object?>> keys) async =>

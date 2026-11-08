@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_card_swiper/flutter_card_swiper.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
 import '../../core/phosphor.dart';
 
 import '../../core/errors.dart';
 import '../../core/feedback.dart';
-import '../../core/media_auth.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../models/follow_request.dart';
@@ -53,12 +53,13 @@ class _DeckScreenState extends ConsumerState<DeckScreen> {
     final cards = _cards;
     if (cards == null) return;
     for (final p in cards.skip(from).take(3)) {
-      final u = p.primaryPhoto;
-      if (u == null || u.isEmpty) continue;
-      final ImageProvider provider = u.startsWith('asset:')
-          ? AssetImage(u.substring(6))
-          : NetworkImage(u, headers: MediaAuth.isMediaUrl(u) ? MediaAuth.headers?.call() : null);
-      precacheImage(provider, context).catchError((_) {});
+      // Same providers (and sizes) ProfilePhoto uses, so the cache hits.
+      for (final provider in [
+        ProfilePhoto.provider(p.primaryPhoto, ProfilePhoto.screenDecodeWidth(context)),
+        ProfilePhoto.provider(p.primaryPhoto, 40),
+      ]) {
+        if (provider != null) precacheImage(provider, context).catchError((_) {});
+      }
     }
   }
 
@@ -89,16 +90,21 @@ class _DeckScreenState extends ConsumerState<DeckScreen> {
   }
 
   void _openProfile(PublicProfile p) {
-    Navigator.of(context).push(PageRouteBuilder<void>(
-      transitionDuration: Motion.of(context, Motion.sheet),
-      reverseTransitionDuration: Motion.of(context, Motion.medium),
-      pageBuilder: (_, _, _) => ProfileDetailScreen(
-        profile: p,
-        onPass: () => _controller.swipe(CardSwiperDirection.left),
-        onRequest: () => _controller.swipe(CardSwiperDirection.right),
+    Navigator.of(context).push(
+      PageRouteBuilder<void>(
+        transitionDuration: Motion.of(context, Motion.sheet),
+        reverseTransitionDuration: Motion.of(context, Motion.medium),
+        pageBuilder: (_, _, _) => ProfileDetailScreen(
+          profile: p,
+          onPass: () => _controller.swipe(CardSwiperDirection.left),
+          onRequest: () => _controller.swipe(CardSwiperDirection.right),
+        ),
+        transitionsBuilder: (_, a, _, child) => FadeTransition(
+          opacity: CurvedAnimation(parent: a, curve: Motion.easeOut),
+          child: child,
+        ),
       ),
-      transitionsBuilder: (_, a, _, child) => FadeTransition(opacity: CurvedAnimation(parent: a, curve: Motion.easeOut), child: child),
-    ));
+    );
   }
 
   @override
@@ -117,69 +123,78 @@ class _DeckScreenState extends ConsumerState<DeckScreen> {
     return Scaffold(
       body: SafeArea(
         bottom: false,
-        child: Column(children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(20, 8, 16, 10),
-            child: Row(children: [
-              const Wordmark(),
-              const Spacer(),
-              if (premium)
-                const FastTrackBadge()
-              else
-                Pressable(
-                  onTap: () => showPaywall(context),
-                  child: InfoChip(icon: PhosphorIconsFill.lightning, label: 'Fast-Track', color: c.gold, background: c.goldSoft),
-                ),
-            ]),
-          ),
-          Expanded(
-            child: _cards == null
-                ? (feed.hasError
-                    ? _Empty(
-                        icon: PhosphorIconsRegular.wifiSlash,
-                        title: 'Couldn’t load profiles',
-                        body: 'Check your connection and try again.',
-                        action: 'Try again',
-                        onAction: _reload,
-                      )
-                    : const SizedBox.shrink())
-                : _exhausted
-                    ? _Empty(
-                        icon: PhosphorIconsRegular.sparkle,
-                        title: 'You’re all caught up',
-                        body: 'New people join every day. Profiles you passed come back after 7 days.',
-                        action: 'Refresh',
-                        onAction: _reload,
-                      )
-                    : CardSwiper(
-                        key: ValueKey(_cards),
-                        controller: _controller,
-                        cardsCount: _cards!.length,
-                        numberOfCardsDisplayed: _cards!.length >= 2 ? 2 : 1,
-                        isLoop: false,
-                        initialIndex: _top.clamp(0, _cards!.length - 1),
-                        duration: Motion.of(context, const Duration(milliseconds: 260)),
-                        threshold: 35,
-                        maxAngle: 12,
-                        scale: 0.95,
-                        backCardOffset: const Offset(0, 12),
-                        padding: EdgeInsets.fromLTRB(12, 2, 12, bottomBar + 10),
-                        allowedSwipeDirection: const AllowedSwipeDirection.symmetric(horizontal: true),
-                        onSwipe: _onSwipe,
-                        cardBuilder: (context, index, dx, dy) {
-                          final p = _cards![index];
-                          return ProfileCard(
-                            profile: p,
-                            dragX: index == _top ? dx : 0,
-                            interactive: index == _top,
-                            onTap: () => _openProfile(p),
-                            onPass: () => _controller.swipe(CardSwiperDirection.left),
-                            onRequest: () => _controller.swipe(CardSwiperDirection.right),
-                          );
-                        },
+        child: Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 8, 16, 10),
+              child: Row(
+                children: [
+                  const Wordmark(),
+                  const Spacer(),
+                  if (premium)
+                    const FastTrackBadge()
+                  else
+                    Pressable(
+                      onTap: () => showPaywall(context),
+                      child: InfoChip(
+                        icon: PhosphorIconsFill.lightning,
+                        label: 'Fast-Track',
+                        color: c.gold,
+                        background: c.goldSoft,
                       ),
-          ),
-        ]),
+                    ),
+                ],
+              ),
+            ),
+            Expanded(
+              child: _cards == null
+                  ? (feed.hasError
+                        ? _Empty(
+                            icon: PhosphorIconsRegular.wifiSlash,
+                            title: 'Couldn’t load profiles',
+                            body: 'Check your connection and try again.',
+                            action: 'Try again',
+                            onAction: _reload,
+                          )
+                        : const SizedBox.shrink())
+                  : _exhausted
+                  ? _Empty(
+                      icon: PhosphorIconsRegular.sparkle,
+                      title: 'You’re all caught up',
+                      body: 'New people join every day. Profiles you passed come back after 7 days.',
+                      action: 'Refresh',
+                      onAction: _reload,
+                    )
+                  : CardSwiper(
+                      key: ValueKey(_cards),
+                      controller: _controller,
+                      cardsCount: _cards!.length,
+                      numberOfCardsDisplayed: _cards!.length >= 2 ? 2 : 1,
+                      isLoop: false,
+                      initialIndex: _top.clamp(0, _cards!.length - 1),
+                      duration: Motion.of(context, const Duration(milliseconds: 220)),
+                      threshold: 35,
+                      maxAngle: 12,
+                      scale: 0.95,
+                      backCardOffset: const Offset(0, 12),
+                      padding: EdgeInsets.fromLTRB(12, 2, 12, bottomBar + 10),
+                      allowedSwipeDirection: const AllowedSwipeDirection.symmetric(horizontal: true),
+                      onSwipe: _onSwipe,
+                      cardBuilder: (context, index, dx, dy) {
+                        final p = _cards![index];
+                        return ProfileCard(
+                          profile: p,
+                          dragX: index == _top ? dx : 0,
+                          interactive: index == _top,
+                          onTap: () => _openProfile(p),
+                          onPass: () => _controller.swipe(CardSwiperDirection.left),
+                          onRequest: () => _controller.swipe(CardSwiperDirection.right),
+                        );
+                      },
+                    ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -200,15 +215,22 @@ class _Empty extends StatelessWidget {
     return Center(
       child: Padding(
         padding: const EdgeInsets.fromLTRB(32, 0, 32, 120),
-        child: Column(mainAxisSize: MainAxisSize.min, children: [
-          Icon(icon, size: 44, color: c.muted),
-          const SizedBox(height: 14),
-          Text(title, style: t.titleLarge, textAlign: TextAlign.center),
-          const SizedBox(height: 6),
-          Text(body, textAlign: TextAlign.center, style: t.bodyMedium?.copyWith(color: c.muted)),
-          const SizedBox(height: 20),
-          PillButton(label: action, dark: false, expand: false, height: 46, onTap: onAction),
-        ]),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 44, color: c.muted),
+            const SizedBox(height: 14),
+            Text(title, style: t.titleLarge, textAlign: TextAlign.center),
+            const SizedBox(height: 6),
+            Text(
+              body,
+              textAlign: TextAlign.center,
+              style: t.bodyMedium?.copyWith(color: c.muted),
+            ),
+            const SizedBox(height: 20),
+            PillButton(label: action, dark: false, expand: false, height: 46, onTap: onAction),
+          ],
+        ),
       ),
     );
   }

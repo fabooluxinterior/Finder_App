@@ -5,13 +5,18 @@
 import 'package:flutter/widgets.dart';
 
 abstract final class PhosphorIconsRegular {
+  static const IconData cake = IconData(0xe780, fontFamily: 'PhosphorRegular');
+  static const IconData camera = IconData(0xe10e, fontFamily: 'PhosphorRegular');
   static const IconData cards = IconData(0xe0f8, fontFamily: 'PhosphorRegular');
   static const IconData chatCircle = IconData(0xe168, fontFamily: 'PhosphorRegular');
   static const IconData envelopeSimple = IconData(0xe218, fontFamily: 'PhosphorRegular');
   static const IconData eye = IconData(0xe220, fontFamily: 'PhosphorRegular');
+  static const IconData eyeSlash = IconData(0xe224, fontFamily: 'PhosphorRegular');
+  static const IconData fileText = IconData(0xe23a, fontFamily: 'PhosphorRegular');
   static const IconData flag = IconData(0xe244, fontFamily: 'PhosphorRegular');
   static const IconData flask = IconData(0xe79e, fontFamily: 'PhosphorRegular');
   static const IconData heart = IconData(0xe2a8, fontFamily: 'PhosphorRegular');
+  static const IconData hourglass = IconData(0xe2b2, fontFamily: 'PhosphorRegular');
   static const IconData pencilSimple = IconData(0xe3b4, fontFamily: 'PhosphorRegular');
   static const IconData prohibit = IconData(0xe3de, fontFamily: 'PhosphorRegular');
   static const IconData shieldCheck = IconData(0xe40c, fontFamily: 'PhosphorRegular');
@@ -37,10 +42,12 @@ abstract final class PhosphorIconsBold {
 }
 
 abstract final class PhosphorIconsFill {
+  static const IconData camera = IconData(0xe10e, fontFamily: 'PhosphorFill');
   static const IconData cards = IconData(0xe0f8, fontFamily: 'PhosphorFill');
   static const IconData chatCircle = IconData(0xe168, fontFamily: 'PhosphorFill');
   static const IconData eye = IconData(0xe220, fontFamily: 'PhosphorFill');
   static const IconData heart = IconData(0xe2a8, fontFamily: 'PhosphorFill');
+  static const IconData imagesSquare = IconData(0xe834, fontFamily: 'PhosphorFill');
   static const IconData lightning = IconData(0xe2de, fontFamily: 'PhosphorFill');
   static const IconData lockSimple = IconData(0xe308, fontFamily: 'PhosphorFill');
   static const IconData lockSimpleOpen = IconData(0xe30a, fontFamily: 'PhosphorFill');

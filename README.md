@@ -5,7 +5,12 @@ A private social connection network for Kerala: Bumble-style swiping on top of I
 - **Swipe right** (or tap **Request +**) sends a follow request. **Swipe left** (or ✕) hides the profile for 7 days.
 - **Free:** browse every profile, pass, and send unlimited follow requests. There is no free trial.
 - **Fast-Track (₹79/month):** see who requested you and accept them, message your connections, and Kerala City Boost. A mutual request is an instant match for anyone, but chatting needs Fast-Track.
-- Public cards show name, age, city, bio and the primary photo. The photo grid and interests stay locked until the request is accepted. RLS enforces this, not just the UI.
+- **Open profiles:** every signed-in user (unless blocked) sees the full profile: all photos, bio and interests. Phone numbers, email, date of birth, exact location and social media details are never shown, and the database rejects phone numbers, @handles and links in names, bios and interests. Location is district/city only.
+- **Trust & compliance:**
+  - Sign-up requires ticking "I'm 18+ and agree to the Terms, Community Guidelines and Privacy Policy"; the acceptance is recorded with its policy version.
+  - The date of birth is private, locked, and checked for 18+ in the database.
+  - Optional selfie verification is reviewed by staff and earns a blue Verified badge.
+  - An "Appears under 18" report hides the profile from Discover until a moderator reviews it.
 - Chat (text + 45 s voice notes) opens only between connections (accepted or mutual requests), and only for Fast-Track members.
 - `FLAG_SECURE` is set on the Android window, so screenshots, screen recording and Recents previews are blocked everywhere in the app.
 - Phone numbers, @handles and URLs are stripped from bios and opening messages on the client. The database rejects them in bios too.
@@ -14,10 +19,19 @@ A private social connection network for Kerala: Bumble-style swiping on top of I
 
 ## Try it on your phone (no store publishing)
 
-The app runs in a **demo mode** with offline sample data whenever it's built without Supabase keys. Any 6-digit code logs you in, and the ₹79 purchase is simulated.
+**Demo mode** runs offline with sample data: any 6-digit code logs you in, and the ₹79 purchase and selfie review are simulated. It's compiled in only when you pass `--dart-define=DEMO=true` (Android: `--flavor demo`). Production builds (`--flavor prod`) contain neither the demo code nor the sample photos.
 
 1. **Android APK:** every push runs the `Android APK` workflow (`.github/workflows/android-apk.yml`). Open the run under **Actions**, download the `finder-apk` artifact, unzip it, and install `finder-demo-arm64.apk`. Your phone will ask you to allow installs from your browser or file manager. Use `finder-demo-armv7.apk` on older 32-bit phones.
-2. **Locally:** `flutter run` with a phone plugged in (USB debugging on), or `flutter build apk --release`.
+2. **Locally:** `flutter run --flavor demo --dart-define=DEMO=true` with a phone plugged in (USB debugging on), or `flutter build apk --release --flavor demo --dart-define=DEMO=true`.
+3. **Web demo:** `tool/build_web_demo.sh` (web builds have no flavors, so the script includes the demo photos for that build only).
+
+### Demo photos
+
+`assets/demo/` holds the sample portraits and scenery used only by demo mode. **They must be licensed or AI-generated; never use photos of real people without a release.**
+- The current portraits are illustrations generated with the DiceBear "Lorelei" style (CC0).
+- The scenery images are procedurally generated.
+
+They're bundled only in the `demo` flavor (`pubspec.yaml` asset `flavors:`), so `prod` release builds don't contain them.
 
 ## Building
 
@@ -92,10 +106,15 @@ In the dashboard: enable **Phone** (with an SMS provider such as Twilio or MSG91
 
 The app calls `Purchases.logIn(<supabase user id>)`, so webhook events map straight to `profiles.id`.
 
-### 3. Build
+### 3. Policies
+
+- Fill every `<FILL: …>` placeholder in `TERMS_OF_SERVICE.md`, `PRIVACY_POLICY.md` and `COMMUNITY_GUIDELINES.md`. The app shows these files as-is.
+- When a policy changes materially, bump `AppConfig.policyVersion` (`lib/core/config.dart`, format `YYYY-MM-DD`). Users who accepted an older version see a blocking re-consent screen.
+
+### 4. Build
 
 ```bash
-flutter build apk --release \
+flutter build apk --release --flavor prod \
   --dart-define=SUPABASE_URL=https://<ref>.supabase.co \
   --dart-define=SUPABASE_ANON_KEY=<publishable key> \
   --dart-define=REVENUECAT_ANDROID_KEY=<goog_...>
@@ -120,6 +139,13 @@ Before a Play Store release, replace the debug signing config in `android/app/bu
 | Locked grid and interests | `profile_private` RLS + `avatars/<uid>/gallery/*` storage policy |
 | Users can't grant themselves premium | column-level `UPDATE` grant excludes `is_premium` |
 | Kerala City Boost | `get_feed` ordering: premium + same city first |
+| Full profiles visible to signed-in users, never to blocked ones | `profile_private_select`, `can_view_media` (selfies: owner only) |
+| No phone numbers / handles / links in names, bios, interests; city is a district name | `contains_contact_info` checks + `profiles_city_district` |
+| Policy acceptance recorded per version | `user_consents`, `record_consent`, `accepted_policy_version` (app compares with `POLICY_VERSION`) |
+| 18+ from a private, locked date of birth; age computed server-side | `profile_dob` + `set_dob` + `tg_profiles_age` + `profile_dob_locked` trigger |
+| Verified badge set only by staff review | `verification_requests`, `mod_review_verification`; `is_verified` not client-writable |
+| "Appears under 18" report hides from Discover until reviewed | `submit_report` → `hidden_pending_review`; `mod_resolve_report` unhides on dismissal |
+| Selfies purged 30 days after review | `run_retention` (daily via `pg_cron`) + `media-maintenance` purge |
 
 These rules and the security layer are covered by the SQL suites in `supabase/tests/`, which run against Postgres 16 with Supabase's `auth` / `storage` schemas stubbed. CI runs them on every push.
 

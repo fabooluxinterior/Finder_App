@@ -25,7 +25,12 @@ class ClaimedKey {
 /// Server operations the engine needs. Implemented over Supabase RPCs; the
 /// server only ever sees public keys and ciphertext.
 abstract class KeyDirectory {
-  Future<String> registerDevice({required String curve25519, required String ed25519, required String label, required String platform});
+  Future<String> registerDevice({
+    required String curve25519,
+    required String ed25519,
+    required String label,
+    required String platform,
+  });
   Future<int> uploadOneTimeKeys(String deviceId, List<Map<String, Object?>> keys);
   Future<int> oneTimeKeyCount(String deviceId);
   Future<List<RemoteDevice>> activeDevices(List<String> userIds);
@@ -93,30 +98,29 @@ class E2eeEngine {
   /// Loads or creates this device's identity, registers it, and tops up
   /// one-time keys. Safe to call repeatedly.
   Future<void> ensureReady(String userId) => _locked(() async {
-        if (_userId == userId && _deviceId != null) return;
-        _userId = userId;
-        final storedKey = await kv.read(_k('pickle_key'));
-        if (storedKey == null) {
-          _pickleKey = Uint8List.fromList(await rc.randomKey());
-          await kv.write(_k('pickle_key'), base64Encode(_pickleKey));
-        } else {
-          _pickleKey = base64Decode(storedKey);
-        }
+    if (_userId == userId && _deviceId != null) return;
+    _userId = userId;
+    final storedKey = await kv.read(_k('pickle_key'));
+    if (storedKey == null) {
+      _pickleKey = Uint8List.fromList(await rc.randomKey());
+      await kv.write(_k('pickle_key'), base64Encode(_pickleKey));
+    } else {
+      _pickleKey = base64Decode(storedKey);
+    }
 
-        final stored = await kv.read(_k('account'));
-        final ident = stored == null
-            ? await rc.createDevice(pickleKey: _pickleKey)
-            : await rc.deviceIdentity(accountPickle: stored, pickleKey: _pickleKey);
-        _account = ident.accountPickle;
-        curve25519 = ident.curve25519;
-        ed25519 = ident.ed25519;
-        await kv.write(_k('account'), _account);
+    final stored = await kv.read(_k('account'));
+    final ident = stored == null
+        ? await rc.createDevice(pickleKey: _pickleKey)
+        : await rc.deviceIdentity(accountPickle: stored, pickleKey: _pickleKey);
+    _account = ident.accountPickle;
+    curve25519 = ident.curve25519;
+    ed25519 = ident.ed25519;
+    await kv.write(_k('account'), _account);
 
-        _deviceId = await directory.registerDevice(
-            curve25519: curve25519, ed25519: ed25519, label: label, platform: platform);
-        await kv.write(_k('device_id'), _deviceId!);
-        await _replenishUnlocked();
-      });
+    _deviceId = await directory.registerDevice(curve25519: curve25519, ed25519: ed25519, label: label, platform: platform);
+    await kv.write(_k('device_id'), _deviceId!);
+    await _replenishUnlocked();
+  });
 
   Future<void> replenishOneTimeKeys() => _locked(_replenishUnlocked);
 
@@ -155,87 +159,86 @@ class E2eeEngine {
   /// Encrypts [payload] for every active device of [peerUserId] and for
   /// this user's other devices. Returns one envelope per target device.
   Future<List<Envelope>> encryptFor(String peerUserId, Uint8List payload) => _locked(() async {
-        final devices = (await directory.activeDevices([peerUserId, _userId!])).where((d) => d.id != deviceId).toList();
-        if (!devices.any((d) => d.userId == peerUserId)) {
-          throw const E2eeException('They need to open the app once before you can message them securely.');
-        }
+    final devices = (await directory.activeDevices([peerUserId, _userId!])).where((d) => d.id != deviceId).toList();
+    if (!devices.any((d) => d.userId == peerUserId)) {
+      throw const E2eeException('They need to open the app once before you can message them securely.');
+    }
 
-        // Establish sessions with devices we have none for, claiming their keys.
-        final needing = <RemoteDevice>[];
-        for (final d in devices) {
-          if ((await _sessions(d.curve25519)).isEmpty) needing.add(d);
-        }
-        for (final owner in needing.map((d) => d.userId).toSet()) {
-          final have = devices.where((d) => d.userId == owner && !needing.contains(d)).map((d) => d.id).toList();
-          if (owner == _userId) have.add(deviceId);
-          for (final claim in await directory.claimKeys(owner, have)) {
-            final ok = await rc.verifyOneTimeKey(
-              deviceEd25519: claim.device.ed25519,
-              deviceCurve25519: claim.device.curve25519,
-              otk: claim.publicKey,
-              signature: claim.signature,
-            );
-            if (!ok) continue; // forged or corrupted key: never encrypt to it
-            final pickle = await rc.createOutboundSession(
-              accountPickle: _account,
-              pickleKey: _pickleKey,
-              theirCurve25519: claim.device.curve25519,
-              theirOneTimeKey: claim.publicKey,
-            );
-            await _saveSession(claim.device.curve25519, pickle);
-          }
-        }
+    // Establish sessions with devices we have none for, claiming their keys.
+    final needing = <RemoteDevice>[];
+    for (final d in devices) {
+      if ((await _sessions(d.curve25519)).isEmpty) needing.add(d);
+    }
+    for (final owner in needing.map((d) => d.userId).toSet()) {
+      final have = devices.where((d) => d.userId == owner && !needing.contains(d)).map((d) => d.id).toList();
+      if (owner == _userId) have.add(deviceId);
+      for (final claim in await directory.claimKeys(owner, have)) {
+        final ok = await rc.verifyOneTimeKey(
+          deviceEd25519: claim.device.ed25519,
+          deviceCurve25519: claim.device.curve25519,
+          otk: claim.publicKey,
+          signature: claim.signature,
+        );
+        if (!ok) continue; // forged or corrupted key: never encrypt to it
+        final pickle = await rc.createOutboundSession(
+          accountPickle: _account,
+          pickleKey: _pickleKey,
+          theirCurve25519: claim.device.curve25519,
+          theirOneTimeKey: claim.publicKey,
+        );
+        await _saveSession(claim.device.curve25519, pickle);
+      }
+    }
 
-        final out = <Envelope>[];
-        for (final d in devices) {
-          final sessions = await _sessions(d.curve25519);
-          if (sessions.isEmpty) continue;
-          final m = await rc.encrypt(sessionPickle: sessions.first, pickleKey: _pickleKey, plaintext: payload);
-          await _saveSession(d.curve25519, m.sessionPickle, replacing: sessions.first);
-          out.add(Envelope(deviceId: d.id, type: m.messageType, ciphertext: m.ciphertext));
-        }
-        if (!out.any((e) => devices.firstWhere((d) => d.id == e.deviceId).userId == peerUserId)) {
-          throw const E2eeException('Could not set up encryption with their device. Try again shortly.');
-        }
-        return out;
-      });
+    final out = <Envelope>[];
+    for (final d in devices) {
+      final sessions = await _sessions(d.curve25519);
+      if (sessions.isEmpty) continue;
+      final m = await rc.encrypt(sessionPickle: sessions.first, pickleKey: _pickleKey, plaintext: payload);
+      await _saveSession(d.curve25519, m.sessionPickle, replacing: sessions.first);
+      out.add(Envelope(deviceId: d.id, type: m.messageType, ciphertext: m.ciphertext));
+    }
+    if (!out.any((e) => devices.firstWhere((d) => d.id == e.deviceId).userId == peerUserId)) {
+      throw const E2eeException('Could not set up encryption with their device. Try again shortly.');
+    }
+    return out;
+  });
 
   /// Decrypts an envelope addressed to this device. Throws on tampering,
   /// replay, or unknown sender device.
-  Future<Uint8List> decrypt({required String senderDeviceId, required int type, required String ciphertext}) =>
-      _locked(() async {
-        final sender = await directory.deviceById(senderDeviceId);
-        if (sender == null) throw const E2eeException('Message from an unknown device');
-        final sessions = await _sessions(sender.curve25519);
+  Future<Uint8List> decrypt({required String senderDeviceId, required int type, required String ciphertext}) => _locked(() async {
+    final sender = await directory.deviceById(senderDeviceId);
+    if (sender == null) throw const E2eeException('Message from an unknown device');
+    final sessions = await _sessions(sender.curve25519);
 
-        for (final s in sessions) {
-          if (type == 0 &&
-              !await rc.sessionMatches(sessionPickle: s, pickleKey: _pickleKey, messageType: type, ciphertext: ciphertext)) {
-            continue;
-          }
-          try {
-            final r = await rc.decrypt(sessionPickle: s, pickleKey: _pickleKey, messageType: type, ciphertext: ciphertext);
-            await _saveSession(sender.curve25519, r.sessionPickle, replacing: s);
-            return r.plaintext;
-          } catch (_) {
-            if (type == 0) rethrow;
-          }
-        }
-        if (type != 0) throw const E2eeException('Could not decrypt message');
-
-        final r = await rc.decryptInbound(
-          accountPickle: _account,
-          pickleKey: _pickleKey,
-          theirCurve25519: sender.curve25519,
-          messageType: type,
-          ciphertext: ciphertext,
-        );
-        _account = r.accountPickle!;
-        await kv.write(_k('account'), _account);
-        await _saveSession(sender.curve25519, r.sessionPickle);
-        unawaited(_replenishUnlocked().catchError((_) {}));
+    for (final s in sessions) {
+      if (type == 0 &&
+          !await rc.sessionMatches(sessionPickle: s, pickleKey: _pickleKey, messageType: type, ciphertext: ciphertext)) {
+        continue;
+      }
+      try {
+        final r = await rc.decrypt(sessionPickle: s, pickleKey: _pickleKey, messageType: type, ciphertext: ciphertext);
+        await _saveSession(sender.curve25519, r.sessionPickle, replacing: s);
         return r.plaintext;
-      });
+      } catch (_) {
+        if (type == 0) rethrow;
+      }
+    }
+    if (type != 0) throw const E2eeException('Could not decrypt message');
+
+    final r = await rc.decryptInbound(
+      accountPickle: _account,
+      pickleKey: _pickleKey,
+      theirCurve25519: sender.curve25519,
+      messageType: type,
+      ciphertext: ciphertext,
+    );
+    _account = r.accountPickle!;
+    await kv.write(_k('account'), _account);
+    await _saveSession(sender.curve25519, r.sessionPickle);
+    unawaited(_replenishUnlocked().catchError((_) {}));
+    return r.plaintext;
+  });
 
   /// 60-digit number both people can compare in person.
   Future<String> safetyNumber(String peerUserId) async {
@@ -248,10 +251,10 @@ class E2eeEngine {
 
   /// Wipes all local key material (sign-out / account deletion).
   Future<void> wipe() => _locked(() async {
-        await kv.deleteAll();
-        _deviceId = null;
-        _userId = null;
-      });
+    await kv.deleteAll();
+    _deviceId = null;
+    _userId = null;
+  });
 
   // ------------------------------------------------------------- attachments
 
@@ -264,6 +267,5 @@ class E2eeEngine {
     required Uint8List ciphertext,
     required Uint8List sha256,
     required String aad,
-  }) =>
-      rc.decryptBlob(key: key, nonce: nonce, ciphertext: ciphertext, sha256: sha256, aad: utf8.encode(aad));
+  }) => rc.decryptBlob(key: key, nonce: nonce, ciphertext: ciphertext, sha256: sha256, aad: utf8.encode(aad));
 }

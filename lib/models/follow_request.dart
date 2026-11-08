@@ -3,11 +3,7 @@ import 'profile.dart';
 enum SwipeOutcome { passed, requested, matched }
 
 class FollowRequest {
-  const FollowRequest({
-    required this.id,
-    required this.sender,
-    required this.createdAt,
-  });
+  const FollowRequest({required this.id, required this.sender, required this.createdAt});
 
   final String id;
   final PublicProfile sender;
@@ -15,12 +11,7 @@ class FollowRequest {
 }
 
 class Connection {
-  const Connection({
-    required this.profile,
-    required this.connectedAt,
-    this.lastMessage,
-    this.unread = 0,
-  });
+  const Connection({required this.profile, required this.connectedAt, this.lastMessage, this.unread = 0});
 
   final PublicProfile profile;
   final DateTime connectedAt;

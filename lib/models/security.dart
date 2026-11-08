@@ -1,7 +1,14 @@
 import 'dart:typed_data';
 
 class SessionInfo {
-  const SessionInfo({required this.id, required this.createdAt, required this.lastActive, required this.userAgent, required this.isCurrent, required this.aal});
+  const SessionInfo({
+    required this.id,
+    required this.createdAt,
+    required this.lastActive,
+    required this.userAgent,
+    required this.isCurrent,
+    required this.aal,
+  });
   final String id;
   final DateTime createdAt;
   final DateTime? lastActive;
@@ -11,7 +18,14 @@ class SessionInfo {
 }
 
 class DeviceInfo {
-  const DeviceInfo({required this.id, required this.label, required this.platform, required this.createdAt, required this.lastSeen, required this.isThisDevice});
+  const DeviceInfo({
+    required this.id,
+    required this.label,
+    required this.platform,
+    required this.createdAt,
+    required this.lastSeen,
+    required this.isThisDevice,
+  });
   final String id;
   final String label;
   final String platform;
@@ -41,27 +55,35 @@ enum ReportReason { sexualContent, harassment, spamOrScam, fakeProfile, underage
 
 extension ReportReasonX on ReportReason {
   String get wire => switch (this) {
-        ReportReason.sexualContent => 'sexual_content',
-        ReportReason.harassment => 'harassment',
-        ReportReason.spamOrScam => 'spam_or_scam',
-        ReportReason.fakeProfile => 'fake_profile',
-        ReportReason.underage => 'underage',
-        ReportReason.maliciousLink => 'malicious_link',
-        ReportReason.other => 'other',
-      };
+    ReportReason.sexualContent => 'sexual_content',
+    ReportReason.harassment => 'harassment',
+    ReportReason.spamOrScam => 'spam_or_scam',
+    ReportReason.fakeProfile => 'fake_profile',
+    ReportReason.underage => 'underage',
+    ReportReason.maliciousLink => 'malicious_link',
+    ReportReason.other => 'other',
+  };
   String get label => switch (this) {
-        ReportReason.sexualContent => 'Sexual or explicit content',
-        ReportReason.harassment => 'Harassment or threats',
-        ReportReason.spamOrScam => 'Spam or scam',
-        ReportReason.fakeProfile => 'Fake profile',
-        ReportReason.underage => 'Under 18',
-        ReportReason.maliciousLink => 'Malicious link',
-        ReportReason.other => 'Something else',
-      };
+    ReportReason.sexualContent => 'Sexual or explicit content',
+    ReportReason.harassment => 'Harassment or threats',
+    ReportReason.spamOrScam => 'Spam or scam',
+    ReportReason.fakeProfile => 'Fake profile',
+    ReportReason.underage => 'Appears under 18',
+    ReportReason.maliciousLink => 'Malicious link',
+    ReportReason.other => 'Something else',
+  };
 }
 
 class ReportSummary {
-  const ReportSummary({required this.id, required this.reportedId, required this.reason, required this.hasEvidence, required this.reportCount, required this.createdAt, required this.status});
+  const ReportSummary({
+    required this.id,
+    required this.reportedId,
+    required this.reason,
+    required this.hasEvidence,
+    required this.reportCount,
+    required this.createdAt,
+    required this.status,
+  });
   final String id;
   final String reportedId;
   final String reason;
@@ -88,3 +110,32 @@ class VoicePlayback {
 }
 
 enum ImageUploadStatus { approved, pending }
+
+enum VerificationStatus { none, pending, approved, rejected }
+
+class VerificationStart {
+  const VerificationStart({required this.requestId, required this.pose});
+  final String requestId;
+
+  /// Server-chosen random pose the selfie must show.
+  final String pose;
+}
+
+class VerificationItem {
+  const VerificationItem({
+    required this.requestId,
+    required this.userId,
+    required this.name,
+    required this.pose,
+    required this.selfieUrl,
+    required this.profileUrl,
+    required this.submittedAt,
+  });
+  final String requestId;
+  final String userId;
+  final String name;
+  final String pose;
+  final String? selfieUrl;
+  final String? profileUrl;
+  final DateTime submittedAt;
+}

@@ -90,14 +90,16 @@ class DemoBackend implements FinderBackend {
     }
     var photo = _me?.primaryPhoto;
     if (d.primaryPhotoWebp != null) photo = MemoryImages.put(d.primaryPhotoWebp!);
+    if (_dob == null) throw const AppException(AppErrorCode.dobRequired, 'Add your date of birth first.');
     _me = PublicProfile(
       id: meId,
       fullName: d.fullName,
-      age: d.age,
+      age: _ageFrom(_dob!),
       city: d.city,
       bio: d.bio,
       primaryPhoto: photo,
       isPremium: premium,
+      isVerified: _verification == VerificationStatus.approved,
     );
     _myPrivate = PrivateProfile(
       interests: d.interests,
@@ -109,7 +111,7 @@ class DemoBackend implements FinderBackend {
   @override
   Future<PrivateProfile> privateProfileOf(String userId) async {
     if (userId == meId) return _myPrivate;
-    if (!_connected(meId, userId)) return PrivateProfile.empty;
+    // Open profiles: every signed-in user sees the full gallery and interests.
     final s = _people[userId]!;
     return PrivateProfile(interests: s.interests, gallery: s.gallery);
   }
@@ -122,10 +124,10 @@ class DemoBackend implements FinderBackend {
     final now = DateTime.now();
     final myCity = _me?.city.toLowerCase();
     final list = _people.values.where((s) {
+      if (_hiddenPendingReview.contains(s.profile.id)) return false;
       final mine = _swipes[(meId, s.profile.id)];
       if (mine != null &&
-          !(mine.action == 'pass' &&
-              now.difference(mine.createdAt) > const Duration(days: AppConfig.passHideDays))) {
+          !(mine.action == 'pass' && now.difference(mine.createdAt) > const Duration(days: AppConfig.passHideDays))) {
         return false;
       }
       final theirs = _swipes[(s.profile.id, meId)];
@@ -184,22 +186,13 @@ class DemoBackend implements FinderBackend {
   @override
   Future<IncomingRequests> incomingRequests() async {
     await _latency();
-    final pending = _swipes.values
-        .where((s) => s.receiver == meId && s.action == 'follow_requested')
-        .toList()
+    final pending = _swipes.values.where((s) => s.receiver == meId && s.action == 'follow_requested').toList()
       ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
     return IncomingRequests(
       count: pending.length,
       // Same rule as the RLS policy: identities only for Fast-Track members.
       requests: premium
-          ? [
-              for (final s in pending)
-                FollowRequest(
-                  id: s.id,
-                  sender: _people[s.sender]!.profile,
-                  createdAt: s.createdAt,
-                ),
-            ]
+          ? [for (final s in pending) FollowRequest(id: s.id, sender: _people[s.sender]!.profile, createdAt: s.createdAt)]
           : const [],
     );
   }
@@ -219,9 +212,7 @@ class DemoBackend implements FinderBackend {
 
   @override
   Future<List<Connection>> connections() async {
-    final rows = _swipes.values
-        .where((s) => s.action == 'accepted' && (s.sender == meId || s.receiver == meId))
-        .toList()
+    final rows = _swipes.values.where((s) => s.action == 'accepted' && (s.sender == meId || s.receiver == meId)).toList()
       ..sort((a, b) => (b.respondedAt ?? b.createdAt).compareTo(a.respondedAt ?? a.createdAt));
     return [
       for (final r in rows)
@@ -344,18 +335,109 @@ class DemoBackend implements FinderBackend {
   }
 
   @override
-  Future<void> report(String peerId, ReportReason reason,
-      {String? details, List<ChatMessage> evidence = const [], bool block = true}) async {
+  Future<void> report(
+    String peerId,
+    ReportReason reason, {
+    String? details,
+    List<ChatMessage> evidence = const [],
+    bool block = true,
+  }) async {
     await _latency();
+    // Same rule as the server: "Appears under 18" hides the profile from
+    // discovery until a moderator reviews it.
+    if (reason == ReportReason.underage) _hiddenPendingReview.add(peerId);
     if (block) await blockUser(peerId);
   }
+
+  final _hiddenPendingReview = <String>{};
+
+  // ------------------------------------------------------ consent & age ----
+
+  String? _consentVersion;
+  DateTime? _dob;
+
+  static int _ageFrom(DateTime dob) {
+    final now = DateTime.now();
+    var age = now.year - dob.year;
+    if (now.month < dob.month || (now.month == dob.month && now.day < dob.day)) age--;
+    return age;
+  }
+
+  @override
+  Future<String?> acceptedPolicyVersion() async => _consentVersion;
+
+  @override
+  Future<void> recordConsent(String version) async => _consentVersion = version;
+
+  @override
+  Future<bool> hasDob() async => _dob != null;
+
+  @override
+  Future<int> setDob(DateTime dob) async {
+    await _latency();
+    if (_dob != null) throw const AppException(AppErrorCode.dobLocked, 'Your date of birth can’t be changed.');
+    final age = _ageFrom(dob);
+    if (dob.isAfter(DateTime.now()) || age > 100) throw const AppException(AppErrorCode.unknown, 'Enter a valid date of birth.');
+    if (age < AppConfig.minimumAge) {
+      throw const AppException(AppErrorCode.underage, 'Finder is only for people aged 18 and over.');
+    }
+    _dob = dob;
+    return age;
+  }
+
+  // -------------------------------------------------------- verification ----
+
+  var _verification = VerificationStatus.none;
+  static const _poses = [
+    'Touch your nose with your right index finger',
+    'Give a thumbs up with your left hand',
+    'Make a peace sign next to your right cheek',
+    'Cover your left eye with your left hand',
+  ];
+
+  @override
+  Future<VerificationStatus> verificationStatus() async => _verification;
+
+  @override
+  Future<VerificationStart> startVerification() async {
+    await _latency();
+    if (_verification == VerificationStatus.pending) {
+      throw const AppException(AppErrorCode.verificationPending, 'Your verification is being reviewed.');
+    }
+    return VerificationStart(requestId: _uuid.v4(), pose: _poses[_rand.nextInt(_poses.length)]);
+  }
+
+  @override
+  Future<void> submitVerificationSelfie(String requestId, Uint8List jpeg) async {
+    await _latency();
+    _verification = VerificationStatus.pending;
+    // Demo has no staff: approve after a short delay so the badge can be seen.
+    Timer(const Duration(seconds: 5), () {
+      _verification = VerificationStatus.approved;
+      _me = _me?.copyWith(isVerified: true);
+      _social.add(null);
+    });
+  }
+
+  @override
+  Future<List<VerificationItem>> verificationQueue() async => const [];
+
+  @override
+  Future<void> reviewVerification(String requestId, {required bool approve}) async {}
 
   final _demoSessionStart = DateTime.now();
 
   @override
   Future<List<SessionInfo>> sessions() async => [
-        SessionInfo(id: 's1', createdAt: _demoSessionStart, lastActive: DateTime.now(), userAgent: 'This device', isCurrent: true, aal: _mfaVerified ? 'aal2' : 'aal1'),
-      ];
+    SessionInfo(
+      id: 's1',
+      createdAt: _demoSessionStart,
+      lastActive: DateTime.now(),
+      userAgent: 'This device',
+      isCurrent: true,
+      aal: _mfaVerified ? 'aal2' : 'aal1',
+    ),
+  ];
 
   @override
   Future<void> revokeSession(String sessionId) async {}
@@ -365,8 +447,15 @@ class DemoBackend implements FinderBackend {
 
   @override
   Future<List<DeviceInfo>> devices() async => [
-        DeviceInfo(id: 'd1', label: 'Android phone', platform: 'android', createdAt: _demoSessionStart, lastSeen: DateTime.now(), isThisDevice: true),
-      ];
+    DeviceInfo(
+      id: 'd1',
+      label: 'Android phone',
+      platform: 'android',
+      createdAt: _demoSessionStart,
+      lastSeen: DateTime.now(),
+      isThisDevice: true,
+    ),
+  ];
 
   @override
   Future<void> revokeDevice(String deviceId) async {}
@@ -376,10 +465,10 @@ class DemoBackend implements FinderBackend {
 
   @override
   Future<MfaState> mfaState() async => MfaState(
-        verifiedFactorIds: [if (_mfaVerified && _mfaFactor != null) _mfaFactor!],
-        sessionIsAal2: _mfaVerified,
-        needsChallenge: false,
-      );
+    verifiedFactorIds: [if (_mfaVerified && _mfaFactor != null) _mfaFactor!],
+    sessionIsAal2: _mfaVerified,
+    needsChallenge: false,
+  );
 
   @override
   Future<TotpEnrollment> enrollTotp() async {
@@ -437,24 +526,19 @@ class DemoBackend implements FinderBackend {
 
   // ------------------------------------------------------------- helpers ----
 
-  bool _connected(String a, String b) =>
-      _swipes[(a, b)]?.action == 'accepted' || _swipes[(b, a)]?.action == 'accepted';
+  bool _connected(String a, String b) => _swipes[(a, b)]?.action == 'accepted' || _swipes[(b, a)]?.action == 'accepted';
 
   ChatMessage _msg(String from, String to, {String? content, String? audio, DateTime? at}) => ChatMessage(
-        id: _uuid.v4(),
-        senderId: from,
-        receiverId: to,
-        content: content,
-        localAudioPath: audio,
-        isRead: false,
-        createdAt: at ?? DateTime.now(),
-      );
+    id: _uuid.v4(),
+    senderId: from,
+    receiverId: to,
+    content: content,
+    localAudioPath: audio,
+    isRead: false,
+    createdAt: at ?? DateTime.now(),
+  );
 
-  static const _openers = [
-    'Hey! Thanks for the follow 😊',
-    'Hii, nice to connect here!',
-    'Heyy, your profile made me smile 🙂',
-  ];
+  static const _openers = ['Hey! Thanks for the follow 😊', 'Hii, nice to connect here!', 'Heyy, your profile made me smile 🙂'];
   static const _replies = [
     'Haha that’s so true 😄',
     'Same here! Have you been to the new café near Marine Drive?',
@@ -471,8 +555,8 @@ class DemoBackend implements FinderBackend {
       final text = opener
           ? _openers[_rand.nextInt(_openers.length)]
           : voiceReaction
-              ? 'Aww I love your voice 🙈'
-              : _replies[_rand.nextInt(_replies.length)];
+          ? 'Aww I love your voice 🙈'
+          : _replies[_rand.nextInt(_replies.length)];
       _push(peerId, _msg(peerId, meId, content: text));
     });
   }
@@ -481,28 +565,87 @@ class DemoBackend implements FinderBackend {
 
   void _seed() {
     final seeds = <_Seed>[
-      _Seed('Ananya Menon', 24, 'Kochi', 'Filter coffee, Fort Kochi sunsets and too many plants 🌿',
-          ['Photography', 'Kathakali', 'Cafés', 'Indie music'], premium: true, accepts: true),
-      _Seed('Arjun Nair', 27, 'Kochi', 'Product designer. Weekend trekker. Will judge your biryani spot.',
-          ['Trekking', 'Design', 'Football', 'Biryani'], accepts: true),
-      _Seed('Meera Pillai', 23, 'Thiruvananthapuram', 'Med student who still finds time for Carnatic music 🎶',
-          ['Music', 'Reading', 'Beaches'], accepts: false),
-      _Seed('Rahul Krishnan', 26, 'Kozhikode', 'Halwa connoisseur. Beach runs at 6am. Ask me about F1.',
-          ['Running', 'F1', 'Food'], accepts: true),
-      _Seed('Diya Thomas', 25, 'Kochi', 'Marketing by day, salsa by night 💃',
-          ['Dance', 'Travel', 'Brunch'], premium: true, accepts: true),
-      _Seed('Nikhil Varma', 28, 'Thrissur', 'Pooram every year. Engineer, amateur chef, dog dad 🐕',
-          ['Cooking', 'Dogs', 'Festivals'], accepts: false),
-      _Seed('Sneha Joseph', 22, 'Kottayam', 'Literature grad. Rain + books + chai = perfect day.',
-          ['Books', 'Poetry', 'Chai'], accepts: true),
-      _Seed('Aditya Shenoy', 29, 'Kochi', 'Startup founder. Ocean kayaker. Terrible at small talk, great at deep talk.', ['Kayaking', 'Startups', 'Podcasts'], accepts: true),
-      _Seed('Fathima Rasheed', 24, 'Kozhikode', 'Architecture student 🏛️ Sketching old Calicut streets.',
-          ['Sketching', 'Heritage', 'Film'], accepts: true),
-      _Seed('Vishnu Prasad', 25, 'Thiruvananthapuram', 'Cricket, coding and coconut everything.',
-          ['Cricket', 'Gaming', 'Coding'], accepts: false),
-      _Seed('Lakshmi Iyer', 26, 'Palakkad', 'Bharatanatyam dancer & UX writer. Looking for good conversations.', ['Dance', 'Writing', 'Yoga'], accepts: true),
-      _Seed('Kiran George', 27, 'Alappuzha', 'Houseboat sunsets & backwater cycling 🚲',
-          ['Cycling', 'Photography', 'Nature'], accepts: true),
+      _Seed(
+        'Ananya Menon',
+        24,
+        'Kochi',
+        'Filter coffee, Fort Kochi sunsets and too many plants 🌿',
+        ['Photography', 'Kathakali', 'Cafés', 'Indie music'],
+        premium: true,
+        accepts: true,
+      ),
+      _Seed('Arjun Nair', 27, 'Kochi', 'Product designer. Weekend trekker. Will judge your biryani spot.', [
+        'Trekking',
+        'Design',
+        'Football',
+        'Biryani',
+      ], accepts: true),
+      _Seed(
+        'Meera Pillai',
+        23,
+        'Thiruvananthapuram',
+        'Med student who still finds time for Carnatic music 🎶',
+        ['Music', 'Reading', 'Beaches'],
+        accepts: false,
+        verified: false,
+      ),
+      _Seed('Rahul Krishnan', 26, 'Kozhikode', 'Halwa connoisseur. Beach runs at 6am. Ask me about F1.', [
+        'Running',
+        'F1',
+        'Food',
+      ], accepts: true),
+      _Seed(
+        'Diya Thomas',
+        25,
+        'Kochi',
+        'Marketing by day, salsa by night 💃',
+        ['Dance', 'Travel', 'Brunch'],
+        premium: true,
+        accepts: true,
+      ),
+      _Seed(
+        'Nikhil Varma',
+        28,
+        'Thrissur',
+        'Pooram every year. Engineer, amateur chef, dog dad 🐕',
+        ['Cooking', 'Dogs', 'Festivals'],
+        accepts: false,
+        verified: false,
+      ),
+      _Seed('Sneha Joseph', 22, 'Kottayam', 'Literature grad. Rain + books + chai = perfect day.', [
+        'Books',
+        'Poetry',
+        'Chai',
+      ], accepts: true),
+      _Seed('Aditya Shenoy', 29, 'Kochi', 'Startup founder. Ocean kayaker. Terrible at small talk, great at deep talk.', [
+        'Kayaking',
+        'Startups',
+        'Podcasts',
+      ], accepts: true),
+      _Seed('Fathima Rasheed', 24, 'Kozhikode', 'Architecture student 🏛️ Sketching old Calicut streets.', [
+        'Sketching',
+        'Heritage',
+        'Film',
+      ], accepts: true),
+      _Seed(
+        'Vishnu Prasad',
+        25,
+        'Thiruvananthapuram',
+        'Cricket, coding and coconut everything.',
+        ['Cricket', 'Gaming', 'Coding'],
+        accepts: false,
+        verified: false,
+      ),
+      _Seed('Lakshmi Iyer', 26, 'Palakkad', 'Bharatanatyam dancer & UX writer. Looking for good conversations.', [
+        'Dance',
+        'Writing',
+        'Yoga',
+      ], accepts: true),
+      _Seed('Kiran George', 27, 'Alappuzha', 'Houseboat sunsets & backwater cycling 🚲', [
+        'Cycling',
+        'Photography',
+        'Nature',
+      ], accepts: true),
     ];
     for (final s in seeds) {
       _people[s.profile.id] = s;
@@ -510,10 +653,24 @@ class DemoBackend implements FinderBackend {
 
     final now = DateTime.now();
     // Incoming follow requests (the "Who Requested You" tab).
-    _swipes[(seeds[4].profile.id, meId)] = _Swipe(seeds[4].profile.id, meId, 'follow_requested', now.subtract(const Duration(hours: 2)));
-    _swipes[(seeds[6].profile.id, meId)] =
-        _Swipe(seeds[6].profile.id, meId, 'follow_requested', now.subtract(const Duration(hours: 5)));
-    _swipes[(seeds[9].profile.id, meId)] = _Swipe(seeds[9].profile.id, meId, 'follow_requested', now.subtract(const Duration(days: 1)));
+    _swipes[(seeds[4].profile.id, meId)] = _Swipe(
+      seeds[4].profile.id,
+      meId,
+      'follow_requested',
+      now.subtract(const Duration(hours: 2)),
+    );
+    _swipes[(seeds[6].profile.id, meId)] = _Swipe(
+      seeds[6].profile.id,
+      meId,
+      'follow_requested',
+      now.subtract(const Duration(hours: 5)),
+    );
+    _swipes[(seeds[9].profile.id, meId)] = _Swipe(
+      seeds[9].profile.id,
+      meId,
+      'follow_requested',
+      now.subtract(const Duration(days: 1)),
+    );
 
     // One existing mutual connection with history so chat is explorable immediately.
     final a = seeds[0].profile.id;
@@ -528,19 +685,28 @@ class DemoBackend implements FinderBackend {
 }
 
 class _Seed {
-  _Seed(String name, int age, String city, String bio, this.interests,
-      {bool premium = false, required bool accepts})
-      : acceptsFollows = accepts,
-        profile = PublicProfile(
-          id: 'u_${name.split(' ').first.toLowerCase()}',
-          fullName: name,
-          age: age,
-          city: city,
-          bio: bio,
-          primaryPhoto: 'asset:assets/demo/p_${name.split(' ').first.toLowerCase()}.jpg',
-          isPremium: premium,
-        ),
-        gallery = List.generate(6, (i) => 'asset:assets/demo/g_${(name.length * 3 + i * 5) % 12}.jpg');
+  _Seed(
+    String name,
+    int age,
+    String city,
+    String bio,
+    this.interests, {
+    bool premium = false,
+    required bool accepts,
+    bool verified = true,
+  }) : acceptsFollows = accepts,
+       profile = PublicProfile(
+         id: 'u_${name.split(' ').first.toLowerCase()}',
+         fullName: name,
+         age: age,
+         city: city,
+         bio: bio,
+         primaryPhoto: 'asset:assets/demo/p_${name.split(' ').first.toLowerCase()}.jpg',
+         isPremium: premium,
+         isVerified: verified,
+         photoCount: 7,
+       ),
+       gallery = List.generate(6, (i) => 'asset:assets/demo/g_${(name.length * 3 + i * 5) % 12}.jpg');
 
   final PublicProfile profile;
   final List<String> interests;
@@ -549,9 +715,7 @@ class _Seed {
 }
 
 class _Swipe {
-  _Swipe(this.sender, this.receiver, this.action, [DateTime? at])
-      : id = const Uuid().v4(),
-        createdAt = at ?? DateTime.now();
+  _Swipe(this.sender, this.receiver, this.action, [DateTime? at]) : id = const Uuid().v4(), createdAt = at ?? DateTime.now();
 
   final String id;
   final String sender;

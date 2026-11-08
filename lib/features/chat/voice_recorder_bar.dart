@@ -53,55 +53,66 @@ class _VoiceRecorderBarState extends State<VoiceRecorderBar> {
     final remaining = AppConfig.voiceMaxSeconds - secs;
     return Padding(
       padding: const EdgeInsets.fromLTRB(6, 6, 10, 8),
-      child: Row(children: [
-        IconButton(
-          tooltip: 'Discard',
-          onPressed: widget.onCancel,
-          icon: const Icon(PhosphorIconsRegular.trash, color: Color(0xFFE5484D)),
-        ),
-        Expanded(
-          child: Container(
-            height: 48,
-            padding: const EdgeInsets.symmetric(horizontal: 14),
-            decoration: BoxDecoration(color: context.fc.surface, borderRadius: BorderRadius.circular(24), border: Border.all(color: context.fc.hair)),
-            child: Row(children: [
-              const _PulsingDot(),
-              const SizedBox(width: 8),
-              Text('0:${secs.toString().padLeft(2, '0')}',
-                  style: const TextStyle(fontFeatures: [FontFeature.tabularFigures()], fontWeight: FontWeight.w700)),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    for (final l in _levels)
-                      AnimatedContainer(
-                        duration: const Duration(milliseconds: 90),
-                        width: 2.5,
-                        height: 4 + 26 * l,
-                        decoration: BoxDecoration(
-                          color: context.fc.accent,
-                          borderRadius: BorderRadius.circular(2),
-                        ),
-                      ),
-                  ],
-                ),
+      child: Row(
+        children: [
+          IconButton(
+            tooltip: 'Discard',
+            onPressed: widget.onCancel,
+            icon: const Icon(PhosphorIconsRegular.trash, color: Color(0xFFE5484D)),
+          ),
+          Expanded(
+            child: Container(
+              height: 48,
+              padding: const EdgeInsets.symmetric(horizontal: 14),
+              decoration: BoxDecoration(
+                color: context.fc.surface,
+                borderRadius: BorderRadius.circular(24),
+                border: Border.all(color: context.fc.hair),
               ),
-              const SizedBox(width: 8),
-              Text('${remaining}s', style: TextStyle(color: Colors.grey.shade600, fontSize: 12)),
-            ]),
+              child: Row(
+                children: [
+                  const _PulsingDot(),
+                  const SizedBox(width: 8),
+                  Text(
+                    '0:${secs.toString().padLeft(2, '0')}',
+                    style: const TextStyle(fontFeatures: [FontFeature.tabularFigures()], fontWeight: FontWeight.w700),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        for (final l in _levels)
+                          AnimatedContainer(
+                            duration: const Duration(milliseconds: 90),
+                            width: 2.5,
+                            height: 4 + 26 * l,
+                            decoration: BoxDecoration(color: context.fc.accent, borderRadius: BorderRadius.circular(2)),
+                          ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Text('${remaining}s', style: TextStyle(color: Colors.grey.shade600, fontSize: 12)),
+                ],
+              ),
+            ),
           ),
-        ),
-        const SizedBox(width: 8),
-        SizedBox.square(
-          dimension: 48,
-          child: FilledButton(
-            style: FilledButton.styleFrom(padding: EdgeInsets.zero, minimumSize: const Size(48, 48), shape: const CircleBorder()),
-            onPressed: widget.onSend,
-            child: const Icon(PhosphorIconsFill.paperPlaneTilt, size: 20),
+          const SizedBox(width: 8),
+          SizedBox.square(
+            dimension: 48,
+            child: FilledButton(
+              style: FilledButton.styleFrom(
+                padding: EdgeInsets.zero,
+                minimumSize: const Size(48, 48),
+                shape: const CircleBorder(),
+              ),
+              onPressed: widget.onSend,
+              child: const Icon(PhosphorIconsFill.paperPlaneTilt, size: 20),
+            ),
           ),
-        ),
-      ]),
+        ],
+      ),
     );
   }
 }
@@ -124,7 +135,7 @@ class _PulsingDotState extends State<_PulsingDot> with SingleTickerProviderState
 
   @override
   Widget build(BuildContext context) => FadeTransition(
-        opacity: Tween(begin: 0.3, end: 1.0).animate(_c),
-        child: const CircleAvatar(radius: 5, backgroundColor: Colors.redAccent),
-      );
+    opacity: Tween(begin: 0.3, end: 1.0).animate(_c),
+    child: const CircleAvatar(radius: 5, backgroundColor: Colors.redAccent),
+  );
 }

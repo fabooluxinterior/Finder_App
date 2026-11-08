@@ -19,8 +19,9 @@ Future<bool> confirmUnmatch(BuildContext context, WidgetRef ref, PublicProfile p
     builder: (c) => AlertDialog(
       title: Text('Unmatch ${peer.firstName}?'),
       content: const Text(
-          'You’ll both lose the chat. The conversation is deleted from this device and from Finder’s servers. '
-          'Copies already on their device can’t be removed by us.'),
+        'You’ll both lose the chat. The conversation is deleted from this device and from Finder’s servers. '
+        'Copies already on their device can’t be removed by us.',
+      ),
       actions: [
         TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Cancel')),
         TextButton(onPressed: () => Navigator.pop(c, true), child: const Text('Unmatch')),
@@ -45,8 +46,9 @@ Future<bool> confirmBlock(BuildContext context, WidgetRef ref, PublicProfile pee
     builder: (c) => AlertDialog(
       title: Text('Block ${peer.firstName}?'),
       content: const Text(
-          'They won’t be able to see your profile, request you again, or send you messages. '
-          'Your chat is deleted from this device and from Finder’s servers.'),
+        'They won’t be able to see your profile, request you again, or send you messages. '
+        'Your chat is deleted from this device and from Finder’s servers.',
+      ),
       actions: [
         TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Cancel')),
         TextButton(onPressed: () => Navigator.pop(c, true), child: const Text('Block')),
@@ -98,7 +100,9 @@ class _ReportSheetState extends ConsumerState<_ReportSheet> {
   Future<void> _send() async {
     setState(() => _busy = true);
     try {
-      await ref.read(backendProvider).report(
+      await ref
+          .read(backendProvider)
+          .report(
             widget.peer.id,
             _reason!,
             details: _details.text.trim().isEmpty ? null : _details.text.trim(),
@@ -139,10 +143,12 @@ class _ReportSheetState extends ConsumerState<_ReportSheet> {
             RadioGroup<ReportReason>(
               groupValue: _reason,
               onChanged: (v) => setState(() => _reason = v),
-              child: Column(children: [
-                for (final r in ReportReason.values)
-                  RadioListTile<ReportReason>(value: r, title: Text(r.label), dense: true, contentPadding: EdgeInsets.zero),
-              ]),
+              child: Column(
+                children: [
+                  for (final r in ReportReason.values)
+                    RadioListTile<ReportReason>(value: r, title: Text(r.label), dense: true, contentPadding: EdgeInsets.zero),
+                ],
+              ),
             ),
             TextField(
               controller: _details,
@@ -157,9 +163,10 @@ class _ReportSheetState extends ConsumerState<_ReportSheet> {
                 onChanged: (v) => setState(() => _shareMessages = v ?? false),
                 title: Text('Share their last ${recent.length} messages with moderators'),
                 subtitle: const Text(
-                    'Your chat is end-to-end encrypted, so moderators can’t see it unless you choose to share it. '
-                    'If you tick this, these messages are decrypted on your phone and sent with your report. '
-                    'Only Finder’s safety team can read them, every access is logged, and they’re deleted 90 days after the report is closed.'),
+                  'Your chat is end-to-end encrypted, so moderators can’t see it unless you choose to share it. '
+                  'If you tick this, these messages are decrypted on your phone and sent with your report. '
+                  'Only Finder’s safety team can read them, every access is logged, and they’re deleted 90 days after the report is closed.',
+                ),
               ),
             ],
             SwitchListTile(
@@ -169,10 +176,7 @@ class _ReportSheetState extends ConsumerState<_ReportSheet> {
               title: Text('Also block ${widget.peer.firstName}'),
             ),
             const SizedBox(height: 8),
-            FilledButton(
-              onPressed: _busy || _reason == null ? null : _send,
-              child: const Text('Send report'),
-            ),
+            FilledButton(onPressed: _busy || _reason == null ? null : _send, child: const Text('Send report')),
           ],
         ),
       ),

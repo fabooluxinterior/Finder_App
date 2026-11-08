@@ -11,7 +11,10 @@ One architecture serves the Android app and the web app. The server never trusts
 | Chat text, voice notes | Per-device Olm ciphertext; voice audio as AES-256-GCM ciphertext | **No.** Keys exist only on users' devices |
 | Who messaged whom, when, read flag, message count | Plain metadata (`messages` row) | Yes. Needed for delivery, unread counts and rate limits |
 | Profile photos, gallery photos | AES-256-GCM ciphertext; data keys wrapped by a server-held KEK | Only through the authorised `media` function; staff views are audit-logged |
-| Name, age, city, bio, interests | Postgres rows (encrypted at rest by the provider) | Yes |
+| Name, age, district/city, bio, interests, photos | Postgres rows / encrypted media; visible to every signed-in user who isn't blocked | Yes |
+| Date of birth | `profile_dob` (owner-only RLS, locked by trigger) | Yes (staff via SQL); never to other users |
+| Verification selfies | Encrypted media, kind `selfie`; owner-only, staff views audit-logged; purged 30 days after review | Verification staff only |
+| Consent records | `user_consents` (owner-only) | Yes |
 | Reports | Reason, optional details, and messages the reporter **chose** to share | Moderators only, every access audit-logged |
 | Phone/email | Supabase Auth | Yes (needed for sign-in); never exposed to other users |
 
@@ -78,8 +81,8 @@ Upload pipeline (`supabase/functions/process-image`):
 7. The quarantine copy is deleted in every outcome.
 
 Delivery (`supabase/functions/media`): there are **no public or signed storage URLs**. Each request carries the user's 15-minute access token. `can_view_media` decides access:
-- primary photos: any signed-in user who isn't blocked;
-- gallery photos: accepted connections only;
+- primary and gallery photos: any signed-in user who isn't blocked;
+- verification selfies: the owner only;
 - pending images: the owner only (plus moderators on an MFA session, audit-logged).
 
 The function then decrypts and returns the image with `Cache-Control: private, max-age=300`. A copied URL is useless without a live session. Each user is limited to 600 image fetches per hour; spikes create a `media_download_spike` security event.
@@ -219,3 +222,15 @@ PGURL=postgres://postgres:postgres@localhost:5432/postgres supabase/tests/run.sh
 - [ ] Replace the debug signing key with a Play upload key; enable Play App Signing and Play Integrity.
 - [ ] Deploy the web app with `web/_headers` (or equivalent) and confirm the headers.
 - [ ] Have the privacy policy reviewed by a lawyer (India DPDP Act 2023).
+
+## 14. Trust & compliance controls (migration `20261110000000_compliance.sql`)
+
+- **Consent:** sign-up requires the 18+ / Terms / Guidelines / Privacy checkbox, and the OTP can't be requested without it. Acceptance is recorded server-side per policy and version (`record_consent`). A newer `POLICY_VERSION` forces a blocking re-consent.
+- **Age:** the date of birth lives in `profile_dob`, readable only by its owner. It can be set once (`set_dob`, which rejects under-18 and future dates), after which an `UPDATE` trigger blocks every change, including service-role writes. Profile ages are computed from it at insert and refreshed daily. Accounts without a DOB keep their age until they add one at next login.
+- **Verification:** the server picks a random pose and the selfie must be uploaded within 15 minutes through the normal image pipeline. Only staff on an MFA session can see it, and each view is audit-logged. `is_verified` changes only through `mod_review_verification`. Selfies are purged 30 days after review.
+- **Under-18 reports** set `hidden_pending_review`, which removes the profile from `get_feed` until a moderator resolves the report. "Actioned" keeps it hidden; "dismissed" restores it if no other under-18 report is open. Abuse is limited by the 10-reports-per-day rate limit.
+- **Contact details:** the database refuses phone numbers, @handles, links and "my insta is …" phrases in names, bios and interests, and restricts `city` to a district name.
+- **Demo isolation:** demo code is compiled only with `--dart-define=DEMO=true`; the sample photos ship only in the `demo` Android flavor.
+
+Tests: `supabase/tests/30_compliance_test.sql` and `test/compliance_test.dart`.
+

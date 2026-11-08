@@ -4,14 +4,34 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/config.dart';
 import '../../core/sanitizer.dart';
+import '../../core/phosphor.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/backend.dart';
 import '../../providers.dart';
+import 'dob.dart';
 
 const _allInterests = [
-  'Travel', 'Music', 'Cafés', 'Photography', 'Trekking', 'Books', 'Movies', 'Football', 'Cricket',
-  'Dance', 'Cooking', 'Fitness', 'Yoga', 'Art', 'Gaming', 'Startups', 'Beaches', 'Pets', 'Poetry', 'Food',
+  'Travel',
+  'Music',
+  'Cafés',
+  'Photography',
+  'Trekking',
+  'Books',
+  'Movies',
+  'Football',
+  'Cricket',
+  'Dance',
+  'Cooking',
+  'Fitness',
+  'Yoga',
+  'Art',
+  'Gaming',
+  'Startups',
+  'Beaches',
+  'Pets',
+  'Poetry',
+  'Food',
 ];
 
 class ProfileSetupScreen extends ConsumerStatefulWidget {
@@ -25,7 +45,8 @@ class ProfileSetupScreen extends ConsumerStatefulWidget {
 class _ProfileSetupScreenState extends ConsumerState<ProfileSetupScreen> {
   final _form = GlobalKey<FormState>();
   final _name = TextEditingController();
-  final _age = TextEditingController();
+  DateTime? _dob;
+  int? _lockedAge;
   final _bio = TextEditingController();
   String _city = AppConfig.keralaCities.first;
   final _interests = <String>{};
@@ -47,7 +68,7 @@ class _ProfileSetupScreenState extends ConsumerState<ProfileSetupScreen> {
     if (!mounted || p == null) return;
     setState(() {
       _name.text = p.fullName;
-      _age.text = '${p.age}';
+      _lockedAge = p.age;
       _bio.text = p.bio;
       _city = AppConfig.keralaCities.contains(p.city) ? p.city : AppConfig.keralaCities.first;
       _existingPrimary = p.primaryPhoto;
@@ -73,27 +94,38 @@ class _ProfileSetupScreenState extends ConsumerState<ProfileSetupScreen> {
       showSnack(context, 'Removed phone numbers / handles / links from your bio.', icon: Icons.shield_outlined);
     }
     if (!_form.currentState!.validate()) return;
+    if (widget.isOnboarding && _dob == null) {
+      showSnack(context, 'Add your date of birth. Finder is for adults only.');
+      return;
+    }
     if (_primary == null && _existingPrimary == null && !AppConfig.isDemo) {
       showSnack(context, 'Add a primary photo — it’s the only one strangers see.');
       return;
     }
     setState(() => _busy = true);
     try {
-      final pendingReview = await ref.read(backendProvider).saveProfile(ProfileDraft(
-            fullName: _name.text.trim(),
-            age: int.parse(_age.text),
-            city: _city,
-            bio: cleanBio,
-            interests: _interests.toList(),
-            primaryPhotoWebp: _primary,
-            newGalleryWebp: _newGallery,
-          ));
+      final backend = ref.read(backendProvider);
+      // The DOB is stored privately and locked; the server computes the age.
+      if (widget.isOnboarding && !await backend.hasDob()) await backend.setDob(_dob!);
+      final pendingReview = await backend.saveProfile(
+        ProfileDraft(
+          fullName: _name.text.trim(),
+          city: _city,
+          bio: cleanBio,
+          interests: _interests.toList(),
+          primaryPhotoWebp: _primary,
+          newGalleryWebp: _newGallery,
+        ),
+      );
       ref.invalidate(myProfileProvider);
       ref.invalidate(myPrivateProfileProvider);
       ref.invalidate(feedProvider);
       if (mounted && pendingReview > 0) {
-        showSnack(context, '$pendingReview photo${pendingReview == 1 ? ' is' : 's are'} being reviewed. They’ll appear once approved.',
-            icon: Icons.hourglass_top_rounded);
+        showSnack(
+          context,
+          '$pendingReview photo${pendingReview == 1 ? ' is' : 's are'} being reviewed. They’ll appear once approved.',
+          icon: Icons.hourglass_top_rounded,
+        );
       }
       if (mounted && !widget.isOnboarding) Navigator.pop(context);
     } catch (e) {
@@ -106,7 +138,6 @@ class _ProfileSetupScreenState extends ConsumerState<ProfileSetupScreen> {
   @override
   void dispose() {
     _name.dispose();
-    _age.dispose();
     _bio.dispose();
     super.dispose();
   }
@@ -137,11 +168,8 @@ class _ProfileSetupScreenState extends ConsumerState<ProfileSetupScreen> {
                         child: _primary != null
                             ? Image.memory(_primary!, fit: BoxFit.cover)
                             : _existingPrimary != null
-                                ? ProfilePhoto(url: _existingPrimary, name: _name.text)
-                                : Container(
-                                    color: Colors.grey.shade200,
-                                    child: const Icon(Icons.add_a_photo_outlined, size: 40),
-                                  ),
+                            ? ProfilePhoto(url: _existingPrimary, name: _name.text)
+                            : Container(color: Colors.grey.shade200, child: const Icon(Icons.add_a_photo_outlined, size: 40)),
                       ),
                     ),
                     Positioned(
@@ -159,40 +187,44 @@ class _ProfileSetupScreenState extends ConsumerState<ProfileSetupScreen> {
             ),
             const SizedBox(height: 6),
             Center(
-              child: Text('Primary photo · visible on your public card',
-                  style: TextStyle(color: Colors.grey.shade600, fontSize: 12)),
+              child: Text(
+                'Primary photo · visible on your public card',
+                style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
+              ),
             ),
             const SizedBox(height: 20),
             TextFormField(
               controller: _name,
               textCapitalization: TextCapitalization.words,
               decoration: const InputDecoration(labelText: 'Full name'),
-              validator: (v) => (v == null || v.trim().isEmpty) ? 'Required' : null,
+              validator: (v) => (v == null || v.trim().isEmpty)
+                  ? 'Required'
+                  : ContactSanitizer.containsContactInfo(v)
+                  ? 'No phone numbers, handles or links'
+                  : null,
             ),
             const SizedBox(height: 12),
+            if (widget.isOnboarding) ...[
+              DobField(value: _dob, onChanged: (d) => setState(() => _dob = d)),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(4, 6, 4, 0),
+                child: Text(
+                  'Others see your age, never your date of birth. It can’t be changed later.',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(color: context.fc.muted),
+                ),
+              ),
+              const SizedBox(height: 12),
+            ] else if (_lockedAge != null) ...[
+              InfoChip(icon: PhosphorIconsRegular.cake, label: 'Age $_lockedAge · from your date of birth'),
+              const SizedBox(height: 12),
+            ],
             Row(
               children: [
-                SizedBox(
-                  width: 110,
-                  child: TextFormField(
-                    controller: _age,
-                    keyboardType: TextInputType.number,
-                    inputFormatters: [FilteringTextInputFormatter.digitsOnly, LengthLimitingTextInputFormatter(2)],
-                    decoration: const InputDecoration(labelText: 'Age'),
-                    validator: (v) {
-                      final n = int.tryParse(v ?? '');
-                      return (n == null || n < 18) ? '18+ only' : null;
-                    },
-                  ),
-                ),
-                const SizedBox(width: 12),
                 Expanded(
                   child: DropdownButtonFormField<String>(
                     initialValue: _city,
                     decoration: const InputDecoration(labelText: 'District / City'),
-                    items: [
-                      for (final c in AppConfig.keralaCities) DropdownMenuItem(value: c, child: Text(c)),
-                    ],
+                    items: [for (final c in AppConfig.keralaCities) DropdownMenuItem(value: c, child: Text(c))],
                     onChanged: (v) => setState(() => _city = v!),
                   ),
                 ),
@@ -203,17 +235,12 @@ class _ProfileSetupScreenState extends ConsumerState<ProfileSetupScreen> {
               controller: _bio,
               maxLength: 300,
               maxLines: 3,
-              decoration: const InputDecoration(
-                labelText: 'Bio',
-                helperText: 'No phone numbers, @handles or links',
-              ),
+              decoration: const InputDecoration(labelText: 'Bio', helperText: 'No phone numbers, @handles or links'),
               onChanged: (_) => setState(() {}),
-              validator: (v) => ContactSanitizer.containsContactInfo(v ?? '')
-                  ? 'Contact details aren’t allowed in bios'
-                  : null,
+              validator: (v) => ContactSanitizer.containsContactInfo(v ?? '') ? 'Contact details aren’t allowed in bios' : null,
             ),
             const SizedBox(height: 16),
-            _SectionTitle(icon: Icons.lock_outline, text: 'Interests (unlocked after follow)'),
+            _SectionTitle(icon: Icons.interests_outlined, text: 'Interests'),
             const SizedBox(height: 8),
             Wrap(
               spacing: 8,
@@ -229,7 +256,7 @@ class _ProfileSetupScreenState extends ConsumerState<ProfileSetupScreen> {
               ],
             ),
             const SizedBox(height: 20),
-            _SectionTitle(icon: Icons.lock_outline, text: 'Private photo grid ($galleryCount/9)'),
+            _SectionTitle(icon: Icons.photo_library_outlined, text: 'More photos ($galleryCount/9)'),
             const SizedBox(height: 8),
             GridView.count(
               crossAxisCount: 3,
@@ -239,9 +266,15 @@ class _ProfileSetupScreenState extends ConsumerState<ProfileSetupScreen> {
               crossAxisSpacing: 6,
               children: [
                 for (final u in _existingGallery)
-                  ClipRRect(borderRadius: BorderRadius.circular(10), child: ProfilePhoto(url: u, name: '')),
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(10),
+                    child: ProfilePhoto(url: u, name: ''),
+                  ),
                 for (final b in _newGallery)
-                  ClipRRect(borderRadius: BorderRadius.circular(10), child: Image.memory(b, fit: BoxFit.cover)),
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(10),
+                    child: Image.memory(b, fit: BoxFit.cover),
+                  ),
                 if (galleryCount < 9)
                   InkWell(
                     borderRadius: BorderRadius.circular(10),
@@ -250,10 +283,7 @@ class _ProfileSetupScreenState extends ConsumerState<ProfileSetupScreen> {
                       if (b != null) setState(() => _newGallery.add(b));
                     },
                     child: Container(
-                      decoration: BoxDecoration(
-                        color: Colors.grey.shade200,
-                        borderRadius: BorderRadius.circular(10),
-                      ),
+                      decoration: BoxDecoration(color: Colors.grey.shade200, borderRadius: BorderRadius.circular(10)),
                       child: const Icon(Icons.add),
                     ),
                   ),
@@ -279,9 +309,11 @@ class _SectionTitle extends StatelessWidget {
   final String text;
 
   @override
-  Widget build(BuildContext context) => Row(children: [
-        Icon(icon, size: 16, color: Colors.grey.shade700),
-        const SizedBox(width: 6),
-        Text(text, style: const TextStyle(fontWeight: FontWeight.w700)),
-      ]);
+  Widget build(BuildContext context) => Row(
+    children: [
+      Icon(icon, size: 16, color: Colors.grey.shade700),
+      const SizedBox(width: 6),
+      Text(text, style: const TextStyle(fontWeight: FontWeight.w700)),
+    ],
+  );
 }

@@ -6,14 +6,11 @@ class ContactSanitizer {
   static final _phone = RegExp(r'\+?\d[\d\s\-().]{7,}\d');
   static final _handle = RegExp(r'(^|[^A-Za-z0-9_])@[A-Za-z0-9_.]{2,}');
   static final _url = RegExp(r'(https?://|www\.)\S+', caseSensitive: false);
-  static final _domain = RegExp(
-    r'\b[a-z0-9-]+\.(com|in|net|org|io|me|co|app|link|ly|gg|xyz)(/\S*)?\b',
-    caseSensitive: false,
-  );
+  static final _domain = RegExp(r'\b[a-z0-9-]+\.(com|in|net|org|io|me|co|app|link|ly|gg|xyz)(/\S*)?\b', caseSensitive: false);
 
   /// Spelled-out platform invitations ("my insta is ...", "snap me").
   static final _platform = RegExp(
-    r'\b(insta(gram)?|snap(chat)?|whats\s?app|telegram|ig)\b\s*(id|handle|is|:|-)?\s*[A-Za-z0-9_.]{3,}',
+    r'\b(insta(gram)?|snap(chat)?|whats\s?app|telegram|ig)\b\s*(id|handle|is|:|-)\s*:?\s*[A-Za-z0-9_.]{3,}',
     caseSensitive: false,
   );
 

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
 import '../../core/phosphor.dart';
 
 import '../../core/config.dart';
@@ -83,17 +84,31 @@ class _PaywallSheetState extends ConsumerState<_PaywallSheet> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Center(
-            child: Container(width: 38, height: 5, decoration: BoxDecoration(color: c.hair, borderRadius: BorderRadius.circular(9))),
+            child: Container(
+              width: 38,
+              height: 5,
+              decoration: BoxDecoration(color: c.hair, borderRadius: BorderRadius.circular(9)),
+            ),
           ),
           const SizedBox(height: 20),
-          Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
-            Expanded(child: Text(headline, style: t.headlineSmall)),
-            const SizedBox(width: 12),
-            Text.rich(TextSpan(children: [
-              TextSpan(text: price, style: t.headlineSmall),
-              TextSpan(text: ' / month', style: t.bodyMedium?.copyWith(color: c.muted)),
-            ])),
-          ]),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Expanded(child: Text(headline, style: t.headlineSmall)),
+              const SizedBox(width: 12),
+              Text.rich(
+                TextSpan(
+                  children: [
+                    TextSpan(text: price, style: t.headlineSmall),
+                    TextSpan(
+                      text: ' / month',
+                      style: t.bodyMedium?.copyWith(color: c.muted),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
           const SizedBox(height: 4),
           Text('Billed monthly through Google Play. Cancel anytime.', style: t.bodySmall?.copyWith(color: c.muted)),
           const SizedBox(height: 14),
@@ -107,11 +122,7 @@ class _PaywallSheetState extends ConsumerState<_PaywallSheet> {
             title: 'Message your connections',
             subtitle: 'End-to-end encrypted text and voice notes.',
           ),
-          const _Perk(
-            icon: PhosphorIconsFill.mapPin,
-            title: 'Kerala City Boost',
-            subtitle: 'Top of your city’s Discover deck.',
-          ),
+          const _Perk(icon: PhosphorIconsFill.mapPin, title: 'Kerala City Boost', subtitle: 'Top of your city’s Discover deck.'),
           const SizedBox(height: 16),
           PillButton(label: 'Continue with Google Play', busy: _busy, onTap: () => _buy()),
           const SizedBox(height: 10),
@@ -142,21 +153,26 @@ class _Perk extends StatelessWidget {
     final t = Theme.of(context).textTheme;
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8),
-      child: Row(children: [
-        Container(
-          width: 40,
-          height: 40,
-          decoration: BoxDecoration(color: c.goldSoft, borderRadius: BorderRadius.circular(13)),
-          child: Icon(icon, color: c.gold, size: 20),
-        ),
-        const SizedBox(width: 14),
-        Expanded(
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(title, style: t.titleMedium),
-            Text(subtitle, style: t.bodySmall?.copyWith(color: c.muted)),
-          ]),
-        ),
-      ]),
+      child: Row(
+        children: [
+          Container(
+            width: 40,
+            height: 40,
+            decoration: BoxDecoration(color: c.goldSoft, borderRadius: BorderRadius.circular(13)),
+            child: Icon(icon, color: c.gold, size: 20),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(title, style: t.titleMedium),
+                Text(subtitle, style: t.bodySmall?.copyWith(color: c.muted)),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

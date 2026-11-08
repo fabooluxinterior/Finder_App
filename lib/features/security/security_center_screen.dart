@@ -55,16 +55,20 @@ class SecurityCenterScreen extends ConsumerWidget {
           ListTile(
             leading: Icon(backend.isEndToEndEncrypted ? Icons.lock_rounded : Icons.lock_open_rounded),
             title: Text(backend.isEndToEndEncrypted ? 'Chats are end-to-end encrypted' : 'Demo mode: chats are not encrypted'),
-            subtitle: Text(backend.isEndToEndEncrypted
-                ? 'Messages and voice notes are encrypted on this device. Finder’s servers only store ciphertext they can’t read.'
-                : 'The demo keeps sample messages in memory on this phone. The live app encrypts every chat end-to-end.'),
+            subtitle: Text(
+              backend.isEndToEndEncrypted
+                  ? 'Messages and voice notes are encrypted on this device. Finder’s servers only store ciphertext they can’t read.'
+                  : 'The demo keeps sample messages in memory on this phone. The live app encrypts every chat end-to-end.',
+            ),
           ),
           if (kIsWeb)
             const ListTile(
               leading: Icon(Icons.info_outline, color: Colors.orange),
               title: Text('You’re using the web app'),
-              subtitle: Text('Browsers have no hardware keystore and can’t block screenshots. Your keys are encrypted in this browser’s storage, '
-                  'but the phone app protects them better. Don’t use the web app on shared computers, and sign out when you’re done.'),
+              subtitle: Text(
+                'Browsers have no hardware keystore and can’t block screenshots. Your keys are encrypted in this browser’s storage, '
+                'but the phone app protects them better. Don’t use the web app on shared computers, and sign out when you’re done.',
+              ),
             ),
           const Divider(),
           const _Header('Two-step verification'),
@@ -129,9 +133,11 @@ class SecurityCenterScreen extends ConsumerWidget {
                 ListTile(
                   leading: const Icon(Icons.key_outlined),
                   title: Text(s.isCurrent ? 'This session' : (s.userAgent?.split(' ').first ?? 'Session')),
-                  subtitle: Text('Signed in ${fmt.format(s.createdAt)}'
-                      '${s.lastActive != null ? ' · active ${fmt.format(s.lastActive!)}' : ''}'
-                      '${s.aal == 'aal2' ? ' · verified' : ''}'),
+                  subtitle: Text(
+                    'Signed in ${fmt.format(s.createdAt)}'
+                    '${s.lastActive != null ? ' · active ${fmt.format(s.lastActive!)}' : ''}'
+                    '${s.aal == 'aal2' ? ' · verified' : ''}',
+                  ),
                   trailing: s.isCurrent
                       ? null
                       : IconButton(
@@ -181,17 +187,22 @@ class SecurityCenterScreen extends ConsumerWidget {
       builder: (c) => StatefulBuilder(
         builder: (c, set) => AlertDialog(
           title: const Text('Delete your account?'),
-          content: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-            const Text(
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
                 'This removes your profile, photos, encryption keys, connections and server-side message data right away. '
-                'Encrypted backups are overwritten within 7 days. Messages already on other people’s phones stay there.'),
-            const SizedBox(height: 12),
-            TextField(
-              controller: ctl,
-              decoration: const InputDecoration(labelText: 'Type DELETE to confirm'),
-              onChanged: (_) => set(() {}),
-            ),
-          ]),
+                'Encrypted backups are overwritten within 7 days. Messages already on other people’s phones stay there.',
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: ctl,
+                decoration: const InputDecoration(labelText: 'Type DELETE to confirm'),
+                onChanged: (_) => set(() {}),
+              ),
+            ],
+          ),
           actions: [
             TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Cancel')),
             TextButton(
@@ -216,8 +227,10 @@ class _Header extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Padding(
-        padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-        child: Text(text.toUpperCase(),
-            style: TextStyle(fontSize: 12, letterSpacing: 0.8, fontWeight: FontWeight.w700, color: Colors.grey.shade600)),
-      );
+    padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+    child: Text(
+      text.toUpperCase(),
+      style: TextStyle(fontSize: 12, letterSpacing: 0.8, fontWeight: FontWeight.w700, color: Colors.grey.shade600),
+    ),
+  );
 }

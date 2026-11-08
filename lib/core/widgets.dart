@@ -1,6 +1,7 @@
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
+
 import 'phosphor.dart';
 
 import '../data/memory_images.dart';
@@ -11,14 +12,45 @@ import 'theme.dart';
 /// Displays network URLs (authorised media function), bundled demo assets or
 /// in-memory picks. Fades in instead of popping.
 class ProfilePhoto extends StatelessWidget {
-  const ProfilePhoto({super.key, required this.url, required this.name, this.fit = BoxFit.cover, this.alignment = const Alignment(0, -0.2)});
+  const ProfilePhoto({
+    super.key,
+    required this.url,
+    required this.name,
+    this.fit = BoxFit.cover,
+    this.alignment = const Alignment(0, -0.2),
+    this.decodeWidth,
+    this.filterQuality = FilterQuality.medium,
+    this.fadeIn = true,
+  });
 
   final String? url;
   final String name;
   final BoxFit fit;
   final Alignment alignment;
 
-  Widget _fade(Widget child, int? frame, bool sync) => sync
+  /// Decode at this pixel width instead of the file's full size. Defaults to
+  /// the screen width in physical pixels, which is all a full-bleed photo
+  /// ever needs; small avatars pass a smaller value.
+  final int? decodeWidth;
+  final FilterQuality filterQuality;
+  final bool fadeIn;
+
+  static int screenDecodeWidth(BuildContext context) {
+    final mq = MediaQuery.of(context);
+    return (mq.size.width * mq.devicePixelRatio).round().clamp(320, 1440);
+  }
+
+  /// The ImageProvider ProfilePhoto would use, for precaching.
+  static ImageProvider? provider(String? url, int width) {
+    final u = url;
+    if (u == null || u.isEmpty || MemoryImages.isMemory(u)) return null;
+    final ImageProvider base = u.startsWith('asset:')
+        ? AssetImage(u.substring(6))
+        : NetworkImage(u, headers: MediaAuth.isMediaUrl(u) ? MediaAuth.headers?.call() : null);
+    return ResizeImage(base, width: width, policy: ResizeImagePolicy.fit);
+  }
+
+  Widget _fade(Widget child, int? frame, bool sync) => sync || !fadeIn
       ? child
       : AnimatedOpacity(opacity: frame == null ? 0 : 1, duration: Motion.fast, curve: Motion.easeOut, child: child);
 
@@ -27,25 +59,32 @@ class ProfilePhoto extends StatelessWidget {
     final u = url;
     final placeholder = _Initials(name: name);
     if (u == null || u.isEmpty) return placeholder;
+    final width = decodeWidth ?? screenDecodeWidth(context);
     if (MemoryImages.isMemory(u)) {
       final bytes = MemoryImages.get(u);
       if (bytes == null) return placeholder;
-      return Image.memory(bytes, fit: fit, alignment: alignment, gaplessPlayback: true);
+      return Image.memory(
+        bytes,
+        fit: fit,
+        alignment: alignment,
+        gaplessPlayback: true,
+        cacheWidth: width,
+        filterQuality: filterQuality,
+      );
     }
-    if (u.startsWith('asset:')) {
-      return Image.asset(u.substring(6), fit: fit, alignment: alignment, gaplessPlayback: true,
-          frameBuilder: (c, child, f, s) => _fade(child, f, s), errorBuilder: (_, _, _) => placeholder);
-    }
-    return Image.network(
-      u,
+    return Image(
+      image: provider(u, width)!,
       fit: fit,
       alignment: alignment,
       gaplessPlayback: true,
-      headers: MediaAuth.isMediaUrl(u) ? MediaAuth.headers?.call() : null,
-      frameBuilder: (c, child, f, s) => Stack(fit: StackFit.passthrough, children: [
-        if (f == null) ColoredBox(color: context.fc.hair),
-        _fade(child, f, s),
-      ]),
+      filterQuality: filterQuality,
+      frameBuilder: (c, child, f, s) => Stack(
+        fit: StackFit.passthrough,
+        children: [
+          if (f == null) ColoredBox(color: context.fc.hair),
+          _fade(child, f, s),
+        ],
+      ),
       errorBuilder: (_, _, _) => placeholder,
     );
   }
@@ -65,8 +104,10 @@ class _Initials extends StatelessWidget {
         child: FittedBox(
           child: Padding(
             padding: const EdgeInsets.all(12),
-            child: Text(initials.toUpperCase(),
-                style: TextStyle(color: c.muted, fontSize: 40, fontWeight: FontWeight.w600, letterSpacing: -1)),
+            child: Text(
+              initials.toUpperCase(),
+              style: TextStyle(color: c.muted, fontSize: 40, fontWeight: FontWeight.w600, letterSpacing: -1),
+            ),
           ),
         ),
       ),
@@ -83,7 +124,13 @@ class Avatar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final img = SizedBox.square(dimension: size, child: ClipOval(child: ProfilePhoto(url: url, name: name)));
+    final px = (size * MediaQuery.devicePixelRatioOf(context)).round();
+    final img = SizedBox.square(
+      dimension: size,
+      child: ClipOval(
+        child: ProfilePhoto(url: url, name: name, decodeWidth: px),
+      ),
+    );
     return heroTag == null ? img : Hero(tag: heroTag!, child: img);
   }
 }
@@ -131,11 +178,7 @@ class _PressableState extends State<Pressable> {
           scale: _down ? widget.scale : 1,
           duration: Motion.of(context, Motion.press),
           curve: Motion.easeOut,
-          child: AnimatedOpacity(
-            opacity: widget.onTap == null ? 0.45 : 1,
-            duration: Motion.fast,
-            child: widget.child,
-          ),
+          child: AnimatedOpacity(opacity: widget.onTap == null ? 0.45 : 1, duration: Motion.fast, child: widget.child),
         ),
       ),
     );
@@ -175,12 +218,16 @@ class RoundButton extends StatelessWidget {
         shape: BoxShape.circle,
         color: background ?? (glass ? Colors.white.withValues(alpha: 0.18) : c.surface),
         border: Border.all(color: glass ? Colors.white.withValues(alpha: 0.28) : c.hair),
-        boxShadow: glass ? null : [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 10, offset: const Offset(0, 2))],
+        boxShadow: glass
+            ? null
+            : [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 10, offset: const Offset(0, 2))],
       ),
       child: Icon(icon, size: iconSize, color: color ?? (glass ? Colors.white : c.ink)),
     );
     if (glass) {
-      body = ClipOval(child: BackdropFilter(filter: ImageFilter.blur(sigmaX: 14, sigmaY: 14), child: body));
+      body = ClipOval(
+        child: BackdropFilter(filter: ImageFilter.blur(sigmaX: 14, sigmaY: 14), child: body),
+      );
     }
     return Pressable(onTap: onTap, semanticLabel: semanticLabel, child: body);
   }
@@ -233,7 +280,11 @@ class PillButton extends StatelessWidget {
           borderRadius: BorderRadius.circular(999),
           border: dark ? null : Border.all(color: c.hair),
           boxShadow: [
-            BoxShadow(color: Colors.black.withValues(alpha: dark ? 0.16 : 0.07), blurRadius: dark ? 18 : 12, offset: const Offset(0, 4)),
+            BoxShadow(
+              color: Colors.black.withValues(alpha: dark ? 0.16 : 0.07),
+              blurRadius: dark ? 18 : 12,
+              offset: const Offset(0, 4),
+            ),
           ],
         ),
         child: AnimatedSwitcher(
@@ -264,13 +315,19 @@ class FastTrackBadge extends StatelessWidget {
       height: 22,
       padding: EdgeInsets.symmetric(horizontal: compact ? 6 : 8),
       decoration: BoxDecoration(color: c.goldSoft, borderRadius: BorderRadius.circular(99)),
-      child: Row(mainAxisSize: MainAxisSize.min, children: [
-        Icon(PhosphorIconsFill.lightning, size: 11, color: c.gold),
-        if (!compact) ...[
-          const SizedBox(width: 3),
-          Text('FAST-TRACK', style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w600, letterSpacing: 0.4, color: c.gold)),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(PhosphorIconsFill.lightning, size: 11, color: c.gold),
+          if (!compact) ...[
+            const SizedBox(width: 3),
+            Text(
+              'FAST-TRACK',
+              style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w600, letterSpacing: 0.4, color: c.gold),
+            ),
+          ],
         ],
-      ]),
+      ),
     );
   }
 }
@@ -303,11 +360,14 @@ class InfoChip extends StatelessWidget {
         borderRadius: BorderRadius.circular(99),
         border: background == null ? Border.all(color: c.hair) : null,
       ),
-      child: Row(mainAxisSize: MainAxisSize.min, children: [
-        Icon(icon, size: 14, color: color ?? c.ink2),
-        const SizedBox(width: 6),
-        Text(label, style: Theme.of(context).textTheme.labelMedium?.copyWith(color: color ?? c.ink2)),
-      ]),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 14, color: color ?? c.ink2),
+          const SizedBox(width: 6),
+          Text(label, style: Theme.of(context).textTheme.labelMedium?.copyWith(color: color ?? c.ink2)),
+        ],
+      ),
     );
   }
 }
@@ -319,10 +379,12 @@ class SectionLabel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Padding(
-        padding: padding,
-        child: Text(text.toUpperCase(),
-            style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, letterSpacing: 0.8, color: context.fc.muted)),
-      );
+    padding: padding,
+    child: Text(
+      text.toUpperCase(),
+      style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, letterSpacing: 0.8, color: context.fc.muted),
+    ),
+  );
 }
 
 /// Progressive frosted fade (reference: milky glass over the photo bottom).
@@ -335,37 +397,56 @@ class FrostedFade extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return LayoutBuilder(builder: (context, box) {
-      final h = box.maxHeight;
-      return Stack(fit: StackFit.expand, children: [
-        if (blur)
-          for (final (start, sigma) in [(0.44, 4.0), (0.60, 10.0), (0.76, 18.0)])
-            Positioned(
-              left: 0,
-              right: 0,
-              bottom: 0,
-              height: h * (1 - start),
-              child: ClipRect(child: BackdropFilter(filter: ImageFilter.blur(sigmaX: sigma, sigmaY: sigma), child: const SizedBox.expand())),
+    return LayoutBuilder(
+      builder: (context, box) {
+        final h = box.maxHeight;
+        return Stack(
+          fit: StackFit.expand,
+          children: [
+            if (blur)
+              for (final (start, sigma) in [(0.44, 4.0), (0.60, 10.0), (0.76, 18.0)])
+                Positioned(
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  height: h * (1 - start),
+                  child: ClipRect(
+                    child: BackdropFilter(
+                      filter: ImageFilter.blur(sigmaX: sigma, sigmaY: sigma),
+                      child: const SizedBox.expand(),
+                    ),
+                  ),
+                ),
+            DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  stops: const [0, 0.28, 0.5, 1],
+                  colors: [
+                    color.withValues(alpha: 0),
+                    color.withValues(alpha: 0.5),
+                    color.withValues(alpha: 0.84),
+                    color.withValues(alpha: 0.94),
+                  ],
+                ),
+              ),
             ),
-        DecoratedBox(
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
-              stops: const [0, 0.28, 0.5, 1],
-              colors: [color.withValues(alpha: 0), color.withValues(alpha: 0.5), color.withValues(alpha: 0.84), color.withValues(alpha: 0.94)],
-            ),
-          ),
-        ),
-      ]);
-    });
+          ],
+        );
+      },
+    );
   }
 }
 
-/// Photo with a progressive frosted bottom: a blurred copy of the same
-/// image is revealed through a gradient mask, then a milky colour wash
-/// carries text contrast. One blur of the image, no backdrop filters, so it
-/// renders identically everywhere and stays cheap while the card moves.
+/// Photo with a progressive frosted bottom (reference: milky glass).
+///
+/// Performance: instead of a Gaussian blur (re-rasterised every frame while
+/// the card moves), the frosted layer is the same photo decoded at ~40 px
+/// wide and upscaled with high-quality filtering, which looks like a soft
+/// blur for free. A gradient mask reveals it towards the bottom, and a milky
+/// wash carries text contrast. The whole thing sits in a RepaintBoundary so
+/// dragging only re-composites a cached layer.
 class FrostedPhoto extends StatelessWidget {
   const FrostedPhoto({super.key, required this.url, required this.name, required this.color, this.heroTag, this.blur = true});
   final String? url;
@@ -377,33 +458,40 @@ class FrostedPhoto extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final photo = ProfilePhoto(url: url, name: name);
-    return Stack(fit: StackFit.expand, children: [
-      heroTag == null ? photo : Hero(tag: heroTag!, child: photo),
-      if (blur)
-        ShaderMask(
-          blendMode: BlendMode.dstIn,
-          shaderCallback: (r) => const LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            stops: [0.5, 0.72],
-            colors: [Colors.transparent, Colors.black],
-          ).createShader(r),
-          child: ImageFiltered(
-            imageFilter: ImageFilter.blur(sigmaX: 18, sigmaY: 18, tileMode: TileMode.clamp),
-            child: ProfilePhoto(url: url, name: name),
+    return RepaintBoundary(
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          heroTag == null ? photo : Hero(tag: heroTag!, child: photo),
+          if (blur)
+            ShaderMask(
+              blendMode: BlendMode.dstIn,
+              shaderCallback: (r) => const LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                stops: [0.5, 0.72],
+                colors: [Colors.transparent, Colors.black],
+              ).createShader(r),
+              child: ProfilePhoto(url: url, name: name, decodeWidth: 40, filterQuality: FilterQuality.high, fadeIn: false),
+            ),
+          DecoratedBox(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                stops: const [0.48, 0.66, 0.8, 1],
+                colors: [
+                  color.withValues(alpha: 0),
+                  color.withValues(alpha: 0.55),
+                  color.withValues(alpha: 0.82),
+                  color.withValues(alpha: 0.92),
+                ],
+              ),
+            ),
           ),
-        ),
-      DecoratedBox(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            stops: const [0.48, 0.66, 0.8, 1],
-            colors: [color.withValues(alpha: 0), color.withValues(alpha: 0.55), color.withValues(alpha: 0.82), color.withValues(alpha: 0.92)],
-          ),
-        ),
+        ],
       ),
-    ]);
+    );
   }
 }
 
@@ -411,11 +499,15 @@ void showSnack(BuildContext context, String text, {IconData? icon}) {
   final c = context.fc;
   ScaffoldMessenger.of(context)
     ..hideCurrentSnackBar()
-    ..showSnackBar(SnackBar(
-      duration: const Duration(milliseconds: 2600),
-      content: Row(children: [
-        if (icon != null) ...[Icon(icon, color: c.paper, size: 18), const SizedBox(width: 10)],
-        Expanded(child: Text(text)),
-      ]),
-    ));
+    ..showSnackBar(
+      SnackBar(
+        duration: const Duration(milliseconds: 2600),
+        content: Row(
+          children: [
+            if (icon != null) ...[Icon(icon, color: c.paper, size: 18), const SizedBox(width: 10)],
+            Expanded(child: Text(text)),
+          ],
+        ),
+      ),
+    );
 }

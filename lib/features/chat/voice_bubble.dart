@@ -84,45 +84,48 @@ class _VoiceBubbleState extends ConsumerState<VoiceBubble> {
     final seed = widget.message.id;
     return SizedBox(
       width: 210,
-      child: Row(children: [
-        InkWell(
-          customBorder: const CircleBorder(),
-          onTap: _loading || _failed ? null : _toggle,
-          child: CircleAvatar(
-            radius: 18,
-            backgroundColor: c.withValues(alpha: 0.18),
-            child: _loading
-                ? SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: c))
-                : Icon(
-                    _failed
-                        ? Icons.error_outline
-                        : (_state == PlayerState.playing ? Icons.pause_rounded : Icons.play_arrow_rounded),
-                    color: c),
+      child: Row(
+        children: [
+          InkWell(
+            customBorder: const CircleBorder(),
+            onTap: _loading || _failed ? null : _toggle,
+            child: CircleAvatar(
+              radius: 18,
+              backgroundColor: c.withValues(alpha: 0.18),
+              child: _loading
+                  ? SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: c))
+                  : Icon(
+                      _failed
+                          ? Icons.error_outline
+                          : (_state == PlayerState.playing ? Icons.pause_rounded : Icons.play_arrow_rounded),
+                      color: c,
+                    ),
+            ),
           ),
-        ),
-        const SizedBox(width: 8),
-        Expanded(
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              for (var i = 0; i < 24; i++)
-                Container(
-                  width: 3,
-                  height: 6.0 + ((seed.codeUnitAt(i % seed.length) * (i + 3)) % 18),
-                  decoration: BoxDecoration(
-                    color: (i / 24) <= progress ? c : c.withValues(alpha: 0.35),
-                    borderRadius: BorderRadius.circular(2),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                for (var i = 0; i < 24; i++)
+                  Container(
+                    width: 3,
+                    height: 6.0 + ((seed.codeUnitAt(i % seed.length) * (i + 3)) % 18),
+                    decoration: BoxDecoration(
+                      color: (i / 24) <= progress ? c : c.withValues(alpha: 0.35),
+                      borderRadius: BorderRadius.circular(2),
+                    ),
                   ),
-                ),
-            ],
+              ],
+            ),
           ),
-        ),
-        const SizedBox(width: 8),
-        Text(
-          '${shown.inMinutes}:${(shown.inSeconds % 60).toString().padLeft(2, '0')}',
-          style: TextStyle(color: c, fontSize: 12, fontWeight: FontWeight.w600),
-        ),
-      ]),
+          const SizedBox(width: 8),
+          Text(
+            '${shown.inMinutes}:${(shown.inSeconds % 60).toString().padLeft(2, '0')}',
+            style: TextStyle(color: c, fontSize: 12, fontWeight: FontWeight.w600),
+          ),
+        ],
+      ),
     );
   }
 }

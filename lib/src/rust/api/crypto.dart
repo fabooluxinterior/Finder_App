@@ -13,45 +13,19 @@ import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 Future<DeviceIdentity> createDevice({required List<int> pickleKey}) =>
     RustLib.instance.api.crateApiCryptoCreateDevice(pickleKey: pickleKey);
 
-Future<DeviceIdentity> deviceIdentity({
-  required String accountPickle,
-  required List<int> pickleKey,
-}) => RustLib.instance.api.crateApiCryptoDeviceIdentity(
-  accountPickle: accountPickle,
-  pickleKey: pickleKey,
-);
+Future<DeviceIdentity> deviceIdentity({required String accountPickle, required List<int> pickleKey}) =>
+    RustLib.instance.api.crateApiCryptoDeviceIdentity(accountPickle: accountPickle, pickleKey: pickleKey);
 
 /// Generates `count` signed one-time keys (and a fallback key if none is
 /// pending) and marks them published.
-Future<OneTimeKeyBatch> generateOneTimeKeys({
-  required String accountPickle,
-  required List<int> pickleKey,
-  required int count,
-}) => RustLib.instance.api.crateApiCryptoGenerateOneTimeKeys(
-  accountPickle: accountPickle,
-  pickleKey: pickleKey,
-  count: count,
-);
+Future<OneTimeKeyBatch> generateOneTimeKeys({required String accountPickle, required List<int> pickleKey, required int count}) =>
+    RustLib.instance.api.crateApiCryptoGenerateOneTimeKeys(accountPickle: accountPickle, pickleKey: pickleKey, count: count);
 
-Future<String> sign({
-  required String accountPickle,
-  required List<int> pickleKey,
-  required List<int> message,
-}) => RustLib.instance.api.crateApiCryptoSign(
-  accountPickle: accountPickle,
-  pickleKey: pickleKey,
-  message: message,
-);
+Future<String> sign({required String accountPickle, required List<int> pickleKey, required List<int> message}) =>
+    RustLib.instance.api.crateApiCryptoSign(accountPickle: accountPickle, pickleKey: pickleKey, message: message);
 
-Future<bool> verifySignature({
-  required String ed25519,
-  required List<int> message,
-  required String signature,
-}) => RustLib.instance.api.crateApiCryptoVerifySignature(
-  ed25519: ed25519,
-  message: message,
-  signature: signature,
-);
+Future<bool> verifySignature({required String ed25519, required List<int> message, required String signature}) =>
+    RustLib.instance.api.crateApiCryptoVerifySignature(ed25519: ed25519, message: message, signature: signature);
 
 /// Verifies a claimed one-time key was signed by the owning device.
 Future<bool> verifyOneTimeKey({
@@ -68,13 +42,8 @@ Future<bool> verifyOneTimeKey({
 
 /// 60-digit safety number for out-of-band verification, identical on both
 /// sides (inputs are sorted).
-Future<String> safetyNumber({
-  required List<String> myEd25519Keys,
-  required List<String> theirEd25519Keys,
-}) => RustLib.instance.api.crateApiCryptoSafetyNumber(
-  myEd25519Keys: myEd25519Keys,
-  theirEd25519Keys: theirEd25519Keys,
-);
+Future<String> safetyNumber({required List<String> myEd25519Keys, required List<String> theirEd25519Keys}) =>
+    RustLib.instance.api.crateApiCryptoSafetyNumber(myEd25519Keys: myEd25519Keys, theirEd25519Keys: theirEd25519Keys);
 
 Future<String> createOutboundSession({
   required String accountPickle,
@@ -88,15 +57,8 @@ Future<String> createOutboundSession({
   theirOneTimeKey: theirOneTimeKey,
 );
 
-Future<EncryptedMessage> encrypt({
-  required String sessionPickle,
-  required List<int> pickleKey,
-  required List<int> plaintext,
-}) => RustLib.instance.api.crateApiCryptoEncrypt(
-  sessionPickle: sessionPickle,
-  pickleKey: pickleKey,
-  plaintext: plaintext,
-);
+Future<EncryptedMessage> encrypt({required String sessionPickle, required List<int> pickleKey, required List<int> plaintext}) =>
+    RustLib.instance.api.crateApiCryptoEncrypt(sessionPickle: sessionPickle, pickleKey: pickleKey, plaintext: plaintext);
 
 /// Does this pre-key message belong to an existing session?
 Future<bool> sessionMatches({
@@ -144,13 +106,8 @@ Future<DecryptedMessage> decryptInbound({
 
 /// AES-256-GCM with a fresh random key and nonce per blob. `aad` binds the
 /// ciphertext to its context (e.g. "voice:<message id>").
-Future<EncryptedBlob> encryptBlob({
-  required List<int> plaintext,
-  required List<int> aad,
-}) => RustLib.instance.api.crateApiCryptoEncryptBlob(
-  plaintext: plaintext,
-  aad: aad,
-);
+Future<EncryptedBlob> encryptBlob({required List<int> plaintext, required List<int> aad}) =>
+    RustLib.instance.api.crateApiCryptoEncryptBlob(plaintext: plaintext, aad: aad);
 
 Future<Uint8List> decryptBlob({
   required List<int> key,
@@ -158,13 +115,7 @@ Future<Uint8List> decryptBlob({
   required List<int> ciphertext,
   required List<int> sha256,
   required List<int> aad,
-}) => RustLib.instance.api.crateApiCryptoDecryptBlob(
-  key: key,
-  nonce: nonce,
-  ciphertext: ciphertext,
-  sha256: sha256,
-  aad: aad,
-);
+}) => RustLib.instance.api.crateApiCryptoDecryptBlob(key: key, nonce: nonce, ciphertext: ciphertext, sha256: sha256, aad: aad);
 
 /// 32 random bytes, e.g. for a new local pickle key.
 Future<Uint8List> randomKey() => RustLib.instance.api.crateApiCryptoRandomKey();
@@ -177,19 +128,10 @@ class DecryptedMessage {
   final String sessionId;
   final Uint8List plaintext;
 
-  const DecryptedMessage({
-    this.accountPickle,
-    required this.sessionPickle,
-    required this.sessionId,
-    required this.plaintext,
-  });
+  const DecryptedMessage({this.accountPickle, required this.sessionPickle, required this.sessionId, required this.plaintext});
 
   @override
-  int get hashCode =>
-      accountPickle.hashCode ^
-      sessionPickle.hashCode ^
-      sessionId.hashCode ^
-      plaintext.hashCode;
+  int get hashCode => accountPickle.hashCode ^ sessionPickle.hashCode ^ sessionId.hashCode ^ plaintext.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -212,15 +154,10 @@ class DeviceIdentity {
   /// Ed25519 signing key (base64).
   final String ed25519;
 
-  const DeviceIdentity({
-    required this.accountPickle,
-    required this.curve25519,
-    required this.ed25519,
-  });
+  const DeviceIdentity({required this.accountPickle, required this.curve25519, required this.ed25519});
 
   @override
-  int get hashCode =>
-      accountPickle.hashCode ^ curve25519.hashCode ^ ed25519.hashCode;
+  int get hashCode => accountPickle.hashCode ^ curve25519.hashCode ^ ed25519.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -241,16 +178,10 @@ class EncryptedBlob {
   /// SHA-256 of the ciphertext, checked before decryption.
   final Uint8List sha256;
 
-  const EncryptedBlob({
-    required this.key,
-    required this.nonce,
-    required this.ciphertext,
-    required this.sha256,
-  });
+  const EncryptedBlob({required this.key, required this.nonce, required this.ciphertext, required this.sha256});
 
   @override
-  int get hashCode =>
-      key.hashCode ^ nonce.hashCode ^ ciphertext.hashCode ^ sha256.hashCode;
+  int get hashCode => key.hashCode ^ nonce.hashCode ^ ciphertext.hashCode ^ sha256.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -279,11 +210,7 @@ class EncryptedMessage {
   });
 
   @override
-  int get hashCode =>
-      sessionPickle.hashCode ^
-      sessionId.hashCode ^
-      messageType.hashCode ^
-      ciphertext.hashCode;
+  int get hashCode => sessionPickle.hashCode ^ sessionId.hashCode ^ messageType.hashCode ^ ciphertext.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -303,15 +230,10 @@ class OneTimeKeyBatch {
   /// Signed fallback key, used when the server runs out of one-time keys.
   final SignedOneTimeKey? fallback;
 
-  const OneTimeKeyBatch({
-    required this.accountPickle,
-    required this.keys,
-    this.fallback,
-  });
+  const OneTimeKeyBatch({required this.accountPickle, required this.keys, this.fallback});
 
   @override
-  int get hashCode =>
-      accountPickle.hashCode ^ keys.hashCode ^ fallback.hashCode;
+  int get hashCode => accountPickle.hashCode ^ keys.hashCode ^ fallback.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -328,11 +250,7 @@ class SignedOneTimeKey {
   final String publicKey;
   final String signature;
 
-  const SignedOneTimeKey({
-    required this.keyId,
-    required this.publicKey,
-    required this.signature,
-  });
+  const SignedOneTimeKey({required this.keyId, required this.publicKey, required this.signature});
 
   @override
   int get hashCode => keyId.hashCode ^ publicKey.hashCode ^ signature.hashCode;

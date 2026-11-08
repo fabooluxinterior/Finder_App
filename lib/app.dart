@@ -4,6 +4,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'core/theme.dart';
 import 'features/auth/auth_screen.dart';
 import 'features/home/home_shell.dart';
+import 'features/legal/consent.dart';
+import 'features/onboarding/dob.dart';
 import 'features/onboarding/profile_setup_screen.dart';
 import 'features/security/mfa_screens.dart';
 import 'providers.dart';
@@ -40,6 +42,10 @@ class _AuthGate extends ConsumerWidget {
         if (mfa.isLoading) return const _Splash();
         final m = mfa.value;
         if (m != null && m.needsChallenge) return MfaChallengeScreen(factorId: m.verifiedFactorIds.first);
+        // Current policies must be accepted (recorded after sign-up consent).
+        final consent = ref.watch(consentOkProvider);
+        if (consent.isLoading && !consent.hasValue) return const _Splash();
+        if (consent.value != true) return const ReConsentScreen();
         final profile = ref.watch(myProfileProvider);
         return profile.when(
           loading: () => const _Splash(),
@@ -51,7 +57,14 @@ class _AuthGate extends ConsumerWidget {
               ),
             ),
           ),
-          data: (p) => p == null ? const ProfileSetupScreen(isOnboarding: true) : const HomeShell(),
+          data: (p) {
+            if (p == null) return const ProfileSetupScreen(isOnboarding: true);
+            // Accounts created before DOBs were required must add one once.
+            final dob = ref.watch(hasDobProvider);
+            if (dob.isLoading && !dob.hasValue) return const _Splash();
+            if (dob.value == false) return const DobRequiredScreen();
+            return const HomeShell();
+          },
         );
       },
     );

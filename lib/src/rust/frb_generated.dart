@@ -9,8 +9,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'frb_generated.dart';
-import 'frb_generated.io.dart'
-    if (dart.library.js_interop) 'frb_generated.web.dart';
+import 'frb_generated.io.dart' if (dart.library.js_interop) 'frb_generated.web.dart';
 
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
@@ -49,12 +48,10 @@ class RustLib extends BaseEntrypoint<RustLibApi, RustLibApiImpl, RustLibWire> {
   static void dispose() => instance.disposeImpl();
 
   @override
-  ApiImplConstructor<RustLibApiImpl, RustLibWire> get apiImplConstructor =>
-      RustLibApiImpl.new;
+  ApiImplConstructor<RustLibApiImpl, RustLibWire> get apiImplConstructor => RustLibApiImpl.new;
 
   @override
-  WireConstructor<RustLibWire> get wireConstructor =>
-      RustLibWire.fromExternalLibrary;
+  WireConstructor<RustLibWire> get wireConstructor => RustLibWire.fromExternalLibrary;
 
   @override
   Future<void> executeRustInitializers() async {
@@ -62,8 +59,7 @@ class RustLib extends BaseEntrypoint<RustLibApi, RustLibApiImpl, RustLibWire> {
   }
 
   @override
-  ExternalLibraryLoaderConfig get defaultExternalLibraryLoaderConfig =>
-      kDefaultExternalLibraryLoaderConfig;
+  ExternalLibraryLoaderConfig get defaultExternalLibraryLoaderConfig => kDefaultExternalLibraryLoaderConfig;
 
   @override
   String get codegenVersion => '2.13.0';
@@ -71,19 +67,16 @@ class RustLib extends BaseEntrypoint<RustLibApi, RustLibApiImpl, RustLibWire> {
   @override
   int get rustContentHash => -858117215;
 
-  static const kDefaultExternalLibraryLoaderConfig =
-      ExternalLibraryLoaderConfig(
-        stem: 'finder_crypto',
-        ioDirectory: 'rust/target/release/',
-        webPrefix: 'pkg/',
-        wasmBindgenName: 'wasm_bindgen',
-      );
+  static const kDefaultExternalLibraryLoaderConfig = ExternalLibraryLoaderConfig(
+    stem: 'finder_crypto',
+    ioDirectory: 'rust/target/release/',
+    webPrefix: 'pkg/',
+    wasmBindgenName: 'wasm_bindgen',
+  );
 }
 
 abstract class RustLibApi extends BaseApi {
-  Future<DeviceIdentity> crateApiCryptoCreateDevice({
-    required List<int> pickleKey,
-  });
+  Future<DeviceIdentity> crateApiCryptoCreateDevice({required List<int> pickleKey});
 
   Future<String> crateApiCryptoCreateOutboundSession({
     required String accountPickle,
@@ -115,10 +108,7 @@ abstract class RustLibApi extends BaseApi {
     required String ciphertext,
   });
 
-  Future<DeviceIdentity> crateApiCryptoDeviceIdentity({
-    required String accountPickle,
-    required List<int> pickleKey,
-  });
+  Future<DeviceIdentity> crateApiCryptoDeviceIdentity({required String accountPickle, required List<int> pickleKey});
 
   Future<EncryptedMessage> crateApiCryptoEncrypt({
     required String sessionPickle,
@@ -126,10 +116,7 @@ abstract class RustLibApi extends BaseApi {
     required List<int> plaintext,
   });
 
-  Future<EncryptedBlob> crateApiCryptoEncryptBlob({
-    required List<int> plaintext,
-    required List<int> aad,
-  });
+  Future<EncryptedBlob> crateApiCryptoEncryptBlob({required List<int> plaintext, required List<int> aad});
 
   Future<OneTimeKeyBatch> crateApiCryptoGenerateOneTimeKeys({
     required String accountPickle,
@@ -141,10 +128,7 @@ abstract class RustLibApi extends BaseApi {
 
   Future<Uint8List> crateApiCryptoRandomKey();
 
-  Future<String> crateApiCryptoSafetyNumber({
-    required List<String> myEd25519Keys,
-    required List<String> theirEd25519Keys,
-  });
+  Future<String> crateApiCryptoSafetyNumber({required List<String> myEd25519Keys, required List<String> theirEd25519Keys});
 
   Future<bool> crateApiCryptoSessionMatches({
     required String sessionPickle,
@@ -153,11 +137,7 @@ abstract class RustLibApi extends BaseApi {
     required String ciphertext,
   });
 
-  Future<String> crateApiCryptoSign({
-    required String accountPickle,
-    required List<int> pickleKey,
-    required List<int> message,
-  });
+  Future<String> crateApiCryptoSign({required String accountPickle, required List<int> pickleKey, required List<int> message});
 
   Future<bool> crateApiCryptoVerifyOneTimeKey({
     required String deviceEd25519,
@@ -166,11 +146,7 @@ abstract class RustLibApi extends BaseApi {
     required String signature,
   });
 
-  Future<bool> crateApiCryptoVerifySignature({
-    required String ed25519,
-    required List<int> message,
-    required String signature,
-  });
+  Future<bool> crateApiCryptoVerifySignature({required String ed25519, required List<int> message, required String signature});
 }
 
 class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
@@ -182,25 +158,15 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   });
 
   @override
-  Future<DeviceIdentity> crateApiCryptoCreateDevice({
-    required List<int> pickleKey,
-  }) {
+  Future<DeviceIdentity> crateApiCryptoCreateDevice({required List<int> pickleKey}) {
     return handler.executeNormal(
       NormalTask(
         callFfi: (port_) {
           final serializer = SseSerializer(generalizedFrbRustBinding);
           sse_encode_list_prim_u_8_loose(pickleKey, serializer);
-          pdeCallFfi(
-            generalizedFrbRustBinding,
-            serializer,
-            funcId: 1,
-            port: port_,
-          );
+          pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 1, port: port_);
         },
-        codec: SseCodec(
-          decodeSuccessData: sse_decode_device_identity,
-          decodeErrorData: sse_decode_AnyhowException,
-        ),
+        codec: SseCodec(decodeSuccessData: sse_decode_device_identity, decodeErrorData: sse_decode_AnyhowException),
         constMeta: kCrateApiCryptoCreateDeviceConstMeta,
         argValues: [pickleKey],
         apiImpl: this,
@@ -226,17 +192,9 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           sse_encode_list_prim_u_8_loose(pickleKey, serializer);
           sse_encode_String(theirCurve25519, serializer);
           sse_encode_String(theirOneTimeKey, serializer);
-          pdeCallFfi(
-            generalizedFrbRustBinding,
-            serializer,
-            funcId: 2,
-            port: port_,
-          );
+          pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 2, port: port_);
         },
-        codec: SseCodec(
-          decodeSuccessData: sse_decode_String,
-          decodeErrorData: sse_decode_AnyhowException,
-        ),
+        codec: SseCodec(decodeSuccessData: sse_decode_String, decodeErrorData: sse_decode_AnyhowException),
         constMeta: kCrateApiCryptoCreateOutboundSessionConstMeta,
         argValues: [accountPickle, pickleKey, theirCurve25519, theirOneTimeKey],
         apiImpl: this,
@@ -244,16 +202,10 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     );
   }
 
-  TaskConstMeta get kCrateApiCryptoCreateOutboundSessionConstMeta =>
-      const TaskConstMeta(
-        debugName: "create_outbound_session",
-        argNames: [
-          "accountPickle",
-          "pickleKey",
-          "theirCurve25519",
-          "theirOneTimeKey",
-        ],
-      );
+  TaskConstMeta get kCrateApiCryptoCreateOutboundSessionConstMeta => const TaskConstMeta(
+    debugName: "create_outbound_session",
+    argNames: ["accountPickle", "pickleKey", "theirCurve25519", "theirOneTimeKey"],
+  );
 
   @override
   Future<DecryptedMessage> crateApiCryptoDecrypt({
@@ -270,17 +222,9 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           sse_encode_list_prim_u_8_loose(pickleKey, serializer);
           sse_encode_u_32(messageType, serializer);
           sse_encode_String(ciphertext, serializer);
-          pdeCallFfi(
-            generalizedFrbRustBinding,
-            serializer,
-            funcId: 3,
-            port: port_,
-          );
+          pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 3, port: port_);
         },
-        codec: SseCodec(
-          decodeSuccessData: sse_decode_decrypted_message,
-          decodeErrorData: sse_decode_AnyhowException,
-        ),
+        codec: SseCodec(decodeSuccessData: sse_decode_decrypted_message, decodeErrorData: sse_decode_AnyhowException),
         constMeta: kCrateApiCryptoDecryptConstMeta,
         argValues: [sessionPickle, pickleKey, messageType, ciphertext],
         apiImpl: this,
@@ -288,10 +232,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     );
   }
 
-  TaskConstMeta get kCrateApiCryptoDecryptConstMeta => const TaskConstMeta(
-    debugName: "decrypt",
-    argNames: ["sessionPickle", "pickleKey", "messageType", "ciphertext"],
-  );
+  TaskConstMeta get kCrateApiCryptoDecryptConstMeta =>
+      const TaskConstMeta(debugName: "decrypt", argNames: ["sessionPickle", "pickleKey", "messageType", "ciphertext"]);
 
   @override
   Future<Uint8List> crateApiCryptoDecryptBlob({
@@ -310,17 +252,9 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           sse_encode_list_prim_u_8_loose(ciphertext, serializer);
           sse_encode_list_prim_u_8_loose(sha256, serializer);
           sse_encode_list_prim_u_8_loose(aad, serializer);
-          pdeCallFfi(
-            generalizedFrbRustBinding,
-            serializer,
-            funcId: 4,
-            port: port_,
-          );
+          pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 4, port: port_);
         },
-        codec: SseCodec(
-          decodeSuccessData: sse_decode_list_prim_u_8_strict,
-          decodeErrorData: sse_decode_AnyhowException,
-        ),
+        codec: SseCodec(decodeSuccessData: sse_decode_list_prim_u_8_strict, decodeErrorData: sse_decode_AnyhowException),
         constMeta: kCrateApiCryptoDecryptBlobConstMeta,
         argValues: [key, nonce, ciphertext, sha256, aad],
         apiImpl: this,
@@ -328,10 +262,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     );
   }
 
-  TaskConstMeta get kCrateApiCryptoDecryptBlobConstMeta => const TaskConstMeta(
-    debugName: "decrypt_blob",
-    argNames: ["key", "nonce", "ciphertext", "sha256", "aad"],
-  );
+  TaskConstMeta get kCrateApiCryptoDecryptBlobConstMeta =>
+      const TaskConstMeta(debugName: "decrypt_blob", argNames: ["key", "nonce", "ciphertext", "sha256", "aad"]);
 
   @override
   Future<DecryptedMessage> crateApiCryptoDecryptInbound({
@@ -350,64 +282,32 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           sse_encode_String(theirCurve25519, serializer);
           sse_encode_u_32(messageType, serializer);
           sse_encode_String(ciphertext, serializer);
-          pdeCallFfi(
-            generalizedFrbRustBinding,
-            serializer,
-            funcId: 5,
-            port: port_,
-          );
+          pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 5, port: port_);
         },
-        codec: SseCodec(
-          decodeSuccessData: sse_decode_decrypted_message,
-          decodeErrorData: sse_decode_AnyhowException,
-        ),
+        codec: SseCodec(decodeSuccessData: sse_decode_decrypted_message, decodeErrorData: sse_decode_AnyhowException),
         constMeta: kCrateApiCryptoDecryptInboundConstMeta,
-        argValues: [
-          accountPickle,
-          pickleKey,
-          theirCurve25519,
-          messageType,
-          ciphertext,
-        ],
+        argValues: [accountPickle, pickleKey, theirCurve25519, messageType, ciphertext],
         apiImpl: this,
       ),
     );
   }
 
-  TaskConstMeta get kCrateApiCryptoDecryptInboundConstMeta =>
-      const TaskConstMeta(
-        debugName: "decrypt_inbound",
-        argNames: [
-          "accountPickle",
-          "pickleKey",
-          "theirCurve25519",
-          "messageType",
-          "ciphertext",
-        ],
-      );
+  TaskConstMeta get kCrateApiCryptoDecryptInboundConstMeta => const TaskConstMeta(
+    debugName: "decrypt_inbound",
+    argNames: ["accountPickle", "pickleKey", "theirCurve25519", "messageType", "ciphertext"],
+  );
 
   @override
-  Future<DeviceIdentity> crateApiCryptoDeviceIdentity({
-    required String accountPickle,
-    required List<int> pickleKey,
-  }) {
+  Future<DeviceIdentity> crateApiCryptoDeviceIdentity({required String accountPickle, required List<int> pickleKey}) {
     return handler.executeNormal(
       NormalTask(
         callFfi: (port_) {
           final serializer = SseSerializer(generalizedFrbRustBinding);
           sse_encode_String(accountPickle, serializer);
           sse_encode_list_prim_u_8_loose(pickleKey, serializer);
-          pdeCallFfi(
-            generalizedFrbRustBinding,
-            serializer,
-            funcId: 6,
-            port: port_,
-          );
+          pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 6, port: port_);
         },
-        codec: SseCodec(
-          decodeSuccessData: sse_decode_device_identity,
-          decodeErrorData: sse_decode_AnyhowException,
-        ),
+        codec: SseCodec(decodeSuccessData: sse_decode_device_identity, decodeErrorData: sse_decode_AnyhowException),
         constMeta: kCrateApiCryptoDeviceIdentityConstMeta,
         argValues: [accountPickle, pickleKey],
         apiImpl: this,
@@ -416,10 +316,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   TaskConstMeta get kCrateApiCryptoDeviceIdentityConstMeta =>
-      const TaskConstMeta(
-        debugName: "device_identity",
-        argNames: ["accountPickle", "pickleKey"],
-      );
+      const TaskConstMeta(debugName: "device_identity", argNames: ["accountPickle", "pickleKey"]);
 
   @override
   Future<EncryptedMessage> crateApiCryptoEncrypt({
@@ -434,17 +331,9 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           sse_encode_String(sessionPickle, serializer);
           sse_encode_list_prim_u_8_loose(pickleKey, serializer);
           sse_encode_list_prim_u_8_loose(plaintext, serializer);
-          pdeCallFfi(
-            generalizedFrbRustBinding,
-            serializer,
-            funcId: 7,
-            port: port_,
-          );
+          pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 7, port: port_);
         },
-        codec: SseCodec(
-          decodeSuccessData: sse_decode_encrypted_message,
-          decodeErrorData: sse_decode_AnyhowException,
-        ),
+        codec: SseCodec(decodeSuccessData: sse_decode_encrypted_message, decodeErrorData: sse_decode_AnyhowException),
         constMeta: kCrateApiCryptoEncryptConstMeta,
         argValues: [sessionPickle, pickleKey, plaintext],
         apiImpl: this,
@@ -452,33 +341,20 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     );
   }
 
-  TaskConstMeta get kCrateApiCryptoEncryptConstMeta => const TaskConstMeta(
-    debugName: "encrypt",
-    argNames: ["sessionPickle", "pickleKey", "plaintext"],
-  );
+  TaskConstMeta get kCrateApiCryptoEncryptConstMeta =>
+      const TaskConstMeta(debugName: "encrypt", argNames: ["sessionPickle", "pickleKey", "plaintext"]);
 
   @override
-  Future<EncryptedBlob> crateApiCryptoEncryptBlob({
-    required List<int> plaintext,
-    required List<int> aad,
-  }) {
+  Future<EncryptedBlob> crateApiCryptoEncryptBlob({required List<int> plaintext, required List<int> aad}) {
     return handler.executeNormal(
       NormalTask(
         callFfi: (port_) {
           final serializer = SseSerializer(generalizedFrbRustBinding);
           sse_encode_list_prim_u_8_loose(plaintext, serializer);
           sse_encode_list_prim_u_8_loose(aad, serializer);
-          pdeCallFfi(
-            generalizedFrbRustBinding,
-            serializer,
-            funcId: 8,
-            port: port_,
-          );
+          pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 8, port: port_);
         },
-        codec: SseCodec(
-          decodeSuccessData: sse_decode_encrypted_blob,
-          decodeErrorData: sse_decode_AnyhowException,
-        ),
+        codec: SseCodec(decodeSuccessData: sse_decode_encrypted_blob, decodeErrorData: sse_decode_AnyhowException),
         constMeta: kCrateApiCryptoEncryptBlobConstMeta,
         argValues: [plaintext, aad],
         apiImpl: this,
@@ -486,10 +362,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     );
   }
 
-  TaskConstMeta get kCrateApiCryptoEncryptBlobConstMeta => const TaskConstMeta(
-    debugName: "encrypt_blob",
-    argNames: ["plaintext", "aad"],
-  );
+  TaskConstMeta get kCrateApiCryptoEncryptBlobConstMeta =>
+      const TaskConstMeta(debugName: "encrypt_blob", argNames: ["plaintext", "aad"]);
 
   @override
   Future<OneTimeKeyBatch> crateApiCryptoGenerateOneTimeKeys({
@@ -504,17 +378,9 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           sse_encode_String(accountPickle, serializer);
           sse_encode_list_prim_u_8_loose(pickleKey, serializer);
           sse_encode_u_32(count, serializer);
-          pdeCallFfi(
-            generalizedFrbRustBinding,
-            serializer,
-            funcId: 9,
-            port: port_,
-          );
+          pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 9, port: port_);
         },
-        codec: SseCodec(
-          decodeSuccessData: sse_decode_one_time_key_batch,
-          decodeErrorData: sse_decode_AnyhowException,
-        ),
+        codec: SseCodec(decodeSuccessData: sse_decode_one_time_key_batch, decodeErrorData: sse_decode_AnyhowException),
         constMeta: kCrateApiCryptoGenerateOneTimeKeysConstMeta,
         argValues: [accountPickle, pickleKey, count],
         apiImpl: this,
@@ -523,10 +389,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   TaskConstMeta get kCrateApiCryptoGenerateOneTimeKeysConstMeta =>
-      const TaskConstMeta(
-        debugName: "generate_one_time_keys",
-        argNames: ["accountPickle", "pickleKey", "count"],
-      );
+      const TaskConstMeta(debugName: "generate_one_time_keys", argNames: ["accountPickle", "pickleKey", "count"]);
 
   @override
   Future<void> crateApiCryptoInitApp() {
@@ -534,17 +397,9 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       NormalTask(
         callFfi: (port_) {
           final serializer = SseSerializer(generalizedFrbRustBinding);
-          pdeCallFfi(
-            generalizedFrbRustBinding,
-            serializer,
-            funcId: 10,
-            port: port_,
-          );
+          pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 10, port: port_);
         },
-        codec: SseCodec(
-          decodeSuccessData: sse_decode_unit,
-          decodeErrorData: null,
-        ),
+        codec: SseCodec(decodeSuccessData: sse_decode_unit, decodeErrorData: null),
         constMeta: kCrateApiCryptoInitAppConstMeta,
         argValues: [],
         apiImpl: this,
@@ -552,8 +407,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     );
   }
 
-  TaskConstMeta get kCrateApiCryptoInitAppConstMeta =>
-      const TaskConstMeta(debugName: "init_app", argNames: []);
+  TaskConstMeta get kCrateApiCryptoInitAppConstMeta => const TaskConstMeta(debugName: "init_app", argNames: []);
 
   @override
   Future<Uint8List> crateApiCryptoRandomKey() {
@@ -561,17 +415,9 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       NormalTask(
         callFfi: (port_) {
           final serializer = SseSerializer(generalizedFrbRustBinding);
-          pdeCallFfi(
-            generalizedFrbRustBinding,
-            serializer,
-            funcId: 11,
-            port: port_,
-          );
+          pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 11, port: port_);
         },
-        codec: SseCodec(
-          decodeSuccessData: sse_decode_list_prim_u_8_strict,
-          decodeErrorData: sse_decode_AnyhowException,
-        ),
+        codec: SseCodec(decodeSuccessData: sse_decode_list_prim_u_8_strict, decodeErrorData: sse_decode_AnyhowException),
         constMeta: kCrateApiCryptoRandomKeyConstMeta,
         argValues: [],
         apiImpl: this,
@@ -579,31 +425,19 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     );
   }
 
-  TaskConstMeta get kCrateApiCryptoRandomKeyConstMeta =>
-      const TaskConstMeta(debugName: "random_key", argNames: []);
+  TaskConstMeta get kCrateApiCryptoRandomKeyConstMeta => const TaskConstMeta(debugName: "random_key", argNames: []);
 
   @override
-  Future<String> crateApiCryptoSafetyNumber({
-    required List<String> myEd25519Keys,
-    required List<String> theirEd25519Keys,
-  }) {
+  Future<String> crateApiCryptoSafetyNumber({required List<String> myEd25519Keys, required List<String> theirEd25519Keys}) {
     return handler.executeNormal(
       NormalTask(
         callFfi: (port_) {
           final serializer = SseSerializer(generalizedFrbRustBinding);
           sse_encode_list_String(myEd25519Keys, serializer);
           sse_encode_list_String(theirEd25519Keys, serializer);
-          pdeCallFfi(
-            generalizedFrbRustBinding,
-            serializer,
-            funcId: 12,
-            port: port_,
-          );
+          pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 12, port: port_);
         },
-        codec: SseCodec(
-          decodeSuccessData: sse_decode_String,
-          decodeErrorData: null,
-        ),
+        codec: SseCodec(decodeSuccessData: sse_decode_String, decodeErrorData: null),
         constMeta: kCrateApiCryptoSafetyNumberConstMeta,
         argValues: [myEd25519Keys, theirEd25519Keys],
         apiImpl: this,
@@ -611,10 +445,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     );
   }
 
-  TaskConstMeta get kCrateApiCryptoSafetyNumberConstMeta => const TaskConstMeta(
-    debugName: "safety_number",
-    argNames: ["myEd25519Keys", "theirEd25519Keys"],
-  );
+  TaskConstMeta get kCrateApiCryptoSafetyNumberConstMeta =>
+      const TaskConstMeta(debugName: "safety_number", argNames: ["myEd25519Keys", "theirEd25519Keys"]);
 
   @override
   Future<bool> crateApiCryptoSessionMatches({
@@ -631,17 +463,9 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           sse_encode_list_prim_u_8_loose(pickleKey, serializer);
           sse_encode_u_32(messageType, serializer);
           sse_encode_String(ciphertext, serializer);
-          pdeCallFfi(
-            generalizedFrbRustBinding,
-            serializer,
-            funcId: 13,
-            port: port_,
-          );
+          pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 13, port: port_);
         },
-        codec: SseCodec(
-          decodeSuccessData: sse_decode_bool,
-          decodeErrorData: sse_decode_AnyhowException,
-        ),
+        codec: SseCodec(decodeSuccessData: sse_decode_bool, decodeErrorData: sse_decode_AnyhowException),
         constMeta: kCrateApiCryptoSessionMatchesConstMeta,
         argValues: [sessionPickle, pickleKey, messageType, ciphertext],
         apiImpl: this,
@@ -650,17 +474,10 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   TaskConstMeta get kCrateApiCryptoSessionMatchesConstMeta =>
-      const TaskConstMeta(
-        debugName: "session_matches",
-        argNames: ["sessionPickle", "pickleKey", "messageType", "ciphertext"],
-      );
+      const TaskConstMeta(debugName: "session_matches", argNames: ["sessionPickle", "pickleKey", "messageType", "ciphertext"]);
 
   @override
-  Future<String> crateApiCryptoSign({
-    required String accountPickle,
-    required List<int> pickleKey,
-    required List<int> message,
-  }) {
+  Future<String> crateApiCryptoSign({required String accountPickle, required List<int> pickleKey, required List<int> message}) {
     return handler.executeNormal(
       NormalTask(
         callFfi: (port_) {
@@ -668,17 +485,9 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           sse_encode_String(accountPickle, serializer);
           sse_encode_list_prim_u_8_loose(pickleKey, serializer);
           sse_encode_list_prim_u_8_loose(message, serializer);
-          pdeCallFfi(
-            generalizedFrbRustBinding,
-            serializer,
-            funcId: 14,
-            port: port_,
-          );
+          pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 14, port: port_);
         },
-        codec: SseCodec(
-          decodeSuccessData: sse_decode_String,
-          decodeErrorData: sse_decode_AnyhowException,
-        ),
+        codec: SseCodec(decodeSuccessData: sse_decode_String, decodeErrorData: sse_decode_AnyhowException),
         constMeta: kCrateApiCryptoSignConstMeta,
         argValues: [accountPickle, pickleKey, message],
         apiImpl: this,
@@ -686,10 +495,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     );
   }
 
-  TaskConstMeta get kCrateApiCryptoSignConstMeta => const TaskConstMeta(
-    debugName: "sign",
-    argNames: ["accountPickle", "pickleKey", "message"],
-  );
+  TaskConstMeta get kCrateApiCryptoSignConstMeta =>
+      const TaskConstMeta(debugName: "sign", argNames: ["accountPickle", "pickleKey", "message"]);
 
   @override
   Future<bool> crateApiCryptoVerifyOneTimeKey({
@@ -706,17 +513,9 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           sse_encode_String(deviceCurve25519, serializer);
           sse_encode_String(otk, serializer);
           sse_encode_String(signature, serializer);
-          pdeCallFfi(
-            generalizedFrbRustBinding,
-            serializer,
-            funcId: 15,
-            port: port_,
-          );
+          pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 15, port: port_);
         },
-        codec: SseCodec(
-          decodeSuccessData: sse_decode_bool,
-          decodeErrorData: null,
-        ),
+        codec: SseCodec(decodeSuccessData: sse_decode_bool, decodeErrorData: null),
         constMeta: kCrateApiCryptoVerifyOneTimeKeyConstMeta,
         argValues: [deviceEd25519, deviceCurve25519, otk, signature],
         apiImpl: this,
@@ -725,17 +524,10 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   TaskConstMeta get kCrateApiCryptoVerifyOneTimeKeyConstMeta =>
-      const TaskConstMeta(
-        debugName: "verify_one_time_key",
-        argNames: ["deviceEd25519", "deviceCurve25519", "otk", "signature"],
-      );
+      const TaskConstMeta(debugName: "verify_one_time_key", argNames: ["deviceEd25519", "deviceCurve25519", "otk", "signature"]);
 
   @override
-  Future<bool> crateApiCryptoVerifySignature({
-    required String ed25519,
-    required List<int> message,
-    required String signature,
-  }) {
+  Future<bool> crateApiCryptoVerifySignature({required String ed25519, required List<int> message, required String signature}) {
     return handler.executeNormal(
       NormalTask(
         callFfi: (port_) {
@@ -743,17 +535,9 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           sse_encode_String(ed25519, serializer);
           sse_encode_list_prim_u_8_loose(message, serializer);
           sse_encode_String(signature, serializer);
-          pdeCallFfi(
-            generalizedFrbRustBinding,
-            serializer,
-            funcId: 16,
-            port: port_,
-          );
+          pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 16, port: port_);
         },
-        codec: SseCodec(
-          decodeSuccessData: sse_decode_bool,
-          decodeErrorData: null,
-        ),
+        codec: SseCodec(decodeSuccessData: sse_decode_bool, decodeErrorData: null),
         constMeta: kCrateApiCryptoVerifySignatureConstMeta,
         argValues: [ed25519, message, signature],
         apiImpl: this,
@@ -762,10 +546,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   TaskConstMeta get kCrateApiCryptoVerifySignatureConstMeta =>
-      const TaskConstMeta(
-        debugName: "verify_signature",
-        argNames: ["ed25519", "message", "signature"],
-      );
+      const TaskConstMeta(debugName: "verify_signature", argNames: ["ed25519", "message", "signature"]);
 
   @protected
   AnyhowException dco_decode_AnyhowException(dynamic raw) {
@@ -795,8 +576,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   DecryptedMessage dco_decode_decrypted_message(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 4)
-      throw Exception('unexpected arr length: expect 4 but see ${arr.length}');
+    if (arr.length != 4) throw Exception('unexpected arr length: expect 4 but see ${arr.length}');
     return DecryptedMessage(
       accountPickle: dco_decode_opt_String(arr[0]),
       sessionPickle: dco_decode_String(arr[1]),
@@ -809,8 +589,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   DeviceIdentity dco_decode_device_identity(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 3)
-      throw Exception('unexpected arr length: expect 3 but see ${arr.length}');
+    if (arr.length != 3) throw Exception('unexpected arr length: expect 3 but see ${arr.length}');
     return DeviceIdentity(
       accountPickle: dco_decode_String(arr[0]),
       curve25519: dco_decode_String(arr[1]),
@@ -822,8 +601,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   EncryptedBlob dco_decode_encrypted_blob(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 4)
-      throw Exception('unexpected arr length: expect 4 but see ${arr.length}');
+    if (arr.length != 4) throw Exception('unexpected arr length: expect 4 but see ${arr.length}');
     return EncryptedBlob(
       key: dco_decode_list_prim_u_8_strict(arr[0]),
       nonce: dco_decode_list_prim_u_8_strict(arr[1]),
@@ -836,8 +614,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   EncryptedMessage dco_decode_encrypted_message(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 4)
-      throw Exception('unexpected arr length: expect 4 but see ${arr.length}');
+    if (arr.length != 4) throw Exception('unexpected arr length: expect 4 but see ${arr.length}');
     return EncryptedMessage(
       sessionPickle: dco_decode_String(arr[0]),
       sessionId: dco_decode_String(arr[1]),
@@ -874,8 +651,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   OneTimeKeyBatch dco_decode_one_time_key_batch(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 3)
-      throw Exception('unexpected arr length: expect 3 but see ${arr.length}');
+    if (arr.length != 3) throw Exception('unexpected arr length: expect 3 but see ${arr.length}');
     return OneTimeKeyBatch(
       accountPickle: dco_decode_String(arr[0]),
       keys: dco_decode_list_signed_one_time_key(arr[1]),
@@ -890,9 +666,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
-  SignedOneTimeKey? dco_decode_opt_box_autoadd_signed_one_time_key(
-    dynamic raw,
-  ) {
+  SignedOneTimeKey? dco_decode_opt_box_autoadd_signed_one_time_key(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return raw == null ? null : dco_decode_box_autoadd_signed_one_time_key(raw);
   }
@@ -901,8 +675,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   SignedOneTimeKey dco_decode_signed_one_time_key(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 3)
-      throw Exception('unexpected arr length: expect 3 but see ${arr.length}');
+    if (arr.length != 3) throw Exception('unexpected arr length: expect 3 but see ${arr.length}');
     return SignedOneTimeKey(
       keyId: dco_decode_String(arr[0]),
       publicKey: dco_decode_String(arr[1]),
@@ -949,9 +722,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
-  SignedOneTimeKey sse_decode_box_autoadd_signed_one_time_key(
-    SseDeserializer deserializer,
-  ) {
+  SignedOneTimeKey sse_decode_box_autoadd_signed_one_time_key(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     return (sse_decode_signed_one_time_key(deserializer));
   }
@@ -977,11 +748,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     var var_accountPickle = sse_decode_String(deserializer);
     var var_curve25519 = sse_decode_String(deserializer);
     var var_ed25519 = sse_decode_String(deserializer);
-    return DeviceIdentity(
-      accountPickle: var_accountPickle,
-      curve25519: var_curve25519,
-      ed25519: var_ed25519,
-    );
+    return DeviceIdentity(accountPickle: var_accountPickle, curve25519: var_curve25519, ed25519: var_ed25519);
   }
 
   @protected
@@ -991,12 +758,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     var var_nonce = sse_decode_list_prim_u_8_strict(deserializer);
     var var_ciphertext = sse_decode_list_prim_u_8_strict(deserializer);
     var var_sha256 = sse_decode_list_prim_u_8_strict(deserializer);
-    return EncryptedBlob(
-      key: var_key,
-      nonce: var_nonce,
-      ciphertext: var_ciphertext,
-      sha256: var_sha256,
-    );
+    return EncryptedBlob(key: var_key, nonce: var_nonce, ciphertext: var_ciphertext, sha256: var_sha256);
   }
 
   @protected
@@ -1041,9 +803,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
-  List<SignedOneTimeKey> sse_decode_list_signed_one_time_key(
-    SseDeserializer deserializer,
-  ) {
+  List<SignedOneTimeKey> sse_decode_list_signed_one_time_key(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
 
     var len_ = sse_decode_i_32(deserializer);
@@ -1059,14 +819,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     // Codec=Sse (Serialization based), see doc to use other codecs
     var var_accountPickle = sse_decode_String(deserializer);
     var var_keys = sse_decode_list_signed_one_time_key(deserializer);
-    var var_fallback = sse_decode_opt_box_autoadd_signed_one_time_key(
-      deserializer,
-    );
-    return OneTimeKeyBatch(
-      accountPickle: var_accountPickle,
-      keys: var_keys,
-      fallback: var_fallback,
-    );
+    var var_fallback = sse_decode_opt_box_autoadd_signed_one_time_key(deserializer);
+    return OneTimeKeyBatch(accountPickle: var_accountPickle, keys: var_keys, fallback: var_fallback);
   }
 
   @protected
@@ -1081,9 +835,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
-  SignedOneTimeKey? sse_decode_opt_box_autoadd_signed_one_time_key(
-    SseDeserializer deserializer,
-  ) {
+  SignedOneTimeKey? sse_decode_opt_box_autoadd_signed_one_time_key(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
 
     if (sse_decode_bool(deserializer)) {
@@ -1094,18 +846,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
-  SignedOneTimeKey sse_decode_signed_one_time_key(
-    SseDeserializer deserializer,
-  ) {
+  SignedOneTimeKey sse_decode_signed_one_time_key(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     var var_keyId = sse_decode_String(deserializer);
     var var_publicKey = sse_decode_String(deserializer);
     var var_signature = sse_decode_String(deserializer);
-    return SignedOneTimeKey(
-      keyId: var_keyId,
-      publicKey: var_publicKey,
-      signature: var_signature,
-    );
+    return SignedOneTimeKey(keyId: var_keyId, publicKey: var_publicKey, signature: var_signature);
   }
 
   @protected
@@ -1132,10 +878,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
-  void sse_encode_AnyhowException(
-    AnyhowException self,
-    SseSerializer serializer,
-  ) {
+  void sse_encode_AnyhowException(AnyhowException self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_String(self.message, serializer);
   }
@@ -1153,19 +896,13 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
-  void sse_encode_box_autoadd_signed_one_time_key(
-    SignedOneTimeKey self,
-    SseSerializer serializer,
-  ) {
+  void sse_encode_box_autoadd_signed_one_time_key(SignedOneTimeKey self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_signed_one_time_key(self, serializer);
   }
 
   @protected
-  void sse_encode_decrypted_message(
-    DecryptedMessage self,
-    SseSerializer serializer,
-  ) {
+  void sse_encode_decrypted_message(DecryptedMessage self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_opt_String(self.accountPickle, serializer);
     sse_encode_String(self.sessionPickle, serializer);
@@ -1174,10 +911,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
-  void sse_encode_device_identity(
-    DeviceIdentity self,
-    SseSerializer serializer,
-  ) {
+  void sse_encode_device_identity(DeviceIdentity self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_String(self.accountPickle, serializer);
     sse_encode_String(self.curve25519, serializer);
@@ -1194,10 +928,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
-  void sse_encode_encrypted_message(
-    EncryptedMessage self,
-    SseSerializer serializer,
-  ) {
+  void sse_encode_encrypted_message(EncryptedMessage self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_String(self.sessionPickle, serializer);
     sse_encode_String(self.sessionId, serializer);
@@ -1215,32 +946,21 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
-  void sse_encode_list_prim_u_8_loose(
-    List<int> self,
-    SseSerializer serializer,
-  ) {
+  void sse_encode_list_prim_u_8_loose(List<int> self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_i_32(self.length, serializer);
-    serializer.buffer.putUint8List(
-      self is Uint8List ? self : Uint8List.fromList(self),
-    );
+    serializer.buffer.putUint8List(self is Uint8List ? self : Uint8List.fromList(self));
   }
 
   @protected
-  void sse_encode_list_prim_u_8_strict(
-    Uint8List self,
-    SseSerializer serializer,
-  ) {
+  void sse_encode_list_prim_u_8_strict(Uint8List self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_i_32(self.length, serializer);
     serializer.buffer.putUint8List(self);
   }
 
   @protected
-  void sse_encode_list_signed_one_time_key(
-    List<SignedOneTimeKey> self,
-    SseSerializer serializer,
-  ) {
+  void sse_encode_list_signed_one_time_key(List<SignedOneTimeKey> self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_i_32(self.length, serializer);
     for (final item in self) {
@@ -1249,10 +969,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
-  void sse_encode_one_time_key_batch(
-    OneTimeKeyBatch self,
-    SseSerializer serializer,
-  ) {
+  void sse_encode_one_time_key_batch(OneTimeKeyBatch self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_String(self.accountPickle, serializer);
     sse_encode_list_signed_one_time_key(self.keys, serializer);
@@ -1270,10 +987,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
-  void sse_encode_opt_box_autoadd_signed_one_time_key(
-    SignedOneTimeKey? self,
-    SseSerializer serializer,
-  ) {
+  void sse_encode_opt_box_autoadd_signed_one_time_key(SignedOneTimeKey? self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
 
     sse_encode_bool(self != null, serializer);
@@ -1283,10 +997,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
-  void sse_encode_signed_one_time_key(
-    SignedOneTimeKey self,
-    SseSerializer serializer,
-  ) {
+  void sse_encode_signed_one_time_key(SignedOneTimeKey self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_String(self.keyId, serializer);
     sse_encode_String(self.publicKey, serializer);

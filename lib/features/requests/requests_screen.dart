@@ -2,6 +2,7 @@ import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
 import '../../core/phosphor.dart';
 
 import '../../core/errors.dart';
@@ -34,46 +35,50 @@ class RequestsScreen extends ConsumerWidget {
         child: RefreshIndicator(
           color: c.ink,
           onRefresh: () => ref.refresh(incomingRequestsProvider.future),
-          child: CustomScrollView(slivers: [
-            SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
-                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Text('Requests', style: t.headlineMedium),
-                  const SizedBox(height: 4),
-                  Text(
-                    count == 0
-                        ? 'No one is waiting right now'
-                        : '$count ${count == 1 ? 'person wants' : 'people want'} to follow you',
-                    style: t.bodyMedium?.copyWith(color: c.muted),
+          child: CustomScrollView(
+            slivers: [
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Requests', style: t.headlineMedium),
+                      const SizedBox(height: 4),
+                      Text(
+                        count == 0
+                            ? 'No one is waiting right now'
+                            : '$count ${count == 1 ? 'person wants' : 'people want'} to follow you',
+                        style: t.bodyMedium?.copyWith(color: c.muted),
+                      ),
+                    ],
                   ),
-                ]),
-              ),
-            ),
-            if (incoming.isLoading && !incoming.hasValue)
-              const SliverToBoxAdapter(child: SizedBox(height: 200))
-            else if (count == 0)
-              SliverFillRemaining(
-                hasScrollBody: false,
-                child: _EmptyState(bottom: bottomBar),
-              )
-            else if (!premium)
-              SliverToBoxAdapter(child: _LockedTeaser(count: count, bottom: bottomBar))
-            else
-              SliverPadding(
-                padding: EdgeInsets.fromLTRB(16, 16, 16, bottomBar + 16),
-                sliver: SliverGrid.builder(
-                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: 2,
-                    mainAxisSpacing: 12,
-                    crossAxisSpacing: 12,
-                    childAspectRatio: 0.66,
-                  ),
-                  itemCount: incoming.value!.requests.length,
-                  itemBuilder: (_, i) => _RequestTile(request: incoming.value!.requests[i]),
                 ),
               ),
-          ]),
+              if (incoming.isLoading && !incoming.hasValue)
+                const SliverToBoxAdapter(child: SizedBox(height: 200))
+              else if (count == 0)
+                SliverFillRemaining(hasScrollBody: false, child: _EmptyState(bottom: bottomBar))
+              else if (!premium)
+                SliverToBoxAdapter(
+                  child: _LockedTeaser(count: count, bottom: bottomBar),
+                )
+              else
+                SliverPadding(
+                  padding: EdgeInsets.fromLTRB(16, 16, 16, bottomBar + 16),
+                  sliver: SliverGrid.builder(
+                    gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                      crossAxisCount: 2,
+                      mainAxisSpacing: 12,
+                      crossAxisSpacing: 12,
+                      childAspectRatio: 0.66,
+                    ),
+                    itemCount: incoming.value!.requests.length,
+                    itemBuilder: (_, i) => _RequestTile(request: incoming.value!.requests[i]),
+                  ),
+                ),
+            ],
+          ),
         ),
       ),
     );
@@ -90,14 +95,20 @@ class _EmptyState extends StatelessWidget {
     final t = Theme.of(context).textTheme;
     return Padding(
       padding: EdgeInsets.fromLTRB(32, 0, 32, bottom),
-      child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-        Icon(PhosphorIconsRegular.heart, size: 44, color: c.muted),
-        const SizedBox(height: 12),
-        Text('No requests yet', style: t.titleLarge),
-        const SizedBox(height: 6),
-        Text('When someone requests to follow you, they’ll appear here.',
-            textAlign: TextAlign.center, style: t.bodyMedium?.copyWith(color: c.muted)),
-      ]),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(PhosphorIconsRegular.heart, size: 44, color: c.muted),
+          const SizedBox(height: 12),
+          Text('No requests yet', style: t.titleLarge),
+          const SizedBox(height: 6),
+          Text(
+            'When someone requests to follow you, they’ll appear here.',
+            textAlign: TextAlign.center,
+            style: t.bodyMedium?.copyWith(color: c.muted),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -121,83 +132,108 @@ class _LockedTeaser extends StatelessWidget {
     final tiles = count.clamp(1, 4);
     return Padding(
       padding: EdgeInsets.fromLTRB(16, 16, 16, bottom + 16),
-      child: Column(children: [
-        GridView.count(
-          crossAxisCount: 2,
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          mainAxisSpacing: 12,
-          crossAxisSpacing: 12,
-          childAspectRatio: 0.78,
-          children: [
-            for (var i = 0; i < tiles; i++)
-              ClipRRect(
-                borderRadius: BorderRadius.circular(24),
-                child: Stack(fit: StackFit.expand, children: [
-                  ImageFiltered(
-                    imageFilter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
-                    child: DecoratedBox(
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          colors: _palettes[i % _palettes.length],
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
+      child: Column(
+        children: [
+          GridView.count(
+            crossAxisCount: 2,
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            mainAxisSpacing: 12,
+            crossAxisSpacing: 12,
+            childAspectRatio: 0.78,
+            children: [
+              for (var i = 0; i < tiles; i++)
+                RepaintBoundary(
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(24),
+                    child: Stack(
+                      fit: StackFit.expand,
+                      children: [
+                        ImageFiltered(
+                          imageFilter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+                          child: DecoratedBox(
+                            decoration: BoxDecoration(
+                              gradient: LinearGradient(
+                                colors: _palettes[i % _palettes.length],
+                                begin: Alignment.topLeft,
+                                end: Alignment.bottomRight,
+                              ),
+                            ),
+                            child: const Align(
+                              alignment: Alignment(0, 0.5),
+                              child: Icon(PhosphorIconsFill.user, size: 140, color: Colors.white54),
+                            ),
+                          ),
                         ),
-                      ),
-                      child: const Align(
-                        alignment: Alignment(0, 0.5),
-                        child: Icon(PhosphorIconsFill.user, size: 140, color: Colors.white54),
-                      ),
+                        Positioned(
+                          left: 14,
+                          bottom: 14,
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Container(
+                                width: 70,
+                                height: 12,
+                                decoration: BoxDecoration(color: Colors.white70, borderRadius: BorderRadius.circular(9)),
+                              ),
+                              const SizedBox(height: 6),
+                              Container(
+                                width: 46,
+                                height: 9,
+                                decoration: BoxDecoration(color: Colors.white54, borderRadius: BorderRadius.circular(9)),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
                     ),
                   ),
-                  Positioned(
-                    left: 14,
-                    bottom: 14,
-                    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                      Container(width: 70, height: 12, decoration: BoxDecoration(color: Colors.white70, borderRadius: BorderRadius.circular(9))),
-                      const SizedBox(height: 6),
-                      Container(width: 46, height: 9, decoration: BoxDecoration(color: Colors.white54, borderRadius: BorderRadius.circular(9))),
-                    ]),
-                  ),
-                ]),
-              ),
-          ],
-        ),
-        const SizedBox(height: 16),
-        Container(
-          padding: const EdgeInsets.all(18),
-          decoration: BoxDecoration(
-            color: c.surface,
-            borderRadius: BorderRadius.circular(26),
-            border: Border.all(color: c.hair),
-            boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.08), blurRadius: 30, offset: const Offset(0, 12))],
+                ),
+            ],
           ),
-          child: Column(children: [
-            Row(children: [
-              Container(
-                width: 44,
-                height: 44,
-                decoration: BoxDecoration(color: c.goldSoft, borderRadius: BorderRadius.circular(14)),
-                child: Icon(PhosphorIconsFill.eye, color: c.gold, size: 22),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Text('See who requested you', style: t.titleMedium),
-                  const SizedBox(height: 2),
-                  Text('Accept them and start chatting with Fast-Track.', style: t.bodySmall?.copyWith(color: c.muted)),
-                ]),
-              ),
-            ]),
-            const SizedBox(height: 14),
-            PillButton(
-              label: 'Unlock with Fast-Track',
-              height: 50,
-              onTap: () => showPaywall(context, reason: PaywallReason.requests),
+          const SizedBox(height: 16),
+          Container(
+            padding: const EdgeInsets.all(18),
+            decoration: BoxDecoration(
+              color: c.surface,
+              borderRadius: BorderRadius.circular(26),
+              border: Border.all(color: c.hair),
+              boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.08), blurRadius: 30, offset: const Offset(0, 12))],
             ),
-          ]),
-        ),
-      ]),
+            child: Column(
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      width: 44,
+                      height: 44,
+                      decoration: BoxDecoration(color: c.goldSoft, borderRadius: BorderRadius.circular(14)),
+                      child: Icon(PhosphorIconsFill.eye, color: c.gold, size: 22),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('See who requested you', style: t.titleMedium),
+                          const SizedBox(height: 2),
+                          Text('Accept them and start chatting with Fast-Track.', style: t.bodySmall?.copyWith(color: c.muted)),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 14),
+                PillButton(
+                  label: 'Unlock with Fast-Track',
+                  height: 50,
+                  onTap: () => showPaywall(context, reason: PaywallReason.requests),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -254,42 +290,63 @@ class _RequestTileState extends ConsumerState<_RequestTile> {
         ),
         child: ClipRRect(
           borderRadius: BorderRadius.circular(21),
-          child: Stack(fit: StackFit.expand, children: [
-            ProfilePhoto(url: p.primaryPhoto, name: p.fullName),
-            Align(
-              alignment: Alignment.bottomCenter,
-              child: FractionallySizedBox(widthFactor: 1, heightFactor: 0.5, child: FrostedFade(color: c.surface, blur: false)),
-            ),
-            Positioned(
-              left: 12,
-              right: 10,
-              bottom: 10,
-              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Row(children: [
-                  Flexible(
-                    child: Text('${p.firstName}, ${p.age}', maxLines: 1, overflow: TextOverflow.ellipsis, style: t.titleMedium),
-                  ),
-                  const SizedBox(width: 4),
-                  const VerifiedBadge(size: 15),
-                ]),
-                Text(p.city, style: t.bodySmall?.copyWith(color: c.muted)),
-                const SizedBox(height: 8),
-                Row(children: [
-                  RoundButton(icon: PhosphorIconsBold.x, size: 38, iconSize: 16, onTap: _busy ? null : () => _respond(false), semanticLabel: 'Decline'),
-                  const SizedBox(width: 6),
-                  Expanded(
-                    child: PillButton(
-                      label: 'Accept',
-                      icon: PhosphorIconsBold.check,
-                      height: 38,
-                      busy: _busy,
-                      onTap: () => _respond(true),
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              ProfilePhoto(url: p.primaryPhoto, name: p.fullName),
+              Align(
+                alignment: Alignment.bottomCenter,
+                child: FractionallySizedBox(widthFactor: 1, heightFactor: 0.5, child: FrostedFade(color: c.surface, blur: false)),
+              ),
+              Positioned(
+                left: 12,
+                right: 10,
+                bottom: 10,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Flexible(
+                          child: Text(
+                            '${p.firstName}, ${p.age}',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: t.titleMedium,
+                          ),
+                        ),
+                        const SizedBox(width: 4),
+                        if (p.isVerified) const VerifiedBadge(size: 15),
+                      ],
                     ),
-                  ),
-                ]),
-              ]),
-            ),
-          ]),
+                    Text(p.city, style: t.bodySmall?.copyWith(color: c.muted)),
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        RoundButton(
+                          icon: PhosphorIconsBold.x,
+                          size: 38,
+                          iconSize: 16,
+                          onTap: _busy ? null : () => _respond(false),
+                          semanticLabel: 'Decline',
+                        ),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: PillButton(
+                            label: 'Accept',
+                            icon: PhosphorIconsBold.check,
+                            height: 38,
+                            busy: _busy,
+                            onTap: () => _respond(true),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

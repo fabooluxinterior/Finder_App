@@ -28,8 +28,11 @@ class SafetyNumberScreen extends ConsumerWidget {
           children: [
             const Icon(Icons.lock_rounded, size: 48),
             const SizedBox(height: 12),
-            Text('Messages and voice notes with ${peer.firstName} are end-to-end encrypted. '
-                'Only your devices and theirs hold the keys.', textAlign: TextAlign.center),
+            Text(
+              'Messages and voice notes with ${peer.firstName} are end-to-end encrypted. '
+              'Only your devices and theirs hold the keys.',
+              textAlign: TextAlign.center,
+            ),
             const SizedBox(height: 24),
             if (n == null)
               const Text('Not available in demo mode.', textAlign: TextAlign.center)
@@ -43,15 +46,19 @@ class SafetyNumberScreen extends ConsumerWidget {
                   runSpacing: 12,
                   children: [
                     for (var i = 0; i < n.length; i += 5)
-                      Text(n.substring(i, i + 5),
-                          style: const TextStyle(fontFamily: 'monospace', fontSize: 20, fontWeight: FontWeight.w600)),
+                      Text(
+                        n.substring(i, i + 5),
+                        style: const TextStyle(fontFamily: 'monospace', fontSize: 20, fontWeight: FontWeight.w600),
+                      ),
                   ],
                 ),
               ),
             const SizedBox(height: 20),
-            Text('Compare this number with the one on ${peer.firstName}’s phone. If they match, your chat is secure. '
-                'If they don’t, someone may be interfering: stop sharing sensitive information and report it.',
-                style: TextStyle(color: Colors.grey.shade700)),
+            Text(
+              'Compare this number with the one on ${peer.firstName}’s phone. If they match, your chat is secure. '
+              'If they don’t, someone may be interfering: stop sharing sensitive information and report it.',
+              style: TextStyle(color: Colors.grey.shade700),
+            ),
           ],
         ),
       ),
