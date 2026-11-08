@@ -15,6 +15,7 @@ import 'package:finder_app/providers.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 Uint8List _bytes(int n) => Uint8List(n);
 
@@ -224,6 +225,37 @@ void main() {
       await expectLater(b.replyToPrompt('u_arjun', 'p2', 'call 98765 43210'), throwsA(isA<AppException>()));
       expect(await b.replyToPrompt('u_arjun', 'p2', 'Thalassery, every time.'), SwipeOutcome.requested);
     });
+  });
+
+  test('demo stays signed in across restarts (no new login after closing the app)', () async {
+    SharedPreferences.setMockInitialValues({});
+    final first = DemoBackend(persist: true);
+    await first.verifyOtp(OtpChannel.phone, '+919876543210', '123456');
+    await first.recordConsent('2026-11-11');
+    await first.setDob(DateTime(1998, 3, 3));
+    await first.acknowledgeStandards('2026-11-11');
+    await first.createProfile(fullName: 'Asha Menon', city: 'Kochi', details: const ProfilePatch({ProfilePatch.gender: 'woman'}));
+    await first.uploadPhoto(Uint8List.fromList(List.filled(2048, 7)), mime: 'image/webp');
+    await first.musicAuthorizeUrl();
+    await Future<void>.delayed(const Duration(milliseconds: 50)); // background save
+
+    final relaunched = DemoBackend(persist: true);
+    await relaunched.restore();
+    expect(relaunched.currentUserId, isNotNull, reason: 'session restored');
+    expect(await relaunched.acceptedPolicyVersion(), '2026-11-11');
+    expect(await relaunched.hasDob(), isTrue);
+    final me = (await relaunched.myProfile())!;
+    expect(me.fullName, 'Asha Menon');
+    expect(me.gender, 'woman');
+    expect(me.photos, hasLength(1));
+    expect((await relaunched.photoSlots()).single.url, me.photos.single);
+    expect(me.musicLinked, isTrue);
+
+    await relaunched.signOut();
+    await Future<void>.delayed(const Duration(milliseconds: 50));
+    final afterSignOut = DemoBackend(persist: true);
+    await afterSignOut.restore();
+    expect(afterSignOut.currentUserId, isNull, reason: 'signing out really signs out');
   });
 
   testWidgets('onboarding starts with the community standards and moves on after agreeing', (tester) async {

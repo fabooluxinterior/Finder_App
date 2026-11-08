@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/phosphor.dart';
 
+import '../../core/app_lifecycle.dart';
 import '../../core/brand.dart';
 import '../../core/feedback.dart';
 import '../../core/theme.dart';
@@ -52,14 +53,27 @@ class _HomeShellState extends ConsumerState<HomeShell> {
     final pending = ref.watch(incomingRequestsProvider).value?.count ?? 0;
     final unread = ref.watch(connectionsProvider).value?.fold<int>(0, (s, c) => s + c.unread) ?? 0;
 
-    return Scaffold(
-      extendBody: true,
-      body: IndexedStack(index: _tab, children: const [DeckScreen(), RequestsScreen(), ChatsScreen(), MyProfileScreen()]),
-      bottomNavigationBar: _TabBar(
-        index: _tab,
-        badges: [0, pending, unread, 0],
-        // Tab switches happen dozens of times a day: no animation.
-        onTap: (i) => setState(() => _tab = i),
+    // Back: other tab -> Discover; Discover -> app goes to the background
+    // (never closes, so you're never asked to sign in again).
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) {
+        if (didPop) return;
+        if (_tab != 0) {
+          setState(() => _tab = 0);
+        } else {
+          sendAppToBackground();
+        }
+      },
+      child: Scaffold(
+        extendBody: true,
+        body: IndexedStack(index: _tab, children: const [DeckScreen(), RequestsScreen(), ChatsScreen(), MyProfileScreen()]),
+        bottomNavigationBar: _TabBar(
+          index: _tab,
+          badges: [0, pending, unread, 0],
+          // Tab switches happen dozens of times a day: no animation.
+          onTap: (i) => setState(() => _tab = i),
+        ),
       ),
     );
   }

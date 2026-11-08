@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/app_lifecycle.dart';
 import '../../core/brand.dart';
 import '../../core/config.dart';
 import '../../core/errors.dart';
@@ -185,9 +186,12 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
     final c = context.fc;
     final keyboard = MediaQuery.viewInsetsOf(context).bottom > 0;
     return PopScope(
-      canPop: _stage == 1,
+      canPop: false,
       onPopInvokedWithResult: (didPop, _) {
-        if (!didPop) _back();
+        if (didPop) return;
+        // Back steps through the stages; on the first one the app goes to
+        // the background (progress is saved, nothing to sign in to again).
+        _stage > 1 ? _back() : sendAppToBackground();
       },
       child: Scaffold(
         body: SafeArea(

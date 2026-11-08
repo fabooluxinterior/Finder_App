@@ -19,7 +19,8 @@ Future<void> main() async {
   await Fx.instance.init();
 
   if (AppConfig.isDemo) {
-    final demo = DemoBackend();
+    final demo = DemoBackend(persist: true);
+    await demo.restore(); // stay signed in across restarts
     runApp(
       ProviderScope(
         overrides: [backendProvider.overrideWithValue(demo), purchasesProvider.overrideWithValue(DemoPurchases(demo))],

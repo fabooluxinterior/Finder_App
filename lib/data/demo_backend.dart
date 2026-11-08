@@ -1,7 +1,9 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:math';
 import 'dart:typed_data';
 
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
 
 import '../core/config.dart';
@@ -20,9 +22,15 @@ import 'memory_images.dart';
 /// Mirrors the server rules (limits, RLS visibility, mutual consent) so the
 /// demo behaves like production.
 class DemoBackend implements FinderBackend {
-  DemoBackend() {
+  /// [persist]: remember the session and your own profile on this device
+  /// (shared preferences / browser storage), so closing the app or going
+  /// back never means signing in and setting up again.
+  DemoBackend({this.persist = false}) {
     _seed();
   }
+
+  final bool persist;
+  static const _stateKey = 'vouby_demo_state_v1';
 
   static const _uuid = Uuid();
   static const meId = 'me';
@@ -68,12 +76,18 @@ class DemoBackend implements FinderBackend {
     }
     _uid = meId;
     _auth.add(_uid);
+    _persist();
   }
 
   @override
   Future<void> signOut() async {
     _uid = null;
     _auth.add(null);
+    if (persist) {
+      try {
+        await (await SharedPreferences.getInstance()).remove(_stateKey);
+      } catch (_) {}
+    }
   }
 
   // ------------------------------------------------------------- profile ----
@@ -83,6 +97,124 @@ class DemoBackend implements FinderBackend {
 
   @override
   Future<PrivateProfile> myPrivateProfile() async => _myPrivate;
+
+  // ---------------------------------------------------------- persistence ----
+
+  /// Loads the saved session (demo builds only). Call before runApp.
+  Future<void> restore() async {
+    if (!persist) return;
+    try {
+      final raw = (await SharedPreferences.getInstance()).getString(_stateKey);
+      if (raw == null) return;
+      final m = jsonDecode(raw) as Map<String, dynamic>;
+      _consentVersion = m['consent'] as String?;
+      _dob = m['dob'] == null ? null : DateTime.parse(m['dob'] as String);
+      _standardsAck = (m['standards'] as bool?) ?? false;
+      premium = (m['premium'] as bool?) ?? false;
+      _verification = VerificationStatus.values.firstWhere(
+        (v) => v.name == m['verification'],
+        orElse: () => VerificationStatus.none,
+      );
+      _photos
+        ..clear()
+        ..addAll([
+          for (final p in (m['photos'] as List? ?? const []).cast<Map<String, dynamic>>())
+            PhotoSlot(mediaId: p['id'] as String, url: MemoryImages.put(base64Decode(p['bytes'] as String))),
+        ]);
+      final music = m['music'] as Map<String, dynamic>?;
+      if (music != null) {
+        _music = MusicState(
+          status: MusicStatus.active,
+          syncedAt: DateTime.tryParse(music['synced'] as String? ?? ''),
+          artists: [
+            for (final a in (music['artists'] as List).cast<Map<String, dynamic>>())
+              MusicArtist.fromJson(a).copyWith(visible: (a['visible'] as bool?) ?? true),
+          ],
+        );
+      }
+      final me = m['me'] as Map<String, dynamic>?;
+      if (me != null) {
+        _me = _rescore(
+          PublicProfile.fromProfileRow({...me, 'photo_urls': _photos.map((p) => p.url).toList()})
+              .copyWith(isPremium: premium, isVerified: _verification == VerificationStatus.approved),
+        );
+      }
+      if (m['uid'] == meId) _uid = meId;
+    } catch (_) {
+      // Corrupt or old state: start fresh.
+    }
+  }
+
+  bool _saving = false;
+  bool _dirty = false;
+
+  /// Writes the session in the background (coalesces bursts of changes).
+  void _persist() {
+    if (!persist) return;
+    _dirty = true;
+    if (_saving) return;
+    _saving = true;
+    Future<void>(() async {
+      try {
+        while (_dirty) {
+          _dirty = false;
+          final prefs = await SharedPreferences.getInstance();
+          await prefs.setString(_stateKey, jsonEncode(_snapshot()));
+        }
+      } catch (_) {
+      } finally {
+        _saving = false;
+      }
+    });
+  }
+
+  Map<String, Object?> _snapshot() {
+    final me = _me;
+    return {
+      'uid': _uid,
+      'consent': _consentVersion,
+      'dob': _dob?.toIso8601String(),
+      'standards': _standardsAck,
+      'premium': premium,
+      'verification': _verification.name,
+      'photos': [
+        for (final p in _photos)
+          if (MemoryImages.get(p.url) case final bytes?) {'id': p.mediaId, 'bytes': base64Encode(bytes)},
+      ],
+      'music': _music.connected
+          ? {
+              'synced': _music.syncedAt?.toIso8601String(),
+              'artists': [
+                for (final a in _music.artists) {...a.toJson(), 'visible': a.visible},
+              ],
+            }
+          : null,
+      'me': me == null
+          ? null
+          : {
+              'id': me.id,
+              'full_name': me.fullName,
+              'age': me.age,
+              'city': me.city,
+              'bio': me.bio,
+              'prompts': [
+                for (final p in me.prompts) {...p.toJson(), 'question': p.question},
+              ],
+              'interest_tags': me.interestTags,
+              'occupation': me.occupation,
+              'education': me.education,
+              'height_cm': me.heightCm,
+              'gender': me.gender,
+              'pronouns': me.pronouns,
+              'languages': me.languages,
+              'lifestyle_attributes': me.lifestyle,
+              'music_top_artists': [for (final a in me.topArtists) a.toJson()],
+              'music_linked': me.musicLinked,
+              'onboarding_stage': me.onboardingStage,
+              'is_onboarded': me.isOnboarded,
+            },
+    };
+  }
 
   // ------------------------------------------------------ profile builder ----
 
@@ -104,12 +236,16 @@ class DemoBackend implements FinderBackend {
     ),
   );
 
-  void _setMe(PublicProfile p) => _me = _rescore(p);
+  void _setMe(PublicProfile p) {
+    _me = _rescore(p);
+    _persist();
+  }
 
   @override
   Future<void> acknowledgeStandards(String version) async {
     await _latency();
     _standardsAck = true;
+    _persist();
   }
 
   void _validate(ProfilePatch patch) {
@@ -496,6 +632,7 @@ class DemoBackend implements FinderBackend {
 
   void setPremium(bool value) {
     premium = value;
+    _persist();
     _social.add(null);
   }
 
@@ -625,7 +762,10 @@ class DemoBackend implements FinderBackend {
   Future<String?> acceptedPolicyVersion() async => _consentVersion;
 
   @override
-  Future<void> recordConsent(String version) async => _consentVersion = version;
+  Future<void> recordConsent(String version) async {
+    _consentVersion = version;
+    _persist();
+  }
 
   @override
   Future<bool> hasDob() async => _dob != null;
@@ -640,6 +780,7 @@ class DemoBackend implements FinderBackend {
       throw const AppException(AppErrorCode.underage, 'Vouby is only for people aged 18 and over.');
     }
     _dob = dob;
+    _persist();
     return age;
   }
 
@@ -673,6 +814,7 @@ class DemoBackend implements FinderBackend {
     Timer(const Duration(seconds: 5), () {
       _verification = VerificationStatus.approved;
       _me = _me?.copyWith(isVerified: true);
+      _persist();
       _social.add(null);
     });
   }
