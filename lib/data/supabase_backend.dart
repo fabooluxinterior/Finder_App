@@ -300,14 +300,10 @@ class SupabaseBackend implements FinderBackend {
       });
 
   @override
-  Future<int> remainingSwipes() => _guard(() async => (await _db.rpc('remaining_swipes') as num).toInt());
-
-  @override
-  Future<SwipeOutcome> swipe(String targetId, {required bool follow, String? directNote}) => _guard(() async {
+  Future<SwipeOutcome> swipe(String targetId, {required bool follow}) => _guard(() async {
         final result = await _db.rpc('swipe_profile', params: {
           'p_target': targetId,
           'p_action': follow ? 'follow_requested' : 'pass',
-          'p_note': directNote,
         }) as String;
         return switch (result) {
           'matched' => SwipeOutcome.matched,
@@ -326,7 +322,7 @@ class SupabaseBackend implements FinderBackend {
         final count = (await _db.rpc('incoming_request_count') as num).toInt();
         final rows = await _db
             .from('swipes_and_requests')
-            .select('id, direct_note, created_at, $_senderJoin')
+            .select('id, created_at, $_senderJoin')
             .eq('receiver_id', _me)
             .eq('action', 'follow_requested')
             .order('created_at', ascending: false);
@@ -338,7 +334,6 @@ class SupabaseBackend implements FinderBackend {
                 FollowRequest(
                   id: r['id'] as String,
                   sender: _withMedia(PublicProfile.fromProfileRow(r['sender'] as Map<String, dynamic>)),
-                  directNote: r['direct_note'] as String?,
                   createdAt: DateTime.parse(r['created_at'] as String).toLocal(),
                 ),
           ],
@@ -747,8 +742,7 @@ class SupabaseBackend implements FinderBackend {
     if (e is PostgrestException) {
       final hint = e.hint ?? '';
       return switch (hint) {
-        'SWIPE_LIMIT' => const AppException(AppErrorCode.swipeLimit, 'You have used your 10 free follow requests today.'),
-        'PREMIUM_REQUIRED' => const AppException(AppErrorCode.premiumRequired, 'This needs the Fast-Track pass.'),
+        'SUBSCRIPTION_REQUIRED' => AppException(AppErrorCode.subscriptionRequired, e.message),
         'RATE_LIMIT' => const AppException(AppErrorCode.rateLimited, 'You’re doing that too fast. Try again in a minute.'),
         'MFA_REQUIRED' => const AppException(AppErrorCode.mfaRequired, 'Verify with your authenticator app to continue.'),
         'DEVICE_LIMIT' => const AppException(AppErrorCode.deviceLimit, 'You’re signed in on 5 devices. Remove one in Security settings.'),

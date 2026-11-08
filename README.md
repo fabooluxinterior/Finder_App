@@ -2,11 +2,14 @@
 
 A private social connection network for Kerala: Bumble-style swiping on top of Instagram-style private profiles. Built with Flutter, Supabase and RevenueCat.
 
-- **Swipe right** sends a follow request. **Swipe left** hides the profile for 7 days. **Swipe up** (or tap ⭐) attaches a 100-character Direct DM Invite (Fast-Track only).
+- **Swipe right** (or tap **Request +**) sends a follow request. **Swipe left** (or ✕) hides the profile for 7 days.
+- **Free:** browse every profile, pass, and send unlimited follow requests. There is no free trial.
+- **Fast-Track (₹79/month):** see who requested you and accept them, message your connections, and Kerala City Boost. A mutual request is an instant match for anyone, but chatting needs Fast-Track.
 - Public cards show name, age, city, bio and the primary photo. The photo grid and interests stay locked until the request is accepted. RLS enforces this, not just the UI.
-- Chat (text + 45 s voice notes) unlocks only after the receiver taps **Accept Follow**, or when both people request each other.
+- Chat (text + 45 s voice notes) opens only between connections (accepted or mutual requests), and only for Fast-Track members.
 - `FLAG_SECURE` is set on the Android window, so screenshots, screen recording and Recents previews are blocked everywhere in the app.
-- Phone numbers, @handles and URLs are stripped from bios, notes and opening messages on the client. The database rejects them in bios and notes too.
+- Phone numbers, @handles and URLs are stripped from bios and opening messages on the client. The database rejects them in bios too.
+- **Design:** Geist type, Phosphor icons, light and dark themes, a frosted profile card, iOS-style transitions, and short UI sounds with paired haptics (they follow silent mode and can be turned off under You → Sounds). It respects the system "remove animations" setting.
 - **Chats are end-to-end encrypted** (Olm / Double Ratchet via the audited `vodozemac` Rust library). Photos are validated, stripped of EXIF/GPS, moderated, and stored AES-256-GCM encrypted. Two-step verification, device and session management, block/report with consent-based evidence, and a staff dashboard with an audit trail are included. See **[SECURITY.md](SECURITY.md)** for the full architecture, its known limitations, and the tests. It has not yet been independently audited.
 
 ## Try it on your phone (no store publishing)
@@ -40,8 +43,10 @@ lib/
   features/
     auth/                      phone / email OTP
     onboarding/                profile setup (primary photo, locked grid, interests)
-    deck/                      swipe deck, card, Direct DM Invite sheet
-    requests/                  Pending Requests (blurred for free users) and Mutual Connections
+    deck/                      swipe deck and frosted profile card
+    requests/                  received requests (blurred count without Fast-Track)
+    chats/                     connections list (locked without Fast-Track)
+    match/                     "It's mutual" moment
     chat/                      real-time thread, voice recorder with waveform, playback
     paywall/                   ₹79 Fast-Track bottom sheet
     profile/                   private profile view, own profile
@@ -52,6 +57,7 @@ rust/                          finder_crypto: vodozemac + AES-256-GCM wrapper (w
 supabase/
   migrations/20261107000000_init_finder.sql   schema, RLS, RPCs, storage, realtime
   migrations/20261108000000_security.sql      E2EE keys/envelopes, encrypted media, blocks, reports, staff, audit, rate limits
+  migrations/20261109000000_subscription_model.sql   free requests; requests inbox + messaging need Fast-Track
   functions/process-image/                    upload validation, EXIF strip, moderation, encryption
   functions/media/                            authorised, decrypting image delivery
   functions/delete-account/, media-maintenance/, revenuecat-webhook/
@@ -80,6 +86,7 @@ In the dashboard: enable **Phone** (with an SMS provider such as Twilio or MSG91
 ### 2. Google Play + RevenueCat
 
 1. In Play Console, create the subscription `fast_track_79_monthly` (₹79 / month). Play Billing offers UPI, Google Pay and cards automatically for INR.
+   **Don't add a free-trial or introductory offer** to the base plan. The app always buys the plain base plan (`PurchaseParams.subscriptionOption` with `isBasePlan`), so a trial offer wouldn't be used anyway.
 2. In RevenueCat, add the Play app, create the entitlement **`fast_track`**, attach the product, and put it in the current offering.
 3. Webhook: URL `https://<ref>.supabase.co/functions/v1/revenuecat-webhook`, with Authorization header `Bearer <REVENUECAT_WEBHOOK_AUTH>`.
 
@@ -102,12 +109,13 @@ Before a Play Store release, replace the debug signing config in `android/app/bu
 
 | Rule | Where |
 |---|---|
-| 10 follow requests / rolling 24 h for free users | `tg_swipes_before_insert` trigger (`hint = SWIPE_LIMIT`) |
-| Direct note needs Fast-Track; ≤100 chars; no contact info | trigger + `swipes_note_clean` check |
+| Sending requests is free and unlimited (rate-limited against abuse) | `swipe_profile`, `tg_swipes_rate_limit` |
+| Accepting a request needs Fast-Track | `respond_to_request` (`hint = SUBSCRIPTION_REQUIRED`); direct updates revoked |
+| Sending messages needs Fast-Track | `send_message`, `claim_device_keys` (`hint = SUBSCRIPTION_REQUIRED`) |
 | Pass hides a profile for 7 days | `get_feed` filter; `swipe_profile` clears expired passes |
 | Free users can't see who requested them | `swipes_select` policy hides pending rows unless `is_premium()` |
 | Mutual swipe = instant match | `swipe_profile` accepts the reverse request |
-| Only the receiver can accept/reject, only once | update policy + `tg_swipes_before_update` |
+| Only the receiver can accept/reject, only once | `respond_to_request` + `tg_swipes_before_update` |
 | Chat only between accepted connections | `messages_*` policies via `is_connected()` |
 | Locked grid and interests | `profile_private` RLS + `avatars/<uid>/gallery/*` storage policy |
 | Users can't grant themselves premium | column-level `UPDATE` grant excludes `is_premium` |

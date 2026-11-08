@@ -4,6 +4,7 @@ insert into public.profiles (id, full_name, age, city, bio) select id, 'U'||righ
 -- A(01) <-> B(02) connected; C(03) stranger; D(04) has MFA; S(05) staff
 insert into public.swipes_and_requests (sender_id, receiver_id, action) values ('00000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-000000000002','follow_requested');
 update public.swipes_and_requests set action='accepted';
+update public.profiles set is_premium = true where id in ('00000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-000000000002');
 insert into auth.mfa_factors (user_id, status) values ('00000000-0000-0000-0000-000000000004','verified'), ('00000000-0000-0000-0000-000000000005','verified');
 insert into public.staff_roles (user_id, role) values ('00000000-0000-0000-0000-000000000005','admin');
 insert into auth.sessions (user_id) values ('00000000-0000-0000-0000-000000000002');

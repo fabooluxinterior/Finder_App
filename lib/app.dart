@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import 'core/config.dart';
 import 'core/theme.dart';
 import 'features/auth/auth_screen.dart';
 import 'features/home/home_shell.dart';
@@ -17,15 +16,9 @@ class FinderApp extends StatelessWidget {
     return MaterialApp(
       title: 'Finder',
       debugShowCheckedModeBanner: false,
-      theme: buildTheme(),
-      builder: (context, child) => AppConfig.isDemo
-          ? Banner(
-              message: 'DEMO',
-              location: BannerLocation.topEnd,
-              color: AppColors.gold,
-              child: child!,
-            )
-          : child!,
+      theme: buildTheme(Brightness.light),
+      darkTheme: buildTheme(Brightness.dark),
+      themeMode: ThemeMode.system,
       home: const _AuthGate(),
     );
   }
@@ -69,7 +62,5 @@ class _Splash extends StatelessWidget {
   const _Splash();
 
   @override
-  Widget build(BuildContext context) => const Scaffold(
-        body: Center(child: CircularProgressIndicator()),
-      );
+  Widget build(BuildContext context) => const Scaffold(body: SizedBox.shrink());
 }

@@ -2,193 +2,233 @@ import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../core/phosphor.dart';
 
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../models/profile.dart';
 import '../../providers.dart';
+import '../deck/profile_card.dart';
 import '../safety/safety_actions.dart';
 
-/// Instagram-private-style profile: public header always visible; photo grid
-/// and interests come from `profile_private`, which RLS returns only to
-/// accepted connections.
+/// Instagram-private-style profile. The photo grid and interests come from
+/// `profile_private`, which the server returns only to accepted connections.
 class ProfileDetailScreen extends ConsumerWidget {
-  const ProfileDetailScreen({super.key, required this.profile});
+  const ProfileDetailScreen({super.key, required this.profile, this.onPass, this.onRequest});
   final PublicProfile profile;
+
+  /// Provided when opened from the Discover deck.
+  final VoidCallback? onPass;
+  final VoidCallback? onRequest;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final c = context.fc;
+    final t = Theme.of(context).textTheme;
     final priv = ref.watch(privateProfileProvider(profile.id));
-    final connected = ref.watch(connectionsProvider).value?.any((c) => c.profile.id == profile.id) ?? false;
+    final isMe = profile.id == ref.watch(backendProvider).currentUserId;
+    final connected = ref.watch(connectionsProvider).value?.any((x) => x.profile.id == profile.id) ?? false;
+    final height = MediaQuery.sizeOf(context).height;
+    final fromDeck = onPass != null && onRequest != null;
+
+    void act(VoidCallback? f) {
+      Navigator.pop(context);
+      // Let the pop start before the card leaves the deck.
+      Future.delayed(const Duration(milliseconds: 120), f);
+    }
 
     return Scaffold(
-      body: CustomScrollView(
-        slivers: [
-          SliverAppBar(
-            expandedHeight: 420,
-            pinned: true,
-            foregroundColor: Colors.white,
-            backgroundColor: AppColors.ink,
-            actions: [
-              if (profile.id != ref.watch(backendProvider).currentUserId)
-                PopupMenuButton<String>(
-                  onSelected: (v) async {
-                    final done = v == 'report'
-                        ? await showReportSheet(context, profile)
-                        : await confirmBlock(context, ref, profile);
-                    if (done && context.mounted) Navigator.pop(context);
-                  },
-                  itemBuilder: (_) => const [
-                    PopupMenuItem(value: 'report', child: Text('Report')),
-                    PopupMenuItem(value: 'block', child: Text('Block')),
-                  ],
-                ),
-            ],
-            flexibleSpace: FlexibleSpaceBar(
-              background: Stack(fit: StackFit.expand, children: [
-                ProfilePhoto(url: profile.primaryPhoto, name: profile.fullName),
-                const DecoratedBox(
+      body: Stack(children: [
+        CustomScrollView(slivers: [
+          SliverToBoxAdapter(
+            child: SizedBox(
+              height: height * 0.62,
+              child: Stack(fit: StackFit.expand, children: [
+                Hero(tag: ProfileCard.heroTag(profile.id), child: ProfilePhoto(url: profile.primaryPhoto, name: profile.fullName)),
+                DecoratedBox(
                   decoration: BoxDecoration(
                     gradient: LinearGradient(
                       begin: Alignment.topCenter,
                       end: Alignment.bottomCenter,
-                      stops: [0.6, 1],
-                      colors: [Colors.transparent, Color(0xCC000000)],
+                      stops: const [0, 0.18, 0.55, 1],
+                      colors: [Colors.black.withValues(alpha: 0.25), Colors.transparent, Colors.transparent, c.paper],
                     ),
                   ),
-                ),
-                Positioned(
-                  left: 20,
-                  bottom: 18,
-                  right: 20,
-                  child: Row(children: [
-                    Flexible(
-                      child: Text('${profile.fullName}, ${profile.age}',
-                          style: const TextStyle(color: Colors.white, fontSize: 26, fontWeight: FontWeight.w900)),
-                    ),
-                    if (profile.isPremium) ...[const SizedBox(width: 8), const FastTrackBadge()],
-                  ]),
                 ),
               ]),
             ),
           ),
-          SliverPadding(
-            padding: const EdgeInsets.all(20),
-            sliver: SliverList.list(children: [
-              Row(children: [
-                const Icon(Icons.location_on_outlined, size: 18),
-                const SizedBox(width: 4),
-                Text(profile.city, style: const TextStyle(fontWeight: FontWeight.w700)),
-                const Spacer(),
-                if (connected)
-                  Chip(
-                    avatar: const Icon(Icons.how_to_reg_rounded, size: 16),
-                    label: const Text('Connected'),
-                    visualDensity: VisualDensity.compact,
-                    backgroundColor: Colors.green.shade50,
+          SliverToBoxAdapter(
+            child: Transform.translate(
+              offset: const Offset(0, -56),
+              child: Padding(
+                padding: EdgeInsets.fromLTRB(22, 0, 22, fromDeck ? 110 : 40),
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Row(children: [
+                    Flexible(
+                      child: Text.rich(
+                        TextSpan(children: [
+                          TextSpan(text: profile.firstName),
+                          TextSpan(text: ', ${profile.age}', style: TextStyle(fontWeight: FontWeight.w400, color: c.ink2)),
+                        ]),
+                        style: t.displaySmall,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    const VerifiedBadge(size: 24),
+                  ]),
+                  const SizedBox(height: 12),
+                  Wrap(spacing: 8, runSpacing: 8, children: [
+                    InfoChip(icon: PhosphorIconsFill.mapPin, label: profile.city),
+                    if (profile.isPremium) InfoChip(icon: PhosphorIconsFill.lightning, label: 'Fast-Track', color: c.gold, background: c.goldSoft),
+                    if (connected) InfoChip(icon: PhosphorIconsFill.userCheck, label: 'Connected', color: c.ok),
+                  ]),
+                  if (profile.bio.isNotEmpty) ...[
+                    const SizedBox(height: 16),
+                    Text(profile.bio, style: t.bodyLarge),
+                  ],
+                  const SectionLabel('Photos · Interests', padding: EdgeInsets.fromLTRB(0, 26, 0, 10)),
+                  priv.when(
+                    loading: () => const SizedBox(height: 120),
+                    error: (e, _) => Text('$e'),
+                    data: (p) => isMe || connected || p.gallery.isNotEmpty || p.interests.isNotEmpty
+                        ? _Unlocked(data: p)
+                        : const _Locked(),
                   ),
-              ]),
-              if (profile.bio.isNotEmpty) ...[
-                const SizedBox(height: 12),
-                Text(profile.bio, style: const TextStyle(fontSize: 16, height: 1.4)),
-              ],
-              const SizedBox(height: 24),
-              priv.when(
-                loading: () => const Center(child: CircularProgressIndicator()),
-                error: (e, _) => Text('$e'),
-                data: (p) => connected || p.gallery.isNotEmpty || p.interests.isNotEmpty
-                    ? _Unlocked(data: p)
-                    : const _Locked(),
+                ]),
               ),
+            ),
+          ),
+        ]),
+        // Floating top controls over the photo.
+        Positioned(
+          top: MediaQuery.paddingOf(context).top + 8,
+          left: 16,
+          right: 16,
+          child: Row(children: [
+            RoundButton(icon: PhosphorIconsBold.caretDown, glass: true, size: 40, iconSize: 18, onTap: () => Navigator.pop(context), semanticLabel: 'Close'),
+            const Spacer(),
+            if (!isMe)
+              PopupMenuButton<String>(
+                color: c.surface,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+                onSelected: (v) async {
+                  final done = v == 'report' ? await showReportSheet(context, profile) : await confirmBlock(context, ref, profile);
+                  if (done && context.mounted) Navigator.pop(context);
+                },
+                itemBuilder: (_) => const [
+                  PopupMenuItem(value: 'report', child: Text('Report')),
+                  PopupMenuItem(value: 'block', child: Text('Block')),
+                ],
+                child: const IgnorePointer(child: RoundButton(icon: PhosphorIconsBold.dotsThree, glass: true, size: 40, iconSize: 20, onTap: _noop)),
+              ),
+          ]),
+        ),
+        if (fromDeck && !connected)
+          Positioned(
+            left: 20,
+            right: 20,
+            bottom: MediaQuery.paddingOf(context).bottom + 16,
+            child: Row(children: [
+              RoundButton(icon: PhosphorIconsBold.x, size: 54, onTap: () => act(onPass), semanticLabel: 'Pass'),
+              const SizedBox(width: 10),
+              Expanded(child: PillButton(label: 'Request to follow', icon: PhosphorIconsFill.userPlus, onTap: () => act(onRequest))),
             ]),
           ),
-        ],
-      ),
+      ]),
     );
   }
 }
+
+void _noop() {}
 
 class _Unlocked extends StatelessWidget {
   const _Unlocked({required this.data});
   final PrivateProfile data;
 
   @override
-  Widget build(BuildContext context) => Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          if (data.interests.isNotEmpty) ...[
-            const Text('Interests', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800)),
-            const SizedBox(height: 10),
-            Wrap(spacing: 8, runSpacing: 8, children: [
-              for (final i in data.interests) Chip(label: Text(i), backgroundColor: const Color(0xFFFFEEF1)),
-            ]),
-            const SizedBox(height: 24),
-          ],
-          const Text('Photos', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800)),
-          const SizedBox(height: 10),
-          if (data.gallery.isEmpty)
-            Text('No extra photos yet.', style: TextStyle(color: Colors.grey.shade600))
-          else
-            GridView.count(
-              crossAxisCount: 3,
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              mainAxisSpacing: 4,
-              crossAxisSpacing: 4,
-              children: [
-                for (final u in data.gallery)
-                  GestureDetector(
-                    onTap: () => showDialog<void>(
-                      context: context,
-                      builder: (_) => Dialog(
-                        clipBehavior: Clip.antiAlias,
-                        child: AspectRatio(aspectRatio: 1, child: ProfilePhoto(url: u, name: '')),
-                      ),
-                    ),
-                    child: ProfilePhoto(url: u, name: ''),
-                  ),
-              ],
+  Widget build(BuildContext context) {
+    final c = context.fc;
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      if (data.interests.isNotEmpty) ...[
+        Wrap(spacing: 8, runSpacing: 8, children: [
+          for (final i in data.interests)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+              decoration: BoxDecoration(color: c.surface, borderRadius: BorderRadius.circular(99), border: Border.all(color: c.hair)),
+              child: Text(i, style: Theme.of(context).textTheme.labelMedium),
             ),
-        ],
-      );
+        ]),
+        const SizedBox(height: 16),
+      ],
+      if (data.gallery.isEmpty)
+        Text('No extra photos yet.', style: TextStyle(color: c.muted))
+      else
+        GridView.count(
+          crossAxisCount: 3,
+          shrinkWrap: true,
+          padding: EdgeInsets.zero,
+          physics: const NeverScrollableScrollPhysics(),
+          mainAxisSpacing: 6,
+          crossAxisSpacing: 6,
+          children: [
+            for (final u in data.gallery)
+              Pressable(
+                scale: 0.97,
+                onTap: () => showDialog<void>(
+                  context: context,
+                  builder: (_) => Dialog(
+                    clipBehavior: Clip.antiAlias,
+                    child: AspectRatio(aspectRatio: 1, child: ProfilePhoto(url: u, name: '')),
+                  ),
+                ),
+                child: ClipRRect(borderRadius: BorderRadius.circular(14), child: ProfilePhoto(url: u, name: '')),
+              ),
+          ],
+        ),
+    ]);
+  }
 }
 
 class _Locked extends StatelessWidget {
   const _Locked();
 
   @override
-  Widget build(BuildContext context) => Stack(
-        alignment: Alignment.center,
-        children: [
-          ImageFiltered(
-            imageFilter: ImageFilter.blur(sigmaX: 6, sigmaY: 6),
-            child: GridView.count(
-              crossAxisCount: 3,
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              mainAxisSpacing: 4,
-              crossAxisSpacing: 4,
-              children: [
-                for (var i = 0; i < 6; i++)
-                  Container(color: i.isEven ? Colors.grey.shade300 : Colors.grey.shade200),
-              ],
-            ),
-          ),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(18),
-              boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 16)],
-            ),
-            child: const Column(mainAxisSize: MainAxisSize.min, children: [
-              Icon(Icons.lock_rounded, size: 30),
-              SizedBox(height: 6),
-              Text('This account is private', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
-              SizedBox(height: 2),
-              Text('Photos and interests unlock once they accept your follow.', textAlign: TextAlign.center),
-            ]),
-          ),
-        ],
-      );
+  Widget build(BuildContext context) {
+    final c = context.fc;
+    return Stack(alignment: Alignment.center, children: [
+      ImageFiltered(
+        imageFilter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+        child: GridView.count(
+          crossAxisCount: 3,
+          shrinkWrap: true,
+          padding: EdgeInsets.zero,
+          physics: const NeverScrollableScrollPhysics(),
+          mainAxisSpacing: 6,
+          crossAxisSpacing: 6,
+          children: [
+            for (var i = 0; i < 3; i++)
+              ClipRRect(
+                borderRadius: BorderRadius.circular(14),
+                child: Image.asset('assets/demo/g_${(i * 4 + 1) % 12}.jpg', fit: BoxFit.cover),
+              ),
+          ],
+        ),
+      ),
+      Container(
+        height: 38,
+        padding: const EdgeInsets.symmetric(horizontal: 14),
+        decoration: BoxDecoration(
+          color: c.surface,
+          borderRadius: BorderRadius.circular(99),
+          boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.10), blurRadius: 16)],
+        ),
+        child: Row(mainAxisSize: MainAxisSize.min, children: [
+          Icon(PhosphorIconsFill.lockSimple, size: 15, color: c.ink),
+          const SizedBox(width: 6),
+          Text('Private until you connect', style: Theme.of(context).textTheme.labelMedium?.copyWith(color: c.ink)),
+        ]),
+      ),
+    ]);
+  }
 }

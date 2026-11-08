@@ -1,150 +1,165 @@
 import 'package:flutter/material.dart';
+import '../../core/phosphor.dart';
 
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../models/profile.dart';
 
+/// Discover card: white rim, full-bleed photo, frosted fade carrying the
+/// text, and the two actions inside the card.
 class ProfileCard extends StatelessWidget {
   const ProfileCard({
     super.key,
     required this.profile,
     required this.dragX,
-    required this.dragY,
     required this.onTap,
+    required this.onPass,
+    required this.onRequest,
+    this.interactive = true,
   });
 
   final PublicProfile profile;
 
-  /// Drag offsets in percent (-100..100) supplied by the swiper.
+  /// Horizontal drag in percent (-100..100), from the swiper.
   final int dragX;
-  final int dragY;
   final VoidCallback onTap;
+  final VoidCallback onPass;
+  final VoidCallback onRequest;
+
+  /// False for the card underneath (cheaper: no blur, no buttons).
+  final bool interactive;
+
+  static String heroTag(String id) => 'photo-$id';
 
   @override
   Widget build(BuildContext context) {
-    final follow = (dragX / 60).clamp(0.0, 1.0);
-    final pass = (-dragX / 60).clamp(0.0, 1.0);
-    final note = (dragY.abs() > dragX.abs() && dragY < 0) ? (-dragY / 60).clamp(0.0, 1.0) : 0.0;
+    final c = context.fc;
+    final t = Theme.of(context).textTheme;
+    // Intent reveals itself as you drag: 0 at rest, 1 at ~45% of the threshold travel.
+    final progress = (dragX.abs() / 45).clamp(0.0, 1.0);
+    final requesting = dragX > 0;
 
     return GestureDetector(
       onTap: onTap,
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(26),
-        child: Stack(
-          fit: StackFit.expand,
-          children: [
-            ProfilePhoto(url: profile.primaryPhoto, name: profile.fullName),
-            const DecoratedBox(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  stops: [0.45, 1],
-                  colors: [Colors.transparent, Color(0xE6000000)],
+      child: Container(
+        padding: const EdgeInsets.all(6),
+        decoration: BoxDecoration(
+          color: c.surface,
+          borderRadius: BorderRadius.circular(34),
+          border: Border.all(color: c.hair),
+          boxShadow: [
+            BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 2, offset: const Offset(0, 1)),
+            BoxShadow(color: Colors.black.withValues(alpha: 0.10), blurRadius: 40, offset: const Offset(0, 18)),
+          ],
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(28),
+          child: Stack(fit: StackFit.expand, children: [
+            FrostedPhoto(
+              url: profile.primaryPhoto,
+              name: profile.fullName,
+              color: c.surface,
+              heroTag: heroTag(profile.id),
+              blur: interactive,
+            ),
+            if (interactive) ...[
+              // Swipe intent: a transparent glass ring with a white icon, no text.
+              Align(
+                alignment: const Alignment(0, -0.25),
+                child: IgnorePointer(
+                  child: Opacity(
+                    opacity: progress,
+                    child: Transform.scale(
+                      scale: 0.85 + 0.15 * progress,
+                      child: _SwipeIcon(icon: requesting ? PhosphorIconsFill.userPlus : PhosphorIconsBold.x),
+                    ),
+                  ),
                 ),
               ),
-            ),
-            Positioned(
-              left: 20,
-              right: 20,
-              bottom: 22,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Flexible(
-                        child: Text(
-                          '${profile.firstName}, ${profile.age}',
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 30,
-                            fontWeight: FontWeight.w900,
-                            letterSpacing: -0.5,
-                          ),
-                        ),
-                      ),
-                      if (profile.isPremium) ...[const SizedBox(width: 8), const FastTrackBadge()],
-                    ],
-                  ),
-                  const SizedBox(height: 4),
+              Positioned(
+                left: 20,
+                right: 16,
+                bottom: 18,
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
                   Row(children: [
-                    const Icon(Icons.location_on_rounded, color: Colors.white70, size: 16),
-                    const SizedBox(width: 4),
-                    Text(profile.city, style: const TextStyle(color: Colors.white70, fontWeight: FontWeight.w600)),
+                    Flexible(
+                      child: Text.rich(
+                        TextSpan(children: [
+                          TextSpan(text: profile.firstName),
+                          TextSpan(text: '  ${profile.age}', style: TextStyle(fontWeight: FontWeight.w400, color: c.ink2)),
+                        ]),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: t.headlineMedium?.copyWith(fontSize: 28),
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    const VerifiedBadge(size: 20),
+                    if (profile.isPremium) ...[const SizedBox(width: 6), const FastTrackBadge()],
+                  ]),
+                  const SizedBox(height: 8),
+                  Row(children: [
+                    _Stat(icon: PhosphorIconsFill.mapPin, label: profile.city),
+                    const SizedBox(width: 14),
+                    const _Stat(icon: PhosphorIconsFill.lockSimple, label: 'Private'),
                   ]),
                   if (profile.bio.isNotEmpty) ...[
-                    const SizedBox(height: 10),
-                    Text(
-                      profile.bio,
-                      maxLines: 3,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(color: Colors.white, fontSize: 15, height: 1.3),
-                    ),
+                    const SizedBox(height: 8),
+                    Text(profile.bio, maxLines: 2, overflow: TextOverflow.ellipsis, style: t.bodyMedium),
                   ],
-                  const SizedBox(height: 12),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.16),
-                      borderRadius: BorderRadius.circular(20),
+                  const SizedBox(height: 14),
+                  Row(children: [
+                    RoundButton(icon: PhosphorIconsBold.x, onTap: onPass, semanticLabel: 'Pass'),
+                    const Spacer(),
+                    PillButton(
+                      label: 'Request',
+                      trailingIcon: PhosphorIconsBold.plus,
+                      dark: false,
+                      expand: false,
+                      height: 46,
+                      onTap: onRequest,
                     ),
-                    child: const Row(mainAxisSize: MainAxisSize.min, children: [
-                      Icon(Icons.lock_outline, size: 14, color: Colors.white),
-                      SizedBox(width: 6),
-                      Text('Photos & interests unlock after follow',
-                          style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600)),
-                    ]),
-                  ),
-                ],
+                  ]),
+                ]),
               ),
-            ),
-            if (follow > 0) _Stamp(label: 'FOLLOW', color: AppColors.brand, opacity: follow, alignment: Alignment.topLeft, angle: -0.25),
-            if (pass > 0) _Stamp(label: 'PASS', color: AppColors.pass, opacity: pass, alignment: Alignment.topRight, angle: 0.25),
-            if (note > 0) _Stamp(label: '⭐ NOTE', color: AppColors.gold, opacity: note, alignment: Alignment.center, angle: 0),
-          ],
+            ],
+          ]),
         ),
       ),
     );
   }
 }
 
-class _Stamp extends StatelessWidget {
-  const _Stamp({
-    required this.label,
-    required this.color,
-    required this.opacity,
-    required this.alignment,
-    required this.angle,
-  });
-
+class _Stat extends StatelessWidget {
+  const _Stat({required this.icon, required this.label});
+  final IconData icon;
   final String label;
-  final Color color;
-  final double opacity;
-  final Alignment alignment;
-  final double angle;
 
   @override
-  Widget build(BuildContext context) => Align(
-        alignment: alignment,
-        child: Padding(
-          padding: const EdgeInsets.all(28),
-          child: Opacity(
-            opacity: opacity,
-            child: Transform.rotate(
-              angle: angle,
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-                decoration: BoxDecoration(
-                  border: Border.all(color: color, width: 4),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Text(label,
-                    style: TextStyle(color: color, fontSize: 32, fontWeight: FontWeight.w900, letterSpacing: 2)),
-              ),
-            ),
-          ),
+  Widget build(BuildContext context) {
+    final c = context.fc;
+    return Row(mainAxisSize: MainAxisSize.min, children: [
+      Icon(icon, size: 14, color: c.muted),
+      const SizedBox(width: 5),
+      Text(label, style: Theme.of(context).textTheme.labelMedium?.copyWith(color: c.ink)),
+    ]);
+  }
+}
+
+class _SwipeIcon extends StatelessWidget {
+  const _SwipeIcon({required this.icon});
+  final IconData icon;
+
+  @override
+  Widget build(BuildContext context) => Container(
+        width: 84,
+        height: 84,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: Colors.white.withValues(alpha: 0.10),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.78), width: 1.5),
+          boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.18), blurRadius: 16)],
         ),
+        child: Icon(icon, size: 36, color: Colors.white, shadows: const [Shadow(color: Color(0x40000000), blurRadius: 8)]),
       );
 }

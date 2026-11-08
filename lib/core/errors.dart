@@ -9,8 +9,7 @@ class AppException implements Exception {
 }
 
 enum AppErrorCode {
-  swipeLimit,
-  premiumRequired,
+  subscriptionRequired,
   notConnected,
   contactInfo,
   rateLimited,

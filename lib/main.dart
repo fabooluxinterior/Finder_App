@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'app.dart';
+import 'core/feedback.dart';
 import 'core/config.dart';
 import 'data/demo_backend.dart';
 import 'data/purchases_service.dart';
@@ -15,6 +16,7 @@ import 'src/rust/frb_generated.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await Fx.instance.init();
 
   if (AppConfig.isDemo) {
     final demo = DemoBackend();

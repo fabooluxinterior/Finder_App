@@ -65,7 +65,6 @@ class PremiumNotifier extends AsyncNotifier<bool> {
 
   void _unlock() {
     state = const AsyncData(true);
-    ref.invalidate(remainingSwipesProvider);
     ref.invalidate(incomingRequestsProvider);
   }
 }
@@ -77,11 +76,6 @@ bool isPremium(WidgetRef ref) => ref.watch(premiumProvider).value ?? false;
 final feedProvider = FutureProvider<List<PublicProfile>>((ref) async {
   ref.watch(authUserProvider);
   return ref.watch(backendProvider).fetchFeed();
-});
-
-final remainingSwipesProvider = FutureProvider<int>((ref) async {
-  ref.watch(premiumProvider);
-  return ref.watch(backendProvider).remainingSwipes();
 });
 
 final incomingRequestsProvider = FutureProvider<IncomingRequests>((ref) async {

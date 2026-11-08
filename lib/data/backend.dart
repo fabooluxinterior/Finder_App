@@ -49,9 +49,8 @@ abstract class FinderBackend {
 
   Future<List<PublicProfile>> fetchFeed();
 
-  /// Remaining free follow requests in the rolling 24h window; -1 = unlimited.
-  Future<int> remainingSwipes();
-  Future<SwipeOutcome> swipe(String targetId, {required bool follow, String? directNote});
+  /// Requests are free for everyone; a mutual request is an instant match.
+  Future<SwipeOutcome> swipe(String targetId, {required bool follow});
 
   Future<IncomingRequests> incomingRequests();
   Future<void> respondToRequest(String requestId, {required bool accept});

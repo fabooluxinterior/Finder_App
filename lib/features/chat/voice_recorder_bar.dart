@@ -3,6 +3,8 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../../core/config.dart';
+import '../../core/phosphor.dart';
+
 import '../../core/theme.dart';
 import '../../data/media_service.dart';
 
@@ -55,13 +57,13 @@ class _VoiceRecorderBarState extends State<VoiceRecorderBar> {
         IconButton(
           tooltip: 'Discard',
           onPressed: widget.onCancel,
-          icon: const Icon(Icons.delete_outline_rounded, color: Colors.redAccent),
+          icon: const Icon(PhosphorIconsRegular.trash, color: Color(0xFFE5484D)),
         ),
         Expanded(
           child: Container(
             height: 48,
             padding: const EdgeInsets.symmetric(horizontal: 14),
-            decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(24)),
+            decoration: BoxDecoration(color: context.fc.surface, borderRadius: BorderRadius.circular(24), border: Border.all(color: context.fc.hair)),
             child: Row(children: [
               const _PulsingDot(),
               const SizedBox(width: 8),
@@ -78,7 +80,7 @@ class _VoiceRecorderBarState extends State<VoiceRecorderBar> {
                         width: 2.5,
                         height: 4 + 26 * l,
                         decoration: BoxDecoration(
-                          color: AppColors.brand,
+                          color: context.fc.accent,
                           borderRadius: BorderRadius.circular(2),
                         ),
                       ),
@@ -96,7 +98,7 @@ class _VoiceRecorderBarState extends State<VoiceRecorderBar> {
           child: FilledButton(
             style: FilledButton.styleFrom(padding: EdgeInsets.zero, minimumSize: const Size(48, 48), shape: const CircleBorder()),
             onPressed: widget.onSend,
-            child: const Icon(Icons.send_rounded),
+            child: const Icon(PhosphorIconsFill.paperPlaneTilt, size: 20),
           ),
         ),
       ]),

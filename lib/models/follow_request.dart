@@ -6,13 +6,11 @@ class FollowRequest {
   const FollowRequest({
     required this.id,
     required this.sender,
-    required this.directNote,
     required this.createdAt,
   });
 
   final String id;
   final PublicProfile sender;
-  final String? directNote;
   final DateTime createdAt;
 }
 
@@ -36,6 +34,6 @@ class IncomingRequests {
 
   final int count;
 
-  /// Empty for free users (server-side RLS hides pending senders).
+  /// Empty without Fast-Track (server-side RLS hides pending senders).
   final List<FollowRequest> requests;
 }

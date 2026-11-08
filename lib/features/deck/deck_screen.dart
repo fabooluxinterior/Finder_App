@@ -1,17 +1,20 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_card_swiper/flutter_card_swiper.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../core/phosphor.dart';
 
 import '../../core/errors.dart';
+import '../../core/feedback.dart';
+import '../../core/media_auth.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../models/follow_request.dart';
 import '../../models/profile.dart';
 import '../../providers.dart';
-import '../chat/chat_screen.dart';
+import '../auth/auth_screen.dart' show Wordmark;
+import '../match/match_screen.dart';
 import '../paywall/paywall_sheet.dart';
 import '../profile/profile_detail_screen.dart';
-import 'direct_note_sheet.dart';
 import 'profile_card.dart';
 
 class DeckScreen extends ConsumerStatefulWidget {
@@ -26,7 +29,6 @@ class _DeckScreenState extends ConsumerState<DeckScreen> {
   List<PublicProfile>? _cards;
   int _top = 0;
   bool _exhausted = false;
-  String? _pendingNote;
 
   @override
   void dispose() {
@@ -34,13 +36,8 @@ class _DeckScreenState extends ConsumerState<DeckScreen> {
     super.dispose();
   }
 
-  bool get _premium => ref.read(premiumProvider).value ?? false;
-  int get _remaining => ref.read(remainingSwipesProvider).value ?? 1;
-  bool get _outOfSwipes => !_premium && _remaining == 0;
-
   Future<void> _reload() async {
     ref.invalidate(feedProvider);
-    ref.invalidate(remainingSwipesProvider);
     final fresh = await ref.read(feedProvider.future);
     if (!mounted) return;
     setState(() {
@@ -48,283 +45,171 @@ class _DeckScreenState extends ConsumerState<DeckScreen> {
       _top = 0;
       _exhausted = fresh.isEmpty;
     });
+    _prefetch(0);
+  }
+
+  /// Decode the next few photos ahead of time so cards never appear blank.
+  void _prefetch(int from) {
+    final cards = _cards;
+    if (cards == null) return;
+    for (final p in cards.skip(from).take(3)) {
+      final u = p.primaryPhoto;
+      if (u == null || u.isEmpty) continue;
+      final ImageProvider provider = u.startsWith('asset:')
+          ? AssetImage(u.substring(6))
+          : NetworkImage(u, headers: MediaAuth.isMediaUrl(u) ? MediaAuth.headers?.call() : null);
+      precacheImage(provider, context).catchError((_) {});
+    }
   }
 
   bool _onSwipe(int previous, int? current, CardSwiperDirection direction) {
     final profile = _cards![previous];
-
-    if (direction == CardSwiperDirection.top) {
-      // Swipe up = Direct DM Invite. Keep the card and open the note flow.
-      WidgetsBinding.instance.addPostFrameCallback((_) => _startDirectNote());
-      return false;
-    }
-
-    if (direction == CardSwiperDirection.right && _outOfSwipes) {
-      _pendingNote = null;
-      WidgetsBinding.instance.addPostFrameCallback((_) => showPaywall(context,
-          reason: 'You’ve sent your 10 free follow requests for today. Go unlimited with Fast-Track.'));
-      return false;
-    }
-
     final follow = direction == CardSwiperDirection.right;
-    final note = follow ? _pendingNote : null;
-    _pendingNote = null;
+    // Sound + haptic on the commit frame, together with the card leaving.
+    follow ? Fx.instance.request() : Fx.instance.pass();
     _top = current ?? _cards!.length;
     if (current == null) setState(() => _exhausted = true);
-    _commitSwipe(profile, follow: follow, note: note);
+    _prefetch(_top + 1);
+    _commit(profile, follow: follow);
     return true;
   }
 
-  Future<void> _commitSwipe(PublicProfile p, {required bool follow, String? note}) async {
+  Future<void> _commit(PublicProfile p, {required bool follow}) async {
     try {
-      final outcome = await ref.read(backendProvider).swipe(p.id, follow: follow, directNote: note);
-      ref.invalidate(remainingSwipesProvider);
+      final outcome = await ref.read(backendProvider).swipe(p.id, follow: follow);
+      if (!mounted || outcome != SwipeOutcome.matched) return;
+      ref.invalidate(connectionsProvider);
+      ref.invalidate(incomingRequestsProvider);
+      final me = await ref.read(myProfileProvider.future);
       if (!mounted) return;
-      switch (outcome) {
-        case SwipeOutcome.matched:
-          ref.invalidate(connectionsProvider);
-          ref.invalidate(incomingRequestsProvider);
-          _showMatch(p);
-        case SwipeOutcome.requested:
-          showSnack(context, note != null ? 'Request + note sent to ${p.firstName} ⭐' : 'Follow request sent to ${p.firstName}',
-              icon: Icons.person_add_alt_1);
-        case SwipeOutcome.passed:
-          break;
-      }
+      await showMatch(context, me: me, them: p);
     } on AppException catch (e) {
-      if (!mounted) return;
-      if (e.code == AppErrorCode.swipeLimit || e.code == AppErrorCode.premiumRequired) {
-        showPaywall(context, reason: e.message);
-      } else {
-        showSnack(context, e.message, icon: Icons.error_outline);
-      }
+      if (mounted) showSnack(context, e.message, icon: PhosphorIconsFill.warningCircle);
     }
   }
 
-  Future<void> _startDirectNote() async {
-    if (_cards == null || _exhausted) return;
-    if (!_premium) {
-      final ok = await showPaywall(context,
-          reason: 'Direct DM Invite lets you attach a note to your follow request. It’s a Fast-Track perk.');
-      if (!ok || !mounted) return;
-    }
-    final profile = _cards![_top];
-    final note = await showDirectNoteSheet(context, profile);
-    if (note == null || !mounted) return;
-    _pendingNote = note;
-    _controller.swipe(CardSwiperDirection.right);
-  }
-
-  void _showMatch(PublicProfile p) {
-    showDialog<void>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        icon: const Icon(Icons.favorite_rounded, color: AppColors.brand, size: 40),
-        title: const Text('It’s mutual!'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Avatar(url: p.primaryPhoto, name: p.fullName, size: 88),
-            const SizedBox(height: 12),
-            Text('You and ${p.firstName} follow each other. Chat and the private photo grid are now unlocked.',
-                textAlign: TextAlign.center),
-          ],
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Keep swiping')),
-          FilledButton(
-            style: FilledButton.styleFrom(minimumSize: const Size(0, 44)),
-            onPressed: () {
-              Navigator.pop(ctx);
-              Navigator.push(context, MaterialPageRoute(builder: (_) => ChatScreen(peer: p)));
-            },
-            child: const Text('Say hi'),
-          ),
-        ],
+  void _openProfile(PublicProfile p) {
+    Navigator.of(context).push(PageRouteBuilder<void>(
+      transitionDuration: Motion.of(context, Motion.sheet),
+      reverseTransitionDuration: Motion.of(context, Motion.medium),
+      pageBuilder: (_, _, _) => ProfileDetailScreen(
+        profile: p,
+        onPass: () => _controller.swipe(CardSwiperDirection.left),
+        onRequest: () => _controller.swipe(CardSwiperDirection.right),
       ),
-    );
+      transitionsBuilder: (_, a, _, child) => FadeTransition(opacity: CurvedAnimation(parent: a, curve: Motion.easeOut), child: child),
+    ));
   }
 
   @override
   Widget build(BuildContext context) {
+    final c = context.fc;
     final feed = ref.watch(feedProvider);
     final premium = isPremium(ref);
-    final remaining = ref.watch(remainingSwipesProvider).value;
+    final bottomBar = 84 + MediaQuery.paddingOf(context).bottom;
 
     if (_cards == null && feed.hasValue) {
       _cards = feed.value;
       _exhausted = _cards!.isEmpty;
+      WidgetsBinding.instance.addPostFrameCallback((_) => _prefetch(0));
     }
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Discover'),
-        actions: [
+      body: SafeArea(
+        bottom: false,
+        child: Column(children: [
           Padding(
-            padding: const EdgeInsets.only(right: 16),
-            child: premium
-                ? const FastTrackBadge()
-                : ActionChip(
-                    avatar: const Icon(Icons.local_fire_department_rounded, size: 18, color: AppColors.brand),
-                    label: Text(remaining == null ? '…' : '$remaining left today'),
-                    onPressed: () => showPaywall(context),
-                  ),
+            padding: const EdgeInsets.fromLTRB(20, 8, 16, 10),
+            child: Row(children: [
+              const Wordmark(),
+              const Spacer(),
+              if (premium)
+                const FastTrackBadge()
+              else
+                Pressable(
+                  onTap: () => showPaywall(context),
+                  child: InfoChip(icon: PhosphorIconsFill.lightning, label: 'Fast-Track', color: c.gold, background: c.goldSoft),
+                ),
+            ]),
           ),
-        ],
-      ),
-      body: _cards == null
-          ? feed.hasError
-              ? Center(child: TextButton(onPressed: _reload, child: Text('${feed.error}\nTap to retry')))
-              : const Center(child: CircularProgressIndicator())
-          : _exhausted
-              ? _EmptyDeck(onRefresh: _reload)
-              : Column(
-                  children: [
-                    Expanded(
-                      child: CardSwiper(
+          Expanded(
+            child: _cards == null
+                ? (feed.hasError
+                    ? _Empty(
+                        icon: PhosphorIconsRegular.wifiSlash,
+                        title: 'Couldn’t load profiles',
+                        body: 'Check your connection and try again.',
+                        action: 'Try again',
+                        onAction: _reload,
+                      )
+                    : const SizedBox.shrink())
+                : _exhausted
+                    ? _Empty(
+                        icon: PhosphorIconsRegular.sparkle,
+                        title: 'You’re all caught up',
+                        body: 'New people join every day. Profiles you passed come back after 7 days.',
+                        action: 'Refresh',
+                        onAction: _reload,
+                      )
+                    : CardSwiper(
                         key: ValueKey(_cards),
                         controller: _controller,
                         cardsCount: _cards!.length,
                         numberOfCardsDisplayed: _cards!.length >= 2 ? 2 : 1,
                         isLoop: false,
                         initialIndex: _top.clamp(0, _cards!.length - 1),
-                        backCardOffset: const Offset(0, 28),
-                        padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
-                        allowedSwipeDirection: const AllowedSwipeDirection.only(left: true, right: true, up: true),
+                        duration: Motion.of(context, const Duration(milliseconds: 260)),
+                        threshold: 35,
+                        maxAngle: 12,
+                        scale: 0.95,
+                        backCardOffset: const Offset(0, 12),
+                        padding: EdgeInsets.fromLTRB(12, 2, 12, bottomBar + 10),
+                        allowedSwipeDirection: const AllowedSwipeDirection.symmetric(horizontal: true),
                         onSwipe: _onSwipe,
-                        cardBuilder: (context, index, dx, dy) => ProfileCard(
-                          profile: _cards![index],
-                          dragX: dx,
-                          dragY: dy,
-                          onTap: () => Navigator.push(
-                            context,
-                            MaterialPageRoute(builder: (_) => ProfileDetailScreen(profile: _cards![index])),
-                          ),
-                        ),
+                        cardBuilder: (context, index, dx, dy) {
+                          final p = _cards![index];
+                          return ProfileCard(
+                            profile: p,
+                            dragX: index == _top ? dx : 0,
+                            interactive: index == _top,
+                            onTap: () => _openProfile(p),
+                            onPass: () => _controller.swipe(CardSwiperDirection.left),
+                            onRequest: () => _controller.swipe(CardSwiperDirection.right),
+                          );
+                        },
                       ),
-                    ),
-                    _ActionBar(
-                      onPass: () => _controller.swipe(CardSwiperDirection.left),
-                      onNote: _startDirectNote,
-                      onFollow: () => _controller.swipe(CardSwiperDirection.right),
-                      premium: premium,
-                    ),
-                    const SizedBox(height: 14),
-                  ],
-                ),
+          ),
+        ]),
+      ),
     );
   }
 }
 
-class _ActionBar extends StatelessWidget {
-  const _ActionBar({required this.onPass, required this.onNote, required this.onFollow, required this.premium});
-  final VoidCallback onPass;
-  final VoidCallback onNote;
-  final VoidCallback onFollow;
-  final bool premium;
-
-  @override
-  Widget build(BuildContext context) => Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          _RoundButton(icon: Icons.close_rounded, color: AppColors.pass, size: 62, onTap: onPass, tooltip: 'Pass'),
-          const SizedBox(width: 22),
-          _RoundButton(
-            icon: Icons.star_rounded,
-            color: AppColors.gold,
-            size: 50,
-            onTap: onNote,
-            tooltip: 'Direct DM Invite',
-            locked: !premium,
-          ),
-          const SizedBox(width: 22),
-          _RoundButton(
-            icon: Icons.person_add_alt_1_rounded,
-            color: AppColors.brand,
-            size: 62,
-            onTap: onFollow,
-            tooltip: 'Request to follow',
-            filled: true,
-          ),
-        ],
-      );
-}
-
-class _RoundButton extends StatelessWidget {
-  const _RoundButton({
-    required this.icon,
-    required this.color,
-    required this.size,
-    required this.onTap,
-    required this.tooltip,
-    this.filled = false,
-    this.locked = false,
-  });
-
+class _Empty extends StatelessWidget {
+  const _Empty({required this.icon, required this.title, required this.body, required this.action, required this.onAction});
   final IconData icon;
-  final Color color;
-  final double size;
-  final VoidCallback onTap;
-  final String tooltip;
-  final bool filled;
-  final bool locked;
+  final String title;
+  final String body;
+  final String action;
+  final VoidCallback onAction;
 
   @override
-  Widget build(BuildContext context) => Tooltip(
-        message: tooltip,
-        child: Stack(
-          clipBehavior: Clip.none,
-          children: [
-            Material(
-              color: filled ? color : Colors.white,
-              shape: const CircleBorder(),
-              elevation: 4,
-              shadowColor: Colors.black26,
-              child: InkWell(
-                customBorder: const CircleBorder(),
-                onTap: onTap,
-                child: SizedBox.square(
-                  dimension: size,
-                  child: Icon(icon, color: filled ? Colors.white : color, size: size * 0.48),
-                ),
-              ),
-            ),
-            if (locked)
-              const Positioned(
-                right: -2,
-                top: -2,
-                child: CircleAvatar(
-                  radius: 10,
-                  backgroundColor: AppColors.ink,
-                  child: Icon(Icons.lock, size: 11, color: Colors.white),
-                ),
-              ),
-          ],
-        ),
-      );
-}
-
-class _EmptyDeck extends StatelessWidget {
-  const _EmptyDeck({required this.onRefresh});
-  final VoidCallback onRefresh;
-
-  @override
-  Widget build(BuildContext context) => Center(
-        child: Padding(
-          padding: const EdgeInsets.all(32),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(Icons.travel_explore_rounded, size: 64, color: Colors.grey.shade400),
-              const SizedBox(height: 12),
-              const Text('You’re all caught up', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
-              const SizedBox(height: 6),
-              Text('New people join every day. Passed profiles come back after 7 days.',
-                  textAlign: TextAlign.center, style: TextStyle(color: Colors.grey.shade600)),
-              const SizedBox(height: 16),
-              OutlinedButton.icon(onPressed: onRefresh, icon: const Icon(Icons.refresh), label: const Text('Refresh')),
-            ],
-          ),
-        ),
-      );
+  Widget build(BuildContext context) {
+    final c = context.fc;
+    final t = Theme.of(context).textTheme;
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(32, 0, 32, 120),
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          Icon(icon, size: 44, color: c.muted),
+          const SizedBox(height: 14),
+          Text(title, style: t.titleLarge, textAlign: TextAlign.center),
+          const SizedBox(height: 6),
+          Text(body, textAlign: TextAlign.center, style: t.bodyMedium?.copyWith(color: c.muted)),
+          const SizedBox(height: 20),
+          PillButton(label: action, dark: false, expand: false, height: 46, onTap: onAction),
+        ]),
+      ),
+    );
+  }
 }

@@ -145,22 +145,12 @@ class DemoBackend implements FinderBackend {
   }
 
   @override
-  Future<int> remainingSwipes() async {
-    if (premium) return -1;
-    final since = DateTime.now().subtract(const Duration(hours: 24));
-    final used = _swipes.values
-        .where((s) => s.sender == meId && s.action != 'pass' && s.createdAt.isAfter(since))
-        .length;
-    return max(0, AppConfig.freeDailySwipes - used);
-  }
-
-  @override
-  Future<SwipeOutcome> swipe(String targetId, {required bool follow, String? directNote}) async {
+  Future<SwipeOutcome> swipe(String targetId, {required bool follow}) async {
     final existing = _swipes[(meId, targetId)];
     if (existing != null && existing.action == 'pass') _swipes.remove((meId, targetId));
 
     if (!follow) {
-      _swipes[(meId, targetId)] = _Swipe(meId, targetId, 'pass', null);
+      _swipes[(meId, targetId)] = _Swipe(meId, targetId, 'pass');
       return SwipeOutcome.passed;
     }
 
@@ -172,17 +162,7 @@ class DemoBackend implements FinderBackend {
       return SwipeOutcome.matched;
     }
 
-    if (directNote != null && !premium) {
-      throw const AppException(AppErrorCode.premiumRequired, 'Direct DM Invite needs the Fast-Track pass.');
-    }
-    if (await remainingSwipes() == 0) {
-      throw const AppException(AppErrorCode.swipeLimit, 'You have used your 10 free follow requests today.');
-    }
-    if (directNote != null && ContactSanitizer.containsContactInfo(directNote)) {
-      throw const AppException(AppErrorCode.contactInfo, 'Phone numbers, @handles and links are not allowed.');
-    }
-
-    final row = _Swipe(meId, targetId, 'follow_requested', directNote);
+    final row = _Swipe(meId, targetId, 'follow_requested');
     _swipes[(meId, targetId)] = row;
 
     // Simulate the other person reviewing the request.
@@ -217,7 +197,6 @@ class DemoBackend implements FinderBackend {
                 FollowRequest(
                   id: s.id,
                   sender: _people[s.sender]!.profile,
-                  directNote: s.note,
                   createdAt: s.createdAt,
                 ),
             ]
@@ -227,6 +206,7 @@ class DemoBackend implements FinderBackend {
 
   @override
   Future<void> respondToRequest(String requestId, {required bool accept}) async {
+    if (!premium) throw const AppException(AppErrorCode.subscriptionRequired, 'Seeing requests is part of Fast-Track');
     final row = _swipes.values.firstWhere(
       (s) => s.id == requestId && s.receiver == meId && s.action == 'follow_requested',
       orElse: () => throw const AppException(AppErrorCode.unknown, 'Request not found'),
@@ -290,6 +270,7 @@ class DemoBackend implements FinderBackend {
 
   @override
   Future<void> sendText(String peerId, String text) async {
+    if (!premium) throw const AppException(AppErrorCode.subscriptionRequired, 'Messaging is part of Fast-Track');
     if (!_connected(meId, peerId)) {
       throw const AppException(AppErrorCode.notConnected, 'Chat unlocks once the follow request is accepted.');
     }
@@ -299,6 +280,7 @@ class DemoBackend implements FinderBackend {
 
   @override
   Future<void> sendVoice(String peerId, Uint8List aacBytes, {String? localPath, Duration duration = Duration.zero}) async {
+    if (!premium) throw const AppException(AppErrorCode.subscriptionRequired, 'Messaging is part of Fast-Track');
     if (!_connected(meId, peerId)) {
       throw const AppException(AppErrorCode.notConnected, 'Chat unlocks once the follow request is accepted.');
     }
@@ -357,7 +339,7 @@ class DemoBackend implements FinderBackend {
   Future<void> blockUser(String peerId) async {
     _endConnection(peerId);
     _swipes.remove((peerId, meId));
-    _swipes[(meId, peerId)] = _Swipe(meId, peerId, 'rejected', null);
+    _swipes[(meId, peerId)] = _Swipe(meId, peerId, 'rejected');
     _social.add(null);
   }
 
@@ -528,16 +510,14 @@ class DemoBackend implements FinderBackend {
 
     final now = DateTime.now();
     // Incoming follow requests (the "Who Requested You" tab).
-    _swipes[(seeds[4].profile.id, meId)] = _Swipe(seeds[4].profile.id, meId, 'follow_requested',
-        'Your bio says Fort Kochi sunsets… I know a secret spot 🌅', now.subtract(const Duration(hours: 2)));
+    _swipes[(seeds[4].profile.id, meId)] = _Swipe(seeds[4].profile.id, meId, 'follow_requested', now.subtract(const Duration(hours: 2)));
     _swipes[(seeds[6].profile.id, meId)] =
-        _Swipe(seeds[6].profile.id, meId, 'follow_requested', null, now.subtract(const Duration(hours: 5)));
-    _swipes[(seeds[9].profile.id, meId)] = _Swipe(seeds[9].profile.id, meId, 'follow_requested',
-        'Cricket or football? Choose wisely 😄', now.subtract(const Duration(days: 1)));
+        _Swipe(seeds[6].profile.id, meId, 'follow_requested', now.subtract(const Duration(hours: 5)));
+    _swipes[(seeds[9].profile.id, meId)] = _Swipe(seeds[9].profile.id, meId, 'follow_requested', now.subtract(const Duration(days: 1)));
 
     // One existing mutual connection with history so chat is explorable immediately.
     final a = seeds[0].profile.id;
-    _swipes[(meId, a)] = _Swipe(meId, a, 'accepted', null, now.subtract(const Duration(days: 1)))
+    _swipes[(meId, a)] = _Swipe(meId, a, 'accepted', now.subtract(const Duration(days: 1)))
       ..respondedAt = now.subtract(const Duration(hours: 20));
     _threads[a] = [
       _msg(a, meId, content: 'Hey! Thanks for the follow 😊', at: now.subtract(const Duration(hours: 19))),
@@ -569,7 +549,7 @@ class _Seed {
 }
 
 class _Swipe {
-  _Swipe(this.sender, this.receiver, this.action, this.note, [DateTime? at])
+  _Swipe(this.sender, this.receiver, this.action, [DateTime? at])
       : id = const Uuid().v4(),
         createdAt = at ?? DateTime.now();
 
@@ -577,7 +557,6 @@ class _Swipe {
   final String sender;
   final String receiver;
   String action;
-  final String? note;
   final DateTime createdAt;
   DateTime? respondedAt;
 }

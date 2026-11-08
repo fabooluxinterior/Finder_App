@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/config.dart';
 import '../../core/sanitizer.dart';
+import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/backend.dart';
 import '../../providers.dart';
@@ -221,6 +222,7 @@ class _ProfileSetupScreenState extends ConsumerState<ProfileSetupScreen> {
                 for (final i in _allInterests)
                   FilterChip(
                     label: Text(i),
+                    labelStyle: TextStyle(color: _interests.contains(i) ? context.fc.paper : context.fc.ink),
                     selected: _interests.contains(i),
                     onSelected: (s) => setState(() => s ? _interests.add(i) : _interests.remove(i)),
                   ),

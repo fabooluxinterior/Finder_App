@@ -2,86 +2,202 @@ import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:intl/intl.dart';
+import '../../core/phosphor.dart';
 
+import '../../core/errors.dart';
+import '../../core/feedback.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../models/follow_request.dart';
 import '../../providers.dart';
-import '../chat/chat_screen.dart';
+import '../match/match_screen.dart';
 import '../paywall/paywall_sheet.dart';
 import '../profile/profile_detail_screen.dart';
 
+/// Received follow requests. Without Fast-Track the server returns only a
+/// count (RLS hides who sent them), so the teaser shows nothing identifying.
 class RequestsScreen extends ConsumerWidget {
   const RequestsScreen({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final pendingCount = ref.watch(incomingRequestsProvider).value?.count ?? 0;
-    final unread = ref.watch(connectionsProvider).value?.fold<int>(0, (s, c) => s + c.unread) ?? 0;
+    final c = context.fc;
+    final t = Theme.of(context).textTheme;
+    final premium = isPremium(ref);
+    final incoming = ref.watch(incomingRequestsProvider);
+    final count = incoming.value?.count ?? 0;
+    final bottomBar = 84 + MediaQuery.paddingOf(context).bottom;
 
-    return DefaultTabController(
-      length: 2,
-      child: Scaffold(
-        appBar: AppBar(
-          title: const Text('Requests'),
-          bottom: TabBar(
-            tabs: [
-              Tab(child: _TabLabel('Pending Requests', pendingCount)),
-              Tab(child: _TabLabel('Mutual Connections', unread)),
-            ],
-          ),
+    return Scaffold(
+      body: SafeArea(
+        bottom: false,
+        child: RefreshIndicator(
+          color: c.ink,
+          onRefresh: () => ref.refresh(incomingRequestsProvider.future),
+          child: CustomScrollView(slivers: [
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Text('Requests', style: t.headlineMedium),
+                  const SizedBox(height: 4),
+                  Text(
+                    count == 0
+                        ? 'No one is waiting right now'
+                        : '$count ${count == 1 ? 'person wants' : 'people want'} to follow you',
+                    style: t.bodyMedium?.copyWith(color: c.muted),
+                  ),
+                ]),
+              ),
+            ),
+            if (incoming.isLoading && !incoming.hasValue)
+              const SliverToBoxAdapter(child: SizedBox(height: 200))
+            else if (count == 0)
+              SliverFillRemaining(
+                hasScrollBody: false,
+                child: _EmptyState(bottom: bottomBar),
+              )
+            else if (!premium)
+              SliverToBoxAdapter(child: _LockedTeaser(count: count, bottom: bottomBar))
+            else
+              SliverPadding(
+                padding: EdgeInsets.fromLTRB(16, 16, 16, bottomBar + 16),
+                sliver: SliverGrid.builder(
+                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: 2,
+                    mainAxisSpacing: 12,
+                    crossAxisSpacing: 12,
+                    childAspectRatio: 0.66,
+                  ),
+                  itemCount: incoming.value!.requests.length,
+                  itemBuilder: (_, i) => _RequestTile(request: incoming.value!.requests[i]),
+                ),
+              ),
+          ]),
         ),
-        body: const TabBarView(children: [_PendingTab(), _MutualTab()]),
       ),
     );
   }
 }
 
-class _TabLabel extends StatelessWidget {
-  const _TabLabel(this.text, this.count);
-  final String text;
-  final int count;
+class _EmptyState extends StatelessWidget {
+  const _EmptyState({required this.bottom});
+  final double bottom;
 
   @override
-  Widget build(BuildContext context) => Row(mainAxisSize: MainAxisSize.min, children: [
-        Flexible(child: Text(text, overflow: TextOverflow.ellipsis)),
-        if (count > 0) ...[const SizedBox(width: 6), Badge(label: Text('$count'))],
-      ]);
+  Widget build(BuildContext context) {
+    final c = context.fc;
+    final t = Theme.of(context).textTheme;
+    return Padding(
+      padding: EdgeInsets.fromLTRB(32, 0, 32, bottom),
+      child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+        Icon(PhosphorIconsRegular.heart, size: 44, color: c.muted),
+        const SizedBox(height: 12),
+        Text('No requests yet', style: t.titleLarge),
+        const SizedBox(height: 6),
+        Text('When someone requests to follow you, they’ll appear here.',
+            textAlign: TextAlign.center, style: t.bodyMedium?.copyWith(color: c.muted)),
+      ]),
+    );
+  }
 }
 
-// ------------------------------------------------------------------ pending ---
+class _LockedTeaser extends StatelessWidget {
+  const _LockedTeaser({required this.count, required this.bottom});
+  final int count;
+  final double bottom;
 
-class _PendingTab extends ConsumerWidget {
-  const _PendingTab();
+  static const _palettes = [
+    [Color(0xFFFFC9B8), Color(0xFFB48CFF)],
+    [Color(0xFFFFD99A), Color(0xFFFF8FA3)],
+    [Color(0xFFA9DFFF), Color(0xFF9C8CFF)],
+    [Color(0xFFC6F2D2), Color(0xFF6CC3FF)],
+  ];
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final premium = isPremium(ref);
-    final incoming = ref.watch(incomingRequestsProvider);
-
-    return incoming.when(
-      loading: () => const Center(child: CircularProgressIndicator()),
-      error: (e, _) => Center(child: Text('$e')),
-      data: (data) {
-        if (data.count == 0) {
-          return const _Empty(
-            icon: Icons.inbox_outlined,
-            title: 'No pending requests',
-            subtitle: 'When someone swipes right on you, it shows up here.',
-          );
-        }
-        if (!premium) return _BlurredTeaser(count: data.count);
-        return RefreshIndicator(
-          onRefresh: () => ref.refresh(incomingRequestsProvider.future),
-          child: ListView.separated(
-            padding: const EdgeInsets.all(16),
-            itemCount: data.requests.length,
-            separatorBuilder: (_, _) => const SizedBox(height: 12),
-            itemBuilder: (_, i) => _RequestTile(request: data.requests[i]),
+  Widget build(BuildContext context) {
+    final c = context.fc;
+    final t = Theme.of(context).textTheme;
+    final tiles = count.clamp(1, 4);
+    return Padding(
+      padding: EdgeInsets.fromLTRB(16, 16, 16, bottom + 16),
+      child: Column(children: [
+        GridView.count(
+          crossAxisCount: 2,
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          mainAxisSpacing: 12,
+          crossAxisSpacing: 12,
+          childAspectRatio: 0.78,
+          children: [
+            for (var i = 0; i < tiles; i++)
+              ClipRRect(
+                borderRadius: BorderRadius.circular(24),
+                child: Stack(fit: StackFit.expand, children: [
+                  ImageFiltered(
+                    imageFilter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          colors: _palettes[i % _palettes.length],
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                        ),
+                      ),
+                      child: const Align(
+                        alignment: Alignment(0, 0.5),
+                        child: Icon(PhosphorIconsFill.user, size: 140, color: Colors.white54),
+                      ),
+                    ),
+                  ),
+                  Positioned(
+                    left: 14,
+                    bottom: 14,
+                    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                      Container(width: 70, height: 12, decoration: BoxDecoration(color: Colors.white70, borderRadius: BorderRadius.circular(9))),
+                      const SizedBox(height: 6),
+                      Container(width: 46, height: 9, decoration: BoxDecoration(color: Colors.white54, borderRadius: BorderRadius.circular(9))),
+                    ]),
+                  ),
+                ]),
+              ),
+          ],
+        ),
+        const SizedBox(height: 16),
+        Container(
+          padding: const EdgeInsets.all(18),
+          decoration: BoxDecoration(
+            color: c.surface,
+            borderRadius: BorderRadius.circular(26),
+            border: Border.all(color: c.hair),
+            boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.08), blurRadius: 30, offset: const Offset(0, 12))],
           ),
-        );
-      },
+          child: Column(children: [
+            Row(children: [
+              Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(color: c.goldSoft, borderRadius: BorderRadius.circular(14)),
+                child: Icon(PhosphorIconsFill.eye, color: c.gold, size: 22),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Text('See who requested you', style: t.titleMedium),
+                  const SizedBox(height: 2),
+                  Text('Accept them and start chatting with Fast-Track.', style: t.bodySmall?.copyWith(color: c.muted)),
+                ]),
+              ),
+            ]),
+            const SizedBox(height: 14),
+            PillButton(
+              label: 'Unlock with Fast-Track',
+              height: 50,
+              onTap: () => showPaywall(context, reason: PaywallReason.requests),
+            ),
+          ]),
+        ),
+      ]),
     );
   }
 }
@@ -99,19 +215,23 @@ class _RequestTileState extends ConsumerState<_RequestTile> {
 
   Future<void> _respond(bool accept) async {
     setState(() => _busy = true);
+    accept ? Fx.instance.request() : Fx.instance.pass();
     try {
       await ref.read(backendProvider).respondToRequest(widget.request.id, accept: accept);
       ref.invalidate(incomingRequestsProvider);
       ref.invalidate(connectionsProvider);
       ref.invalidate(feedProvider);
-      if (!mounted) return;
-      final p = widget.request.sender;
-      if (accept) {
-        showSnack(context, 'You and ${p.firstName} are connected. Chat unlocked 🔓', icon: Icons.lock_open_rounded);
-        Navigator.push(context, MaterialPageRoute(builder: (_) => ChatScreen(peer: p)));
+      if (accept && mounted) {
+        final me = await ref.read(myProfileProvider.future);
+        if (mounted) await showMatch(context, me: me, them: widget.request.sender);
       }
-    } catch (e) {
-      if (mounted) showSnack(context, '$e', icon: Icons.error_outline);
+    } on AppException catch (e) {
+      if (!mounted) return;
+      if (e.code == AppErrorCode.subscriptionRequired) {
+        showPaywall(context, reason: PaywallReason.requests);
+      } else {
+        showSnack(context, e.message, icon: PhosphorIconsFill.warningCircle);
+      }
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -119,239 +239,59 @@ class _RequestTileState extends ConsumerState<_RequestTile> {
 
   @override
   Widget build(BuildContext context) {
-    final r = widget.request;
-    final p = r.sender;
-    return Card(
-      elevation: 0,
-      color: Colors.white,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
-      child: Padding(
-        padding: const EdgeInsets.all(14),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            InkWell(
-              onTap: () => Navigator.push(
-                  context, MaterialPageRoute(builder: (_) => ProfileDetailScreen(profile: p))),
-              child: Row(children: [
-                Avatar(url: p.primaryPhoto, name: p.fullName, size: 56),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    Row(children: [
-                      Flexible(
-                        child: Text('${p.firstName}, ${p.age}',
-                            style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 17)),
-                      ),
-                      if (p.isPremium) ...[const SizedBox(width: 6), const FastTrackBadge(compact: true)],
-                    ]),
-                    Text('${p.city} · ${_ago(r.createdAt)}', style: TextStyle(color: Colors.grey.shade600)),
-                  ]),
-                ),
+    final c = context.fc;
+    final t = Theme.of(context).textTheme;
+    final p = widget.request.sender;
+    return Pressable(
+      scale: 0.98,
+      onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => ProfileDetailScreen(profile: p))),
+      child: Container(
+        padding: const EdgeInsets.all(5),
+        decoration: BoxDecoration(
+          color: c.surface,
+          borderRadius: BorderRadius.circular(26),
+          border: Border.all(color: c.hair),
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(21),
+          child: Stack(fit: StackFit.expand, children: [
+            ProfilePhoto(url: p.primaryPhoto, name: p.fullName),
+            Align(
+              alignment: Alignment.bottomCenter,
+              child: FractionallySizedBox(widthFactor: 1, heightFactor: 0.5, child: FrostedFade(color: c.surface, blur: false)),
+            ),
+            Positioned(
+              left: 12,
+              right: 10,
+              bottom: 10,
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Row(children: [
+                  Flexible(
+                    child: Text('${p.firstName}, ${p.age}', maxLines: 1, overflow: TextOverflow.ellipsis, style: t.titleMedium),
+                  ),
+                  const SizedBox(width: 4),
+                  const VerifiedBadge(size: 15),
+                ]),
+                Text(p.city, style: t.bodySmall?.copyWith(color: c.muted)),
+                const SizedBox(height: 8),
+                Row(children: [
+                  RoundButton(icon: PhosphorIconsBold.x, size: 38, iconSize: 16, onTap: _busy ? null : () => _respond(false), semanticLabel: 'Decline'),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: PillButton(
+                      label: 'Accept',
+                      icon: PhosphorIconsBold.check,
+                      height: 38,
+                      busy: _busy,
+                      onTap: () => _respond(true),
+                    ),
+                  ),
+                ]),
               ]),
             ),
-            if (r.directNote != null) ...[
-              const SizedBox(height: 12),
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFFFF7E6),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  const Icon(Icons.star_rounded, color: AppColors.gold, size: 18),
-                  const SizedBox(width: 8),
-                  Expanded(child: Text(r.directNote!, style: const TextStyle(height: 1.3))),
-                ]),
-              ),
-            ],
-            const SizedBox(height: 12),
-            Row(children: [
-              Expanded(
-                child: OutlinedButton(
-                  onPressed: _busy ? null : () => _respond(false),
-                  style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(46)),
-                  child: const Text('Decline'),
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                flex: 2,
-                child: FilledButton.icon(
-                  onPressed: _busy ? null : () => _respond(true),
-                  style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(46)),
-                  icon: const Icon(Icons.how_to_reg_rounded),
-                  label: const Text('Accept Follow'),
-                ),
-              ),
-            ]),
-          ],
+          ]),
         ),
       ),
     );
   }
-}
-
-class _BlurredTeaser extends StatelessWidget {
-  const _BlurredTeaser({required this.count});
-  final int count;
-
-  @override
-  Widget build(BuildContext context) {
-    return ListView(
-      padding: const EdgeInsets.all(16),
-      children: [
-        GridView.count(
-          crossAxisCount: 2,
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          mainAxisSpacing: 12,
-          crossAxisSpacing: 12,
-          childAspectRatio: 0.78,
-          children: [for (var i = 0; i < count.clamp(1, 6); i++) _BlurTile(seed: i)],
-        ),
-        const SizedBox(height: 20),
-        Text(
-          '$count ${count == 1 ? 'person wants' : 'people want'} to follow you',
-          textAlign: TextAlign.center,
-          style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800),
-        ),
-        const SizedBox(height: 6),
-        Text(
-          'See who they are and accept instantly with Fast-Track — or keep swiping: if you request them back, it’s an instant match.',
-          textAlign: TextAlign.center,
-          style: TextStyle(color: Colors.grey.shade700),
-        ),
-        const SizedBox(height: 16),
-        FilledButton.icon(
-          style: FilledButton.styleFrom(backgroundColor: AppColors.ink),
-          onPressed: () => showPaywall(context, reason: 'Unblur all $count pending requests.'),
-          icon: const Icon(Icons.visibility_rounded),
-          label: const Text('Unlock Who Requested You · ₹79'),
-        ),
-      ],
-    );
-  }
-}
-
-class _BlurTile extends StatelessWidget {
-  const _BlurTile({required this.seed});
-  final int seed;
-
-  static const _palettes = [
-    [Color(0xFFFFA8B8), Color(0xFF9B6BFF)],
-    [Color(0xFFFFC27A), Color(0xFFFF6A8A)],
-    [Color(0xFF7AD3FF), Color(0xFF8B7CFF)],
-    [Color(0xFFB0F0C4), Color(0xFF52B7FF)],
-  ];
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = _palettes[seed % _palettes.length];
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(18),
-      child: Stack(fit: StackFit.expand, children: [
-        // Nothing identifying is ever downloaded for free users; this is an abstract silhouette.
-        ImageFiltered(
-          imageFilter: ImageFilter.blur(sigmaX: 14, sigmaY: 14),
-          child: DecoratedBox(
-            decoration: BoxDecoration(gradient: LinearGradient(colors: colors, begin: Alignment.topLeft, end: Alignment.bottomRight)),
-            child: const Align(
-              alignment: Alignment(0, 0.3),
-              child: Icon(Icons.person, size: 150, color: Colors.white70),
-            ),
-          ),
-        ),
-        const Center(
-          child: CircleAvatar(
-            radius: 22,
-            backgroundColor: Colors.white,
-            child: Icon(Icons.lock_rounded, color: AppColors.ink),
-          ),
-        ),
-      ]),
-    );
-  }
-}
-
-// ------------------------------------------------------------------- mutual ---
-
-class _MutualTab extends ConsumerWidget {
-  const _MutualTab();
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final connections = ref.watch(connectionsProvider);
-    return connections.when(
-      loading: () => const Center(child: CircularProgressIndicator()),
-      error: (e, _) => Center(child: Text('$e')),
-      data: (list) => list.isEmpty
-          ? const _Empty(
-              icon: Icons.people_outline,
-              title: 'No connections yet',
-              subtitle: 'Chat unlocks the moment a follow request is accepted.',
-            )
-          : RefreshIndicator(
-              onRefresh: () => ref.refresh(connectionsProvider.future),
-              child: ListView.separated(
-                padding: const EdgeInsets.symmetric(vertical: 8),
-                itemCount: list.length,
-                separatorBuilder: (_, _) => const Divider(indent: 84, height: 1),
-                itemBuilder: (_, i) {
-                  final c = list[i];
-                  final p = c.profile;
-                  return ListTile(
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-                    leading: Avatar(url: p.primaryPhoto, name: p.fullName, size: 54),
-                    title: Text(p.firstName, style: const TextStyle(fontWeight: FontWeight.w800)),
-                    subtitle: Text(
-                      c.lastMessage ?? 'Connected ${_ago(c.connectedAt)} · say hi 👋',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontWeight: c.unread > 0 ? FontWeight.w700 : FontWeight.normal,
-                        color: c.unread > 0 ? AppColors.ink : Colors.grey.shade600,
-                      ),
-                    ),
-                    trailing: c.unread > 0
-                        ? Badge(label: Text('${c.unread}'), backgroundColor: AppColors.brand)
-                        : const Icon(Icons.chevron_right),
-                    onTap: () =>
-                        Navigator.push(context, MaterialPageRoute(builder: (_) => ChatScreen(peer: p))),
-                  );
-                },
-              ),
-            ),
-    );
-  }
-}
-
-class _Empty extends StatelessWidget {
-  const _Empty({required this.icon, required this.title, required this.subtitle});
-  final IconData icon;
-  final String title;
-  final String subtitle;
-
-  @override
-  Widget build(BuildContext context) => Center(
-        child: Padding(
-          padding: const EdgeInsets.all(32),
-          child: Column(mainAxisSize: MainAxisSize.min, children: [
-            Icon(icon, size: 60, color: Colors.grey.shade400),
-            const SizedBox(height: 12),
-            Text(title, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
-            const SizedBox(height: 6),
-            Text(subtitle, textAlign: TextAlign.center, style: TextStyle(color: Colors.grey.shade600)),
-          ]),
-        ),
-      );
-}
-
-String _ago(DateTime t) {
-  final d = DateTime.now().difference(t);
-  if (d.inMinutes < 1) return 'just now';
-  if (d.inHours < 1) return '${d.inMinutes}m ago';
-  if (d.inDays < 1) return '${d.inHours}h ago';
-  if (d.inDays < 7) return '${d.inDays}d ago';
-  return DateFormat('d MMM').format(t);
 }

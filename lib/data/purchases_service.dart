@@ -57,8 +57,13 @@ class RevenueCatPurchases implements PurchasesService {
   Future<bool> purchaseFastTrack() async {
     final pkg = await _package();
     if (pkg == null) throw StateError('Fast-Track pass is not available right now.');
+    // No free trial: always buy the plain base plan, never an offer phase
+    // (RevenueCat's default option would pick the longest free trial).
+    final basePlan = pkg.storeProduct.subscriptionOptions?.where((o) => o.isBasePlan).firstOrNull;
     try {
-      final result = await Purchases.purchase(PurchaseParams.package(pkg));
+      final result = await Purchases.purchase(
+        basePlan != null ? PurchaseParams.subscriptionOption(basePlan) : PurchaseParams.package(pkg),
+      );
       return _active(result.customerInfo);
     } on PlatformException catch (e) {
       if (PurchasesErrorHelper.getErrorCode(e) == PurchasesErrorCode.purchaseCancelledError) return false;

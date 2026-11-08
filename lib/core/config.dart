@@ -12,9 +12,7 @@ class AppConfig {
   static const productId = 'fast_track_79_monthly';
   static const entitlementId = 'fast_track';
 
-  static const freeDailySwipes = 10;
   static const passHideDays = 7;
-  static const directNoteMaxLength = 100;
   static const voiceMaxSeconds = 45;
   static const voiceBitRate = 32000;
   static const voiceSampleRate = 22050;
