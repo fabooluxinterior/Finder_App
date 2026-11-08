@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'core/brand.dart';
 import 'core/theme.dart';
 import 'features/auth/auth_screen.dart';
 import 'features/home/home_shell.dart';
@@ -16,12 +17,12 @@ class FinderApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Finder',
+      title: 'Vouby',
       debugShowCheckedModeBanner: false,
-      theme: buildTheme(Brightness.light),
+      theme: buildTheme(Brightness.dark),
       darkTheme: buildTheme(Brightness.dark),
-      themeMode: ThemeMode.system,
-      home: const _AuthGate(),
+      themeMode: ThemeMode.dark,
+      home: const _Intro(child: _AuthGate()),
     );
   }
 }
@@ -76,4 +77,64 @@ class _Splash extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => const Scaffold(body: SizedBox.shrink());
+}
+
+/// Plays the Vouby opening animation once per launch over whatever the gate
+/// resolves to underneath, then fades it away.
+class _Intro extends StatefulWidget {
+  const _Intro({required this.child});
+  final Widget child;
+
+  @override
+  State<_Intro> createState() => _IntroState();
+}
+
+class _IntroState extends State<_Intro> {
+  bool _done = false;
+  bool _gone = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.fc;
+    return Stack(
+      children: [
+        widget.child,
+        if (!_gone)
+          IgnorePointer(
+            ignoring: _done,
+            child: AnimatedOpacity(
+              opacity: _done ? 0 : 1,
+              duration: Motion.of(context, const Duration(milliseconds: 260)),
+              curve: Motion.easeOut,
+              onEnd: () => setState(() => _gone = true),
+              child: Scaffold(
+                backgroundColor: c.paper,
+                body: SafeArea(
+                  child: Column(
+                    children: [
+                      Expanded(
+                        child: Center(
+                          child: VoubySplash(
+                            onDone: () => Future.delayed(const Duration(milliseconds: 250), () {
+                              if (mounted) setState(() => _done = true);
+                            }),
+                          ),
+                        ),
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 40),
+                        child: Text(
+                          'Real people, real conversations.',
+                          style: TextStyle(fontSize: 15, height: 22 / 15, color: c.ink.withValues(alpha: 0.85)),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
 }

@@ -1,6 +1,9 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+
+import '../../core/theme.dart';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
@@ -129,15 +132,19 @@ class _Stat extends StatelessWidget {
   Widget build(BuildContext context) => Container(
     width: 160,
     padding: const EdgeInsets.all(14),
-    decoration: BoxDecoration(color: danger ? Colors.red.shade50 : Colors.white, borderRadius: BorderRadius.circular(14)),
+    decoration: BoxDecoration(
+      color: danger ? const Color(0xFF2A1210) : context.fc.surface,
+      border: Border.all(color: context.fc.hair),
+      borderRadius: BorderRadius.circular(14),
+    ),
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
           value,
-          style: TextStyle(fontSize: 26, fontWeight: FontWeight.w900, color: danger ? Colors.red : null),
+          style: TextStyle(fontSize: 26, fontWeight: FontWeight.w900, color: danger ? const Color(0xFFFF6B5A) : null),
         ),
-        Text(label, style: TextStyle(color: Colors.grey.shade700)),
+        Text(label, style: TextStyle(color: context.fc.ink3)),
       ],
     ),
   );

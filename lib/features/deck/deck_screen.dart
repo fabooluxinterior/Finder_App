@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/phosphor.dart';
 
+import '../../core/brand.dart';
 import '../../core/errors.dart';
 import '../../core/feedback.dart';
 import '../../core/theme.dart';
@@ -11,7 +12,6 @@ import '../../core/widgets.dart';
 import '../../models/follow_request.dart';
 import '../../models/profile.dart';
 import '../../providers.dart';
-import '../auth/auth_screen.dart' show Wordmark;
 import '../match/match_screen.dart';
 import '../paywall/paywall_sheet.dart';
 import '../profile/profile_detail_screen.dart';
@@ -112,7 +112,8 @@ class _DeckScreenState extends ConsumerState<DeckScreen> {
     final c = context.fc;
     final feed = ref.watch(feedProvider);
     final premium = isPremium(ref);
-    final bottomBar = 84 + MediaQuery.paddingOf(context).bottom;
+    // extendBody: the shell already adds the tab bar to the bottom padding.
+    final bottomBar = MediaQuery.paddingOf(context).bottom;
 
     if (_cards == null && feed.hasValue) {
       _cards = feed.value;
@@ -126,21 +127,32 @@ class _DeckScreenState extends ConsumerState<DeckScreen> {
         child: Column(
           children: [
             Padding(
-              padding: const EdgeInsets.fromLTRB(20, 8, 16, 10),
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 14),
               child: Row(
                 children: [
-                  const Wordmark(),
+                  const VoubyWordmark(size: 28),
                   const Spacer(),
                   if (premium)
-                    const FastTrackBadge()
+                    const FastTrackBadge(large: true)
                   else
                     Pressable(
                       onTap: () => showPaywall(context),
-                      child: InfoChip(
-                        icon: PhosphorIconsFill.lightning,
-                        label: 'Fast-Track',
-                        color: c.gold,
-                        background: c.goldSoft,
+                      semanticLabel: 'Fast-Track',
+                      child: Container(
+                        height: 40,
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        decoration: BoxDecoration(color: c.goldSoft, borderRadius: BorderRadius.circular(999)),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            BoltIcon(size: 16, color: c.gold),
+                            const SizedBox(width: 8),
+                            Text(
+                              'Fast-Track',
+                              style: TextStyle(fontSize: 15, fontWeight: FontWeight.w500, color: c.gold),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
                 ],
@@ -177,7 +189,7 @@ class _DeckScreenState extends ConsumerState<DeckScreen> {
                       maxAngle: 12,
                       scale: 0.95,
                       backCardOffset: const Offset(0, 12),
-                      padding: EdgeInsets.fromLTRB(12, 2, 12, bottomBar + 10),
+                      padding: EdgeInsets.fromLTRB(12, 0, 12, bottomBar + 6),
                       allowedSwipeDirection: const AllowedSwipeDirection.symmetric(horizontal: true),
                       onSwipe: _onSwipe,
                       cardBuilder: (context, index, dx, dy) {

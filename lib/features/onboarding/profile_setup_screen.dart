@@ -95,7 +95,7 @@ class _ProfileSetupScreenState extends ConsumerState<ProfileSetupScreen> {
     }
     if (!_form.currentState!.validate()) return;
     if (widget.isOnboarding && _dob == null) {
-      showSnack(context, 'Add your date of birth. Finder is for adults only.');
+      showSnack(context, 'Add your date of birth. Vouby is for adults only.');
       return;
     }
     if (_primary == null && _existingPrimary == null && !AppConfig.isDemo) {
@@ -169,7 +169,10 @@ class _ProfileSetupScreenState extends ConsumerState<ProfileSetupScreen> {
                             ? Image.memory(_primary!, fit: BoxFit.cover)
                             : _existingPrimary != null
                             ? ProfilePhoto(url: _existingPrimary, name: _name.text)
-                            : Container(color: Colors.grey.shade200, child: const Icon(Icons.add_a_photo_outlined, size: 40)),
+                            : Container(
+                                color: context.fc.surface,
+                                child: Icon(Icons.add_a_photo_outlined, size: 40, color: context.fc.muted),
+                              ),
                       ),
                     ),
                     Positioned(
@@ -177,8 +180,8 @@ class _ProfileSetupScreenState extends ConsumerState<ProfileSetupScreen> {
                       bottom: 8,
                       child: CircleAvatar(
                         radius: 16,
-                        backgroundColor: Theme.of(context).colorScheme.primary,
-                        child: const Icon(Icons.edit, size: 16, color: Colors.white),
+                        backgroundColor: context.fc.accent,
+                        child: Icon(Icons.edit, size: 16, color: context.fc.paper),
                       ),
                     ),
                   ],
@@ -187,10 +190,7 @@ class _ProfileSetupScreenState extends ConsumerState<ProfileSetupScreen> {
             ),
             const SizedBox(height: 6),
             Center(
-              child: Text(
-                'Primary photo · visible on your public card',
-                style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
-              ),
+              child: Text('Primary photo · visible on your public card', style: TextStyle(color: context.fc.muted, fontSize: 12)),
             ),
             const SizedBox(height: 20),
             TextFormField(
@@ -284,8 +284,12 @@ class _ProfileSetupScreenState extends ConsumerState<ProfileSetupScreen> {
                       if (b != null) setState(() => _newGallery.add(b));
                     },
                     child: Container(
-                      decoration: BoxDecoration(color: Colors.grey.shade200, borderRadius: BorderRadius.circular(10)),
-                      child: const Icon(Icons.add),
+                      decoration: BoxDecoration(
+                        color: context.fc.surface,
+                        border: Border.all(color: context.fc.hair),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Icon(Icons.add, color: context.fc.ink),
                     ),
                   ),
               ],
@@ -312,7 +316,7 @@ class _SectionTitle extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Row(
     children: [
-      Icon(icon, size: 16, color: Colors.grey.shade700),
+      Icon(icon, size: 16, color: context.fc.muted),
       const SizedBox(width: 6),
       Text(text, style: const TextStyle(fontWeight: FontWeight.w700)),
     ],

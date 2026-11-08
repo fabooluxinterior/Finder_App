@@ -3,10 +3,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/phosphor.dart';
 
+import '../../core/brand.dart';
 import '../../core/config.dart';
 import '../../core/feedback.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
+import '../../models/profile.dart';
 import '../../providers.dart';
 import '../onboarding/profile_setup_screen.dart';
 import '../paywall/paywall_sheet.dart';
@@ -30,104 +32,190 @@ class _MyProfileScreenState extends ConsumerState<MyProfileScreen> {
     final me = ref.watch(myProfileProvider).value;
     final premium = isPremium(ref);
     if (me == null) return const Scaffold(body: SizedBox.shrink());
-    final bottomBar = 84 + MediaQuery.paddingOf(context).bottom;
+    // extendBody: the shell already adds the tab bar to the bottom padding.
+    final bottomBar = MediaQuery.paddingOf(context).bottom;
 
     return Scaffold(
       body: SafeArea(
         bottom: false,
         child: ListView(
-          padding: EdgeInsets.fromLTRB(20, 8, 20, bottomBar + 20),
+          padding: EdgeInsets.fromLTRB(16, 8, 16, bottomBar + 20),
           children: [
-            Text('You', style: t.headlineMedium),
-            const SizedBox(height: 20),
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: Row(
+                children: [
+                  Expanded(child: Text('You', style: t.headlineMedium)),
+                  RoundButton(
+                    icon: Icons.tune,
+                    iconWidget: VIcon(VIcons.settings, size: 22, color: c.ink),
+                    size: 44,
+                    semanticLabel: 'Privacy & security',
+                    onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SecurityCenterScreen())),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 14),
             Row(
               children: [
-                Avatar(url: me.primaryPhoto, name: me.fullName, size: 80),
-                const SizedBox(width: 16),
+                Pressable(
+                  scale: 0.98,
+                  semanticLabel: 'Preview your profile',
+                  onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => ProfileDetailScreen(profile: me))),
+                  child: Container(
+                    width: 112,
+                    height: 144,
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(26),
+                      border: Border.all(color: c.surface, width: 3),
+                    ),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(23),
+                      child: ProfilePhoto(url: me.primaryPhoto, name: me.fullName, decodeWidth: 300),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 14),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text('${me.firstName}, ${me.age}', style: t.titleLarge),
-                      const SizedBox(height: 2),
-                      Text(me.city, style: t.bodyMedium?.copyWith(color: c.muted)),
-                      if (premium) ...[const SizedBox(height: 8), const FastTrackBadge()],
-                    ],
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 18),
-            Row(
-              children: [
-                Expanded(
-                  child: PillButton(
-                    label: 'Edit profile',
-                    icon: PhosphorIconsRegular.pencilSimple,
-                    dark: false,
-                    height: 48,
-                    onTap: () =>
-                        Navigator.push(context, MaterialPageRoute(builder: (_) => const ProfileSetupScreen(isOnboarding: false))),
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: PillButton(
-                    label: 'Preview',
-                    icon: PhosphorIconsRegular.eye,
-                    dark: false,
-                    height: 48,
-                    onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => ProfileDetailScreen(profile: me))),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 20),
-            if (!premium)
-              Pressable(
-                scale: 0.98,
-                onTap: () => showPaywall(context),
-                child: Container(
-                  padding: const EdgeInsets.all(18),
-                  decoration: BoxDecoration(color: c.ink, borderRadius: BorderRadius.circular(24)),
-                  child: Row(
-                    children: [
-                      Container(
-                        width: 44,
-                        height: 44,
-                        decoration: BoxDecoration(color: c.gold.withValues(alpha: 0.18), borderRadius: BorderRadius.circular(14)),
-                        child: Icon(PhosphorIconsFill.lightning, color: c.gold),
-                      ),
-                      const SizedBox(width: 14),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text('Fast-Track · ₹79/month', style: t.titleMedium?.copyWith(color: c.paper)),
-                            const SizedBox(height: 2),
-                            Text(
-                              'See who requested you and start chatting.',
-                              style: t.bodySmall?.copyWith(color: c.paper.withValues(alpha: 0.7)),
+                      Wrap(
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        spacing: 6,
+                        runSpacing: 4,
+                        children: [
+                          Text.rich(
+                            TextSpan(
+                              children: [
+                                TextSpan(text: me.firstName),
+                                TextSpan(
+                                  text: ' ${me.age}',
+                                  style: const TextStyle(fontWeight: FontWeight.w400, color: Color(0xFFC9C9CF)),
+                                ),
+                              ],
                             ),
-                          ],
+                            style: TextStyle(
+                              fontSize: 28,
+                              height: 32 / 28,
+                              fontWeight: FontWeight.w700,
+                              letterSpacing: -0.8,
+                              color: c.ink,
+                            ),
+                          ),
+                          if (me.isVerified) const VerifiedBadge(size: 22),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        '${me.city}, ${me.photoCount} ${me.photoCount == 1 ? 'photo' : 'photos'}',
+                        style: TextStyle(fontSize: 15, height: 20 / 15, color: c.ink3),
+                      ),
+                      const SizedBox(height: 10),
+                      Pressable(
+                        onTap: () => Navigator.push(
+                          context,
+                          MaterialPageRoute(builder: (_) => const ProfileSetupScreen(isOnboarding: false)),
+                        ),
+                        child: Container(
+                          height: 36,
+                          padding: const EdgeInsets.symmetric(horizontal: 14),
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(999),
+                            border: Border.all(color: c.hair),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                'Edit profile',
+                                style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: c.ink),
+                              ),
+                            ],
+                          ),
                         ),
                       ),
-                      Icon(PhosphorIconsBold.caretRight, color: c.paper, size: 18),
                     ],
                   ),
                 ),
-              )
-            else
-              _Card(
+              ],
+            ),
+            const SizedBox(height: 16),
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(color: c.goldSoft, borderRadius: BorderRadius.circular(24)),
+              child: Row(
                 children: [
-                  _Row(
-                    icon: PhosphorIconsFill.lightning,
-                    iconColor: c.gold,
-                    title: 'Fast-Track is active',
-                    subtitle: 'Manage or cancel in Google Play › Subscriptions',
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          premium ? 'Fast-Track is active' : 'Fast-Track',
+                          style: const TextStyle(
+                            fontSize: 16,
+                            height: 22 / 16,
+                            fontWeight: FontWeight.w600,
+                            color: Color(0xFFF3D9A6),
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          premium
+                              ? 'Manage or cancel in Google Play › Subscriptions.'
+                              : 'See who requested you, accept, and chat. ₹79/month.',
+                          style: const TextStyle(fontSize: 14, height: 20 / 14, color: Color(0xFFCDB68C)),
+                        ),
+                      ],
+                    ),
                   ),
+                  if (!premium) ...[
+                    const SizedBox(width: 14),
+                    Pressable(
+                      onTap: () => showPaywall(context),
+                      child: Container(
+                        height: 40,
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        decoration: BoxDecoration(color: c.gold, borderRadius: BorderRadius.circular(999)),
+                        alignment: Alignment.center,
+                        child: Text(
+                          'Get it',
+                          style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: c.paper),
+                        ),
+                      ),
+                    ),
+                  ],
                 ],
               ),
+            ),
+            const SizedBox(height: 14),
+            _Completeness(profile: me),
+            if (me.bio.isNotEmpty) ...[
+              const SizedBox(height: 14),
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: c.surface,
+                  borderRadius: BorderRadius.circular(24),
+                  border: Border.all(color: c.hair),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Bio',
+                      style: TextStyle(fontSize: 14, height: 20 / 14, color: c.muted),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      me.bio,
+                      style: TextStyle(fontSize: 17, height: 24 / 17, color: c.ink),
+                    ),
+                  ],
+                ),
+              ),
+            ],
             const SizedBox(height: 12),
             _Card(
               children: [
@@ -201,6 +289,74 @@ class _MyProfileScreenState extends ConsumerState<MyProfileScreen> {
   }
 }
 
+/// How complete the profile is, and the one next thing that would help.
+class _Completeness extends StatelessWidget {
+  const _Completeness({required this.profile});
+  final PublicProfile profile;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.fc;
+    final steps = [
+      (profile.primaryPhoto != null, 'Add a photo so people can see you.'),
+      (profile.photoCount >= 3, 'Add at least 3 photos so people get a feel for you.'),
+      (profile.bio.isNotEmpty, 'Add a bio so people have an easy way to start talking.'),
+      (profile.isVerified, 'Get verified to earn the blue tick.'),
+    ];
+    final done = steps.where((s) => s.$1).length;
+    if (done == steps.length) return const SizedBox.shrink();
+    final pct = (done / steps.length * 100).round();
+    final next = steps.firstWhere((s) => !s.$1).$2;
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: c.surface,
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: c.hair),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  'Profile $pct% complete',
+                  style: TextStyle(fontSize: 15, height: 20 / 15, fontWeight: FontWeight.w600, color: c.ink),
+                ),
+              ),
+              Pressable(
+                onTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => profile.isVerified || done < 3
+                        ? const ProfileSetupScreen(isOnboarding: false)
+                        : const VerificationScreen(),
+                  ),
+                ),
+                child: const Text(
+                  'Finish',
+                  style: TextStyle(fontSize: 15, height: 20 / 15, fontWeight: FontWeight.w600, color: Color(0xFFFF7A62)),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(999),
+            child: LinearProgressIndicator(value: done / steps.length, minHeight: 6, backgroundColor: c.hair, color: c.accent),
+          ),
+          const SizedBox(height: 10),
+          Text(
+            next,
+            style: TextStyle(fontSize: 14, height: 20 / 14, color: c.ink3),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _Card extends StatelessWidget {
   const _Card({required this.children});
   final List<Widget> children;
@@ -211,7 +367,7 @@ class _Card extends StatelessWidget {
     return Container(
       decoration: BoxDecoration(
         color: c.surface,
-        borderRadius: BorderRadius.circular(22),
+        borderRadius: BorderRadius.circular(24),
         border: Border.all(color: c.hair),
       ),
       child: Column(
@@ -220,7 +376,7 @@ class _Card extends StatelessWidget {
             if (i > 0)
               Padding(
                 padding: const EdgeInsets.only(left: 56),
-                child: Divider(color: c.hair),
+                child: Divider(color: c.line),
               ),
             children[i],
           ],

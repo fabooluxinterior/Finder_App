@@ -153,7 +153,7 @@ class _ReConsentScreenState extends ConsumerState<ReConsentScreen> {
               const SizedBox(height: 18),
               Text('We’ve updated our policies', style: t.headlineSmall),
               const SizedBox(height: 8),
-              Text('Please review the changes to keep using Finder.', style: t.bodyMedium?.copyWith(color: c.muted)),
+              Text('Please review the changes to keep using Vouby.', style: t.bodyMedium?.copyWith(color: c.muted)),
               const SizedBox(height: 20),
               for (final p in Policy.values)
                 Pressable(

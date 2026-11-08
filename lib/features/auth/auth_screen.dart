@@ -1,10 +1,14 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/phosphor.dart';
 
+import '../../core/brand.dart';
 import '../../core/config.dart';
+import '../../core/illustrations.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/backend.dart';
@@ -25,7 +29,7 @@ class _AuthScreenState extends ConsumerState<AuthScreen> with SingleTickerProvid
   bool _codeSent = false;
   bool _busy = false;
   bool _agreed = SignupConsent.accepted;
-  late final _intro = AnimationController(vsync: this, duration: const Duration(milliseconds: 700))..forward();
+  late final _intro = AnimationController(vsync: this, duration: const Duration(milliseconds: 1100))..forward();
 
   String get _normalizedTarget {
     final t = _target.text.trim();
@@ -117,18 +121,44 @@ class _AuthScreenState extends ConsumerState<AuthScreen> with SingleTickerProvid
                           child: keyboardOpen
                               ? const SizedBox(width: double.infinity)
                               : Padding(
-                                  padding: const EdgeInsets.only(top: 24, bottom: 32),
-                                  child: AppConfig.isDemo ? _PortraitFan(animation: _intro) : _AbstractFan(animation: _intro),
+                                  padding: const EdgeInsets.only(top: 28, bottom: 36),
+                                  child: _CardFan(animation: _intro),
                                 ),
                         ),
-                        const Wordmark(size: 44),
-                        const SizedBox(height: 14),
-                        Text(
-                          'Real people, real profiles. Chat when you both say yes.',
-                          style: t.headlineSmall?.copyWith(fontWeight: FontWeight.w500),
+                        FittedBox(
+                          fit: BoxFit.scaleDown,
+                          alignment: Alignment.centerLeft,
+                          child: VoubyWordmark(size: keyboardOpen ? 36 : 56),
                         ),
-                        const SizedBox(height: 10),
-                        Text('Kochi · Kozhikode · Thiruvananthapuram', style: t.bodyMedium?.copyWith(color: c.muted)),
+                        // Folds away with the keyboard so the form stays in view.
+                        AnimatedSize(
+                          duration: Motion.of(context, Motion.medium),
+                          curve: Motion.easeOut,
+                          alignment: Alignment.topLeft,
+                          child: keyboardOpen
+                              ? const SizedBox(width: double.infinity)
+                              : Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    const SizedBox(height: 24),
+                                    Text(
+                                      'Real people, real profiles. Chat when you both say hi.',
+                                      style: TextStyle(
+                                        fontSize: 30,
+                                        height: 36 / 30,
+                                        fontWeight: FontWeight.w600,
+                                        letterSpacing: -0.6,
+                                        color: c.ink,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 12),
+                                    Text(
+                                      'Kochi · Kozhikode · Thiruvananthapuram',
+                                      style: TextStyle(fontSize: 15, height: 22 / 15, color: c.muted),
+                                    ),
+                                  ],
+                                ),
+                        ),
                         const SizedBox(height: 24),
                       ],
                     ),
@@ -149,7 +179,8 @@ class _AuthScreenState extends ConsumerState<AuthScreen> with SingleTickerProvid
                         const SizedBox(height: 12),
                         PillButton(
                           label: 'Continue',
-                          trailingIcon: PhosphorIconsBold.arrowRight,
+                          height: 58,
+                          trailing: VIcon(VIcons.arrowRight, size: 20, color: c.paper),
                           busy: _busy,
                           // OTP can't be requested until the user is 18+ and has agreed.
                           onTap: _targetValid && _agreed ? _sendCode : null,
@@ -161,7 +192,7 @@ class _AuthScreenState extends ConsumerState<AuthScreen> with SingleTickerProvid
                           }),
                           child: Text(
                             _channel == OtpChannel.phone ? 'Use email instead' : 'Use phone instead',
-                            style: t.labelMedium?.copyWith(color: c.ink2),
+                            style: TextStyle(fontSize: 15, fontWeight: FontWeight.w500, color: c.ink2),
                           ),
                         ),
                       ] else ...[
@@ -184,7 +215,7 @@ class _AuthScreenState extends ConsumerState<AuthScreen> with SingleTickerProvid
                           onSubmitted: (_) => _verify(),
                         ),
                         const SizedBox(height: 10),
-                        PillButton(label: 'Verify', busy: _busy, onTap: _code.text.length == 6 ? _verify : null),
+                        PillButton(label: 'Verify', height: 58, busy: _busy, onTap: _code.text.length == 6 ? _verify : null),
                         TextButton(
                           onPressed: _busy
                               ? null
@@ -221,86 +252,6 @@ class _AuthScreenState extends ConsumerState<AuthScreen> with SingleTickerProvid
   }
 }
 
-/// Production welcome art: no photos of people, just the card motif.
-class _AbstractFan extends StatelessWidget {
-  const _AbstractFan({required this.animation});
-  final Animation<double> animation;
-
-  @override
-  Widget build(BuildContext context) {
-    final c = context.fc;
-    final tones = [c.goldSoft, c.accentSoft, c.surface, c.hair];
-    final icons = [
-      PhosphorIconsFill.heart,
-      PhosphorIconsFill.chatCircle,
-      PhosphorIconsFill.lockSimple,
-      PhosphorIconsFill.sealCheck,
-    ];
-    return SizedBox(
-      height: 112,
-      child: Stack(
-        clipBehavior: Clip.none,
-        children: [
-          for (var i = 0; i < 4; i++)
-            AnimatedBuilder(
-              animation: animation,
-              builder: (context, child) {
-                final p = Motion.easeOut.transform(((animation.value - i * 0.06) / (1 - i * 0.06)).clamp(0.0, 1.0));
-                return Positioned(
-                  left: i * 58.0,
-                  top: [6.0, -4.0, 2.0, 10.0][i] + (1 - p) * 24,
-                  child: Opacity(
-                    opacity: p,
-                    child: Transform.rotate(angle: [-8, -2, 5, 10][i] * 3.14159 / 180, child: child),
-                  ),
-                );
-              },
-              child: Container(
-                width: 76,
-                height: 96,
-                decoration: BoxDecoration(
-                  color: tones[i],
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: c.paper, width: 3),
-                  boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.10), blurRadius: 18, offset: const Offset(0, 8))],
-                ),
-                child: Icon(icons[i], color: c.ink, size: 26),
-              ),
-            ),
-        ],
-      ),
-    );
-  }
-}
-
-class Wordmark extends StatelessWidget {
-  const Wordmark({super.key, this.size = 22});
-  final double size;
-
-  @override
-  Widget build(BuildContext context) {
-    final c = context.fc;
-    return Text.rich(
-      TextSpan(
-        children: [
-          const TextSpan(text: 'finder'),
-          TextSpan(
-            text: '.',
-            style: TextStyle(color: c.accent),
-          ),
-        ],
-      ),
-      style: TextStyle(
-        fontFamily: 'Geist',
-        fontSize: size,
-        fontWeight: FontWeight.w700,
-        letterSpacing: -size * 0.04,
-        color: c.ink,
-      ),
-    );
-  }
-}
-
 class _TargetField extends StatelessWidget {
   const _TargetField({required this.channel, required this.controller, required this.onChanged, required this.onSubmitted});
   final OtpChannel channel;
@@ -311,24 +262,27 @@ class _TargetField extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final c = context.fc;
-    final t = Theme.of(context).textTheme;
     final phone = channel == OtpChannel.phone;
     return TextField(
       controller: controller,
       keyboardType: phone ? TextInputType.phone : TextInputType.emailAddress,
       autofillHints: [phone ? AutofillHints.telephoneNumberNational : AutofillHints.email],
-      style: t.titleMedium?.copyWith(fontWeight: FontWeight.w500),
+      style: TextStyle(fontSize: 18, fontWeight: FontWeight.w500, color: c.ink),
       decoration: InputDecoration(
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 19),
         hintText: phone ? 'Mobile number' : 'Email',
         prefixIcon: phone
             ? Padding(
-                padding: const EdgeInsets.only(left: 18, right: 10),
+                padding: const EdgeInsets.only(left: 20, right: 4),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Text('+91', style: t.titleMedium),
-                    const SizedBox(width: 12),
-                    Container(width: 1, height: 22, color: c.hair),
+                    Text(
+                      '+91',
+                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600, color: c.ink),
+                    ),
+                    const SizedBox(width: 16),
+                    Container(width: 1, height: 28, color: c.hair),
                   ],
                 ),
               )
@@ -342,60 +296,118 @@ class _TargetField extends StatelessWidget {
   }
 }
 
-/// Four tilted portraits that slide up and settle once, on first view.
-class _PortraitFan extends StatelessWidget {
-  const _PortraitFan({required this.animation});
+/// Four tilted cards dealt in from the centre, then floating gently.
+/// Demo builds show the bundled demo portraits; release builds show the
+/// illustrated people (no real person is depicted).
+class _CardFan extends StatefulWidget {
+  const _CardFan({required this.animation});
   final Animation<double> animation;
 
-  static const _cards = [
-    ('assets/demo/p_meera.jpg', -8.0, 6.0),
-    ('assets/demo/p_arjun.jpg', -2.0, -4.0),
-    ('assets/demo/p_diya.jpg', 5.0, 2.0),
-    ('assets/demo/p_kiran.jpg', 10.0, 10.0),
+  @override
+  State<_CardFan> createState() => _CardFanState();
+}
+
+class _CardFanState extends State<_CardFan> with SingleTickerProviderStateMixin {
+  static const _photos = [
+    'assets/demo/p_meera.jpg',
+    'assets/demo/p_arjun.jpg',
+    'assets/demo/p_diya.jpg',
+    'assets/demo/p_kiran.jpg',
   ];
+  // left, top, rotation (deg), deal-in offset x
+  static const _layout = [
+    (0.0, 18.0, -8.0, 130.0),
+    (86.0, 2.0, -3.0, 44.0),
+    (172.0, 8.0, 3.0, -42.0),
+    (254.0, 22.0, 9.0, -126.0),
+  ];
+  late final _float = AnimationController(vsync: this, duration: const Duration(milliseconds: 4200));
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final reduce = MediaQuery.maybeDisableAnimationsOf(context) ?? false;
+    if (reduce) {
+      _float.stop();
+    } else if (!_float.isAnimating) {
+      _float.repeat();
+    }
+  }
+
+  @override
+  void dispose() {
+    _float.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
     final c = context.fc;
     final reduce = MediaQuery.maybeDisableAnimationsOf(context) ?? false;
-    return SizedBox(
-      height: 112,
-      child: Stack(
-        clipBehavior: Clip.none,
-        children: [
-          for (var i = 0; i < _cards.length; i++)
-            AnimatedBuilder(
-              animation: animation,
-              builder: (context, child) {
-                final start = i * 0.06;
-                final p = reduce ? 1.0 : Motion.easeOut.transform(((animation.value - start) / (1 - start)).clamp(0.0, 1.0));
-                return Positioned(
-                  left: i * 58.0,
-                  top: _cards[i].$3 + (1 - p) * 24,
-                  child: Opacity(
-                    opacity: p,
-                    child: Transform.rotate(angle: _cards[i].$2 * 3.14159 / 180, child: child),
-                  ),
-                );
-              },
-              child: Container(
-                width: 76,
-                height: 96,
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: c.paper, width: 3),
-                  boxShadow: [
-                    BoxShadow(color: Colors.black.withValues(alpha: 0.14), blurRadius: 24, offset: const Offset(0, 10)),
-                  ],
-                ),
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(17),
-                  child: Image.asset(_cards[i].$1, fit: BoxFit.cover, alignment: const Alignment(0, 0.4)),
-                ),
+    return ExcludeSemantics(
+      child: LayoutBuilder(
+        builder: (context, box) {
+          // Fits 362 px of design width into whatever we have.
+          final scale = (box.maxWidth / 362).clamp(0.6, 1.2);
+          return SizedBox(
+            height: 196 * scale,
+            child: AnimatedBuilder(
+              animation: Listenable.merge([widget.animation, _float]),
+              builder: (context, _) => Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  for (var i = 0; i < 4; i++)
+                    Builder(
+                      builder: (_) {
+                        final (left, top, deg, dx) = _layout[i];
+                        final start = 0.05 + i * 0.12;
+                        final p = reduce
+                            ? 1.0
+                            : const Cubic(
+                                0.2,
+                                0.9,
+                                0.25,
+                                1.15,
+                              ).transform(((widget.animation.value - start) / 0.6).clamp(0.0, 1.0));
+                        final bob = reduce ? 0.0 : math.sin((_float.value + i * 0.12) * 2 * math.pi) * 3.5 - 3.5;
+                        return Positioned(
+                          left: left * scale,
+                          top: top * scale,
+                          child: Transform.translate(
+                            offset: Offset(dx * (1 - p) * scale, 40 * (1 - p) * scale + bob),
+                            child: Transform.rotate(
+                              angle: deg * (2 * p - 1).clamp(-1.0, 1.0) * math.pi / 180,
+                              child: Opacity(
+                                opacity: p.clamp(0.0, 1.0),
+                                child: Transform.scale(scale: 0.86 + 0.14 * p, child: _card(c, i, scale)),
+                              ),
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                ],
               ),
             ),
-        ],
+          );
+        },
       ),
     );
   }
+
+  Widget _card(FinderColors c, int i, double scale) => Container(
+    width: 108 * scale,
+    height: 140 * scale,
+    decoration: BoxDecoration(
+      borderRadius: BorderRadius.circular(24 * scale),
+      border: Border.all(color: c.paper, width: 3),
+      boxShadow: const [BoxShadow(color: Color(0x73000000), blurRadius: 24, offset: Offset(0, 10))],
+    ),
+    child: ClipRRect(
+      borderRadius: BorderRadius.circular(21 * scale),
+      child: AppConfig.isDemo
+          ? Image.asset(_photos[i], fit: BoxFit.cover, alignment: const Alignment(0, -0.2), cacheWidth: 240)
+          : IllustratedPerson(index: i),
+    ),
+  );
 }

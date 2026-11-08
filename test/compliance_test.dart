@@ -34,11 +34,17 @@ void main() {
       final b = DemoBackend();
       await b.verifyOtp(OtpChannel.phone, '+919876543210', '123456');
       final draft = ProfileDraft(fullName: 'Asha', city: 'Kochi', bio: '', interests: const []);
-      await expectLater(b.saveProfile(draft), throwsA(isA<AppException>().having((e) => e.code, 'code', AppErrorCode.dobRequired)));
+      await expectLater(
+        b.saveProfile(draft),
+        throwsA(isA<AppException>().having((e) => e.code, 'code', AppErrorCode.dobRequired)),
+      );
       final minor = DateTime.now().subtract(const Duration(days: 365 * 17));
       await expectLater(b.setDob(minor), throwsA(isA<AppException>().having((e) => e.code, 'code', AppErrorCode.underage)));
       expect(await b.setDob(DateTime(1999, 5, 20)), greaterThanOrEqualTo(26));
-      await expectLater(b.setDob(DateTime(1990, 1, 1)), throwsA(isA<AppException>().having((e) => e.code, 'code', AppErrorCode.dobLocked)));
+      await expectLater(
+        b.setDob(DateTime(1990, 1, 1)),
+        throwsA(isA<AppException>().having((e) => e.code, 'code', AppErrorCode.dobLocked)),
+      );
       await b.saveProfile(draft);
       expect((await b.myProfile())!.age, ageOn(DateTime(1999, 5, 20)));
     });
@@ -85,10 +91,15 @@ void main() {
 
     testWidgets('OTP button stays disabled until the 18+ / policies box is ticked', (tester) async {
       SignupConsent.accepted = false;
-      await tester.pumpWidget(ProviderScope(
-        overrides: [backendProvider.overrideWithValue(DemoBackend())],
-        child: MaterialApp(theme: buildTheme(Brightness.light), home: const AuthScreen()),
-      ));
+      tester.view.physicalSize = const Size(1080, 2340);
+      tester.view.devicePixelRatio = 2.625;
+      addTearDown(tester.view.reset);
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [backendProvider.overrideWithValue(DemoBackend())],
+          child: MaterialApp(theme: buildTheme(Brightness.light), home: const AuthScreen()),
+        ),
+      );
       await tester.pump(const Duration(seconds: 1));
       await tester.enterText(find.byType(TextField), '9876543210');
       await tester.pump();
@@ -124,10 +135,12 @@ void main() {
       tester.view.viewInsets = FakeViewPadding(bottom: keyboard * 2.625);
       addTearDown(tester.view.reset);
       final backend = DemoBackend();
-      await tester.pumpWidget(ProviderScope(
-        overrides: [backendProvider.overrideWithValue(backend)],
-        child: MaterialApp(theme: buildTheme(Brightness.light), home: const AuthScreen()),
-      ));
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [backendProvider.overrideWithValue(backend)],
+          child: MaterialApp(theme: buildTheme(Brightness.light), home: const AuthScreen()),
+        ),
+      );
       await tester.pump(const Duration(seconds: 1));
       return backend;
     }

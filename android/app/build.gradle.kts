@@ -37,11 +37,11 @@ android {
             dimension = "mode"
             applicationIdSuffix = ".demo"
             versionNameSuffix = "-demo"
-            manifestPlaceholders["appName"] = "Finder Demo"
+            manifestPlaceholders["appName"] = "Vouby Demo"
         }
         create("prod") {
             dimension = "mode"
-            manifestPlaceholders["appName"] = "Finder"
+            manifestPlaceholders["appName"] = "Vouby"
         }
     }
 

@@ -93,7 +93,7 @@ class _VoiceRecorderBarState extends State<VoiceRecorderBar> {
                     ),
                   ),
                   const SizedBox(width: 8),
-                  Text('${remaining}s', style: TextStyle(color: Colors.grey.shade600, fontSize: 12)),
+                  Text('${remaining}s', style: TextStyle(color: context.fc.muted, fontSize: 12)),
                 ],
               ),
             ),

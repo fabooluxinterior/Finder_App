@@ -20,7 +20,13 @@ void main() {
   });
 
   test('leaves ordinary text alone', () {
-    for (final s in ['I am 24, love biryani at 8pm', 'I love Instagram photography', 'Snapchat filters are fun', 'Kochi → Munnar trip in 2025!', 'email me? no.']) {
+    for (final s in [
+      'I am 24, love biryani at 8pm',
+      'I love Instagram photography',
+      'Snapchat filters are fun',
+      'Kochi → Munnar trip in 2025!',
+      'email me? no.',
+    ]) {
       expect(ContactSanitizer.containsContactInfo(s), isFalse, reason: s);
       expect(ContactSanitizer.sanitize(s), s);
     }

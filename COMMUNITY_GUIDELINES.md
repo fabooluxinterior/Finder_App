@@ -1,12 +1,12 @@
-# Finder Community Guidelines
+# Vouby Community Guidelines
 
 **Version 2026-11-10.** Draft: have this reviewed by a lawyer before publishing.
 
-Finder is a private place to meet people in Kerala. These guidelines keep it respectful and safe. They're part of our [Terms of Service](TERMS_OF_SERVICE.md). Breaking them can get content removed or your account banned.
+Vouby is a private place to meet people in Kerala. These guidelines keep it respectful and safe. They're part of our [Terms of Service](TERMS_OF_SERVICE.md). Breaking them can get content removed or your account banned.
 
 ## Be 18+ and be yourself
 
-- **Finder is for adults only.** If you think someone is under 18, report them with **"Appears under 18"**. We hide that profile from Discover straight away while we review it.
+- **Vouby is for adults only.** If you think someone is under 18, report them with **"Appears under 18"**. We hide that profile from Discover straight away while we review it.
 - Use your real first name and real, recent photos of yourself.
 - **No fake profiles, impersonation, catfishing or duplicate accounts.** Selfie verification exists so others can trust that you're you.
 

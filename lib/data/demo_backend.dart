@@ -379,7 +379,7 @@ class DemoBackend implements FinderBackend {
     final age = _ageFrom(dob);
     if (dob.isAfter(DateTime.now()) || age > 100) throw const AppException(AppErrorCode.unknown, 'Enter a valid date of birth.');
     if (age < AppConfig.minimumAge) {
-      throw const AppException(AppErrorCode.underage, 'Finder is only for people aged 18 and over.');
+      throw const AppException(AppErrorCode.underage, 'Vouby is only for people aged 18 and over.');
     }
     _dob = dob;
     return age;
@@ -476,7 +476,7 @@ class DemoBackend implements FinderBackend {
     return const TotpEnrollment(
       factorId: 'demo-factor',
       secret: 'DEMODEMODEMODEMO',
-      uri: 'otpauth://totp/Finder:demo?secret=DEMODEMODEMODEMO&issuer=Finder',
+      uri: 'otpauth://totp/Vouby:demo?secret=DEMODEMODEMODEMO&issuer=Vouby',
     );
   }
 

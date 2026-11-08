@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+
+import '../../core/theme.dart';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/widgets.dart';
@@ -19,7 +22,7 @@ Future<bool> confirmUnmatch(BuildContext context, WidgetRef ref, PublicProfile p
     builder: (c) => AlertDialog(
       title: Text('Unmatch ${peer.firstName}?'),
       content: const Text(
-        'You’ll both lose the chat. The conversation is deleted from this device and from Finder’s servers. '
+        'You’ll both lose the chat. The conversation is deleted from this device and from Vouby’s servers. '
         'Copies already on their device can’t be removed by us.',
       ),
       actions: [
@@ -47,7 +50,7 @@ Future<bool> confirmBlock(BuildContext context, WidgetRef ref, PublicProfile pee
       title: Text('Block ${peer.firstName}?'),
       content: const Text(
         'They won’t be able to see your profile, request you again, or send you messages. '
-        'Your chat is deleted from this device and from Finder’s servers.',
+        'Your chat is deleted from this device and from Vouby’s servers.',
       ),
       actions: [
         TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Cancel')),
@@ -138,7 +141,7 @@ class _ReportSheetState extends ConsumerState<_ReportSheet> {
           children: [
             Text('Report ${widget.peer.firstName}', style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
             const SizedBox(height: 4),
-            Text('They won’t know you reported them.', style: TextStyle(color: Colors.grey.shade600)),
+            Text('They won’t know you reported them.', style: TextStyle(color: context.fc.muted)),
             const SizedBox(height: 12),
             RadioGroup<ReportReason>(
               groupValue: _reason,
@@ -165,7 +168,7 @@ class _ReportSheetState extends ConsumerState<_ReportSheet> {
                 subtitle: const Text(
                   'Your chat is end-to-end encrypted, so moderators can’t see it unless you choose to share it. '
                   'If you tick this, these messages are decrypted on your phone and sent with your report. '
-                  'Only Finder’s safety team can read them, every access is logged, and they’re deleted 90 days after the report is closed.',
+                  'Only Vouby’s safety team can read them, every access is logged, and they’re deleted 90 days after the report is closed.',
                 ),
               ),
             ],

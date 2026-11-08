@@ -36,19 +36,27 @@ class FinderColors extends ThemeExtension<FinderColors> {
     ok: Color(0xFF1F9D63),
   );
 
+  /// Vouby: near-black ground so the people carry the colour; orange marks
+  /// everything you can act on.
   static const dark = FinderColors(
     paper: Color(0xFF0B0B0C),
     surface: Color(0xFF161618),
-    ink: Color(0xFFF5F5F4),
-    ink2: Color(0xFFB4B4BA),
-    muted: Color(0xFF77777F),
-    hair: Color(0x14FFFFFF),
+    ink: Color(0xFFF5F5F5),
+    ink2: Color(0xFFD4D4D8),
+    muted: Color(0xFF8A8A93),
+    hair: Color(0xFF28282A),
     accent: Color(0xFFFF5A3D),
     accentSoft: Color(0xFF2A1510),
-    gold: Color(0xFFCDAA6E),
+    gold: Color(0xFFE2B66A),
     goldSoft: Color(0xFF221D14),
-    ok: Color(0xFF34C17E),
+    ok: Color(0xFF22C79A),
   );
+
+  /// Dividers between rows and above the tab bar (quieter than [hair]).
+  Color get line => const Color(0xFF1C1C1F);
+
+  /// Secondary copy on surfaces.
+  Color get ink3 => const Color(0xFFA1A1AA);
 
   @override
   FinderColors copyWith() => this;
@@ -118,7 +126,7 @@ TextTheme _type(Color ink, Color ink2) {
   );
   return TextTheme(
     displaySmall: s(38, FontWeight.w600, -0.035, 1.05),
-    headlineMedium: s(30, FontWeight.w600, -0.035, 1.1),
+    headlineMedium: s(34, FontWeight.w700, -0.03, 40 / 34),
     headlineSmall: s(26, FontWeight.w600, -0.03, 1.15),
     titleLarge: s(20, FontWeight.w600, -0.02, 1.2),
     titleMedium: s(16, FontWeight.w600, -0.01, 1.3),
@@ -171,7 +179,7 @@ ThemeData buildTheme(Brightness brightness) {
       systemOverlayStyle: brightness == Brightness.light ? SystemUiOverlayStyle.dark : SystemUiOverlayStyle.light,
       titleTextStyle: text.headlineSmall,
     ),
-    dividerTheme: DividerThemeData(color: c.hair, thickness: 1, space: 1),
+    dividerTheme: DividerThemeData(color: c.line, thickness: 1, space: 1),
     listTileTheme: ListTileThemeData(
       iconColor: c.ink2,
       titleTextStyle: text.titleMedium,
@@ -184,21 +192,21 @@ ThemeData buildTheme(Brightness brightness) {
       labelStyle: text.bodyMedium?.copyWith(color: c.muted),
       contentPadding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
       border: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(18),
+        borderRadius: BorderRadius.circular(22),
         borderSide: BorderSide(color: c.hair),
       ),
       enabledBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(18),
+        borderRadius: BorderRadius.circular(22),
         borderSide: BorderSide(color: c.hair),
       ),
       focusedBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(18),
-        borderSide: BorderSide(color: c.ink, width: 1.2),
+        borderRadius: BorderRadius.circular(22),
+        borderSide: BorderSide(color: c.ink3, width: 1.2),
       ),
     ),
     filledButtonTheme: FilledButtonThemeData(
       style: FilledButton.styleFrom(
-        backgroundColor: c.ink,
+        backgroundColor: c.accent,
         foregroundColor: c.paper,
         disabledBackgroundColor: c.hair,
         minimumSize: const Size.fromHeight(54),
@@ -222,7 +230,7 @@ ThemeData buildTheme(Brightness brightness) {
     ),
     chipTheme: ChipThemeData(
       backgroundColor: c.surface,
-      selectedColor: c.ink,
+      selectedColor: c.accent,
       side: BorderSide(color: c.hair),
       shape: const StadiumBorder(),
       labelStyle: text.labelMedium,
@@ -230,15 +238,18 @@ ThemeData buildTheme(Brightness brightness) {
       checkmarkColor: c.paper,
     ),
     switchTheme: SwitchThemeData(
-      thumbColor: WidgetStateProperty.resolveWith((s) => s.contains(WidgetState.selected) ? c.paper : c.surface),
-      trackColor: WidgetStateProperty.resolveWith((s) => s.contains(WidgetState.selected) ? c.ink : c.hair),
+      thumbColor: WidgetStateProperty.resolveWith((s) => s.contains(WidgetState.selected) ? c.paper : c.muted),
+      trackColor: WidgetStateProperty.resolveWith((s) => s.contains(WidgetState.selected) ? c.accent : c.hair),
       trackOutlineColor: WidgetStateProperty.all(Colors.transparent),
     ),
     snackBarTheme: SnackBarThemeData(
       behavior: SnackBarBehavior.floating,
-      backgroundColor: c.ink,
-      contentTextStyle: text.bodyMedium?.copyWith(color: c.paper),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      backgroundColor: c.surface,
+      contentTextStyle: text.bodyMedium?.copyWith(color: c.ink),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(18),
+        side: BorderSide(color: c.hair),
+      ),
       elevation: 0,
     ),
     bottomSheetTheme: BottomSheetThemeData(
@@ -252,18 +263,18 @@ ThemeData buildTheme(Brightness brightness) {
       titleTextStyle: text.titleLarge,
       contentTextStyle: text.bodyMedium,
     ),
-    progressIndicatorTheme: ProgressIndicatorThemeData(color: c.ink),
+    progressIndicatorTheme: ProgressIndicatorThemeData(color: c.accent),
     datePickerTheme: DatePickerThemeData(
       backgroundColor: c.surface,
       surfaceTintColor: Colors.transparent,
       headerForegroundColor: c.ink,
       dividerColor: c.hair,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
-      todayBorder: BorderSide(color: c.ink),
+      todayBorder: BorderSide(color: c.accent),
       dayForegroundColor: WidgetStateProperty.resolveWith((s) => s.contains(WidgetState.selected) ? c.paper : c.ink),
-      dayBackgroundColor: WidgetStateProperty.resolveWith((s) => s.contains(WidgetState.selected) ? c.ink : null),
+      dayBackgroundColor: WidgetStateProperty.resolveWith((s) => s.contains(WidgetState.selected) ? c.accent : null),
       yearForegroundColor: WidgetStateProperty.resolveWith((s) => s.contains(WidgetState.selected) ? c.paper : c.ink),
-      yearBackgroundColor: WidgetStateProperty.resolveWith((s) => s.contains(WidgetState.selected) ? c.ink : null),
+      yearBackgroundColor: WidgetStateProperty.resolveWith((s) => s.contains(WidgetState.selected) ? c.accent : null),
       cancelButtonStyle: TextButton.styleFrom(foregroundColor: c.ink2),
       confirmButtonStyle: TextButton.styleFrom(foregroundColor: c.ink),
     ),

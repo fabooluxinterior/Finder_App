@@ -44,7 +44,7 @@ Deno.serve((req) =>
     const verdict = await moderate(clean.webp);
     if (verdict.status === "rejected") {
       await securityEvent(user.id, "upload_blocked_by_moderation", "warning", {});
-      throw new HttpError(422, "rejected", "This photo isn't allowed on Finder.");
+      throw new HttpError(422, "rejected", "This photo isn't allowed on Vouby.");
     }
 
     const mediaId = crypto.randomUUID();

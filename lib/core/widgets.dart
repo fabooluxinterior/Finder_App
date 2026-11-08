@@ -2,7 +2,7 @@ import 'dart:ui';
 
 import 'package:flutter/material.dart';
 
-import 'phosphor.dart';
+import 'brand.dart';
 
 import '../data/memory_images.dart';
 import 'feedback.dart';
@@ -197,9 +197,11 @@ class RoundButton extends StatelessWidget {
     this.background,
     this.glass = false,
     this.semanticLabel,
+    this.iconWidget,
   });
 
   final IconData icon;
+  final Widget? iconWidget;
   final VoidCallback? onTap;
   final double size;
   final double iconSize;
@@ -218,11 +220,10 @@ class RoundButton extends StatelessWidget {
         shape: BoxShape.circle,
         color: background ?? (glass ? Colors.white.withValues(alpha: 0.18) : c.surface),
         border: Border.all(color: glass ? Colors.white.withValues(alpha: 0.28) : c.hair),
-        boxShadow: glass
-            ? null
-            : [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 10, offset: const Offset(0, 2))],
       ),
-      child: Icon(icon, size: iconSize, color: color ?? (glass ? Colors.white : c.ink)),
+      child: Center(
+        child: iconWidget ?? Icon(icon, size: iconSize, color: color ?? (glass ? Colors.white : c.ink)),
+      ),
     );
     if (glass) {
       body = ClipOval(
@@ -233,13 +234,15 @@ class RoundButton extends StatelessWidget {
   }
 }
 
-/// Stadium button. [dark] = ink fill (primary); otherwise white with hairline.
+/// Stadium button. [dark] = the primary orange fill with dark text;
+/// otherwise surface with a hairline.
 class PillButton extends StatelessWidget {
   const PillButton({
     super.key,
     required this.label,
     this.icon,
     this.trailingIcon,
+    this.trailing,
     required this.onTap,
     this.dark = true,
     this.height = 54,
@@ -250,6 +253,7 @@ class PillButton extends StatelessWidget {
   final String label;
   final IconData? icon;
   final IconData? trailingIcon;
+  final Widget? trailing;
   final VoidCallback? onTap;
   final bool dark;
   final double height;
@@ -265,8 +269,17 @@ class PillButton extends StatelessWidget {
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
         if (icon != null) ...[Icon(icon, size: 19, color: fg), const SizedBox(width: 8)],
-        Text(label, style: Theme.of(context).textTheme.labelLarge?.copyWith(color: fg)),
-        if (trailingIcon != null) ...[const SizedBox(width: 8), Icon(trailingIcon, size: 17, color: fg)],
+        Text(
+          label,
+          style: Theme.of(context).textTheme.labelLarge?.copyWith(color: fg, fontSize: height >= 56 ? 18 : 16),
+        ),
+        if (trailing != null) ...[
+          const SizedBox(width: 12),
+          trailing!,
+        ] else if (trailingIcon != null) ...[
+          const SizedBox(width: 8),
+          Icon(trailingIcon, size: 17, color: fg),
+        ],
       ],
     );
     return Pressable(
@@ -274,18 +287,11 @@ class PillButton extends StatelessWidget {
       scale: 0.97,
       child: Container(
         height: height,
-        padding: EdgeInsets.symmetric(horizontal: expand ? 20 : 18),
+        padding: EdgeInsets.symmetric(horizontal: expand ? 20 : (height >= 56 ? 26 : 18)),
         decoration: BoxDecoration(
-          color: dark ? c.ink : c.surface,
+          color: dark ? c.accent : c.surface,
           borderRadius: BorderRadius.circular(999),
           border: dark ? null : Border.all(color: c.hair),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: dark ? 0.16 : 0.07),
-              blurRadius: dark ? 18 : 12,
-              offset: const Offset(0, 4),
-            ),
-          ],
         ),
         child: AnimatedSwitcher(
           duration: Motion.fast,
@@ -303,27 +309,33 @@ class PillButton extends StatelessWidget {
   }
 }
 
-/// Small gold "FAST-TRACK" tag.
+/// Gold "FAST-TRACK" tag.
 class FastTrackBadge extends StatelessWidget {
-  const FastTrackBadge({super.key, this.compact = false});
+  const FastTrackBadge({super.key, this.compact = false, this.large = false});
   final bool compact;
+  final bool large;
 
   @override
   Widget build(BuildContext context) {
     final c = context.fc;
     return Container(
-      height: 22,
-      padding: EdgeInsets.symmetric(horizontal: compact ? 6 : 8),
+      height: large ? 30 : 22,
+      padding: EdgeInsets.symmetric(horizontal: compact ? 6 : (large ? 12 : 8)),
       decoration: BoxDecoration(color: c.goldSoft, borderRadius: BorderRadius.circular(99)),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(PhosphorIconsFill.lightning, size: 11, color: c.gold),
+          BoltIcon(size: large ? 13 : 11, color: c.gold),
           if (!compact) ...[
-            const SizedBox(width: 3),
+            SizedBox(width: large ? 6 : 3),
             Text(
               'FAST-TRACK',
-              style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w600, letterSpacing: 0.4, color: c.gold),
+              style: TextStyle(
+                fontSize: large ? 13 : 10.5,
+                fontWeight: FontWeight.w600,
+                letterSpacing: large ? 0.8 : 0.4,
+                color: c.gold,
+              ),
             ),
           ],
         ],
@@ -337,8 +349,7 @@ class VerifiedBadge extends StatelessWidget {
   final double size;
 
   @override
-  Widget build(BuildContext context) =>
-      Icon(PhosphorIconsFill.sealCheck, size: size, color: const Color(0xFF2E7CF6), semanticLabel: 'Verified');
+  Widget build(BuildContext context) => VerifiedTick(size: size);
 }
 
 /// Small rounded label with an icon (city, distance, privacy…).
@@ -504,7 +515,7 @@ void showSnack(BuildContext context, String text, {IconData? icon}) {
         duration: const Duration(milliseconds: 2600),
         content: Row(
           children: [
-            if (icon != null) ...[Icon(icon, color: c.paper, size: 18), const SizedBox(width: 10)],
+            if (icon != null) ...[Icon(icon, color: c.accent, size: 18), const SizedBox(width: 10)],
             Expanded(child: Text(text)),
           ],
         ),

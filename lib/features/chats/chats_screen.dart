@@ -28,19 +28,20 @@ class ChatsScreen extends ConsumerWidget {
     final t = Theme.of(context).textTheme;
     final premium = isPremium(ref);
     final connections = ref.watch(connectionsProvider);
-    final bottomBar = 84 + MediaQuery.paddingOf(context).bottom;
+    // extendBody: the shell already adds the tab bar to the bottom padding.
+    final bottomBar = MediaQuery.paddingOf(context).bottom;
 
     return Scaffold(
       body: SafeArea(
         bottom: false,
         child: RefreshIndicator(
-          color: c.ink,
+          color: c.accent,
           onRefresh: () => ref.refresh(connectionsProvider.future),
           child: CustomScrollView(
             slivers: [
               SliverToBoxAdapter(
                 child: Padding(
-                  padding: const EdgeInsets.fromLTRB(20, 8, 20, 8),
+                  padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
                   child: Text('Chats', style: t.headlineMedium),
                 ),
               ),
@@ -95,14 +96,18 @@ class ChatsScreen extends ConsumerWidget {
                         ),
                       ]
                     : [
+                        if (list.any((x) => x.lastMessage == null))
+                          SliverToBoxAdapter(
+                            child: _NewConnections(
+                              list: list.where((x) => x.lastMessage == null).toList(),
+                              onOpen: (x) => _open(context, ref, x),
+                            ),
+                          ),
                         SliverPadding(
-                          padding: EdgeInsets.only(bottom: bottomBar + 8),
+                          padding: EdgeInsets.fromLTRB(12, 6, 12, bottomBar + 8),
                           sliver: SliverList.separated(
                             itemCount: list.length,
-                            separatorBuilder: (_, _) => Padding(
-                              padding: const EdgeInsets.only(left: 86),
-                              child: Divider(color: c.hair),
-                            ),
+                            separatorBuilder: (_, _) => Divider(color: c.line),
                             itemBuilder: (_, i) =>
                                 _ChatRow(connection: list[i], locked: !premium, onTap: () => _open(context, ref, list[i])),
                           ),
@@ -117,6 +122,72 @@ class ChatsScreen extends ConsumerWidget {
   }
 }
 
+/// People you're newly connected with and haven't talked to yet.
+class _NewConnections extends StatelessWidget {
+  const _NewConnections({required this.list, required this.onOpen});
+  final List<Connection> list;
+  final ValueChanged<Connection> onOpen;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.fc;
+    return Padding(
+      padding: const EdgeInsets.only(top: 12, bottom: 10),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20),
+            child: Text(
+              'New connections',
+              style: TextStyle(fontSize: 15, height: 20 / 15, fontWeight: FontWeight.w600, color: c.ink3),
+            ),
+          ),
+          const SizedBox(height: 12),
+          SizedBox(
+            height: 114,
+            child: ListView.separated(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              itemCount: list.length,
+              separatorBuilder: (_, _) => const SizedBox(width: 12),
+              itemBuilder: (_, i) {
+                final p = list[i].profile;
+                return Pressable(
+                  onTap: () => onOpen(list[i]),
+                  semanticLabel: 'Chat with ${p.firstName}',
+                  child: Column(
+                    children: [
+                      Container(
+                        width: 70,
+                        height: 88,
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(color: c.accent, width: 2),
+                        ),
+                        padding: const EdgeInsets.all(2),
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(16),
+                          child: ProfilePhoto(url: p.primaryPhoto, name: p.fullName, decodeWidth: 200),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        p.firstName,
+                        style: TextStyle(fontSize: 14, height: 18 / 14, fontWeight: FontWeight.w600, color: c.ink),
+                      ),
+                    ],
+                  ),
+                );
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _ChatRow extends StatelessWidget {
   const _ChatRow({required this.connection, required this.locked, required this.onTap});
   final Connection connection;
@@ -126,7 +197,6 @@ class _ChatRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final c = context.fc;
-    final t = Theme.of(context).textTheme;
     final p = connection.profile;
     final unread = connection.unread > 0;
     final preview = connection.lastMessage ?? 'You’re connected. Say hi.';
@@ -134,61 +204,59 @@ class _ChatRow extends StatelessWidget {
       scale: 0.99,
       haptic: false,
       onTap: onTap,
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
-        child: Row(
-          children: [
-            Avatar(url: p.primaryPhoto, name: p.fullName, size: 56),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Flexible(
-                        child: Text(p.firstName, maxLines: 1, overflow: TextOverflow.ellipsis, style: t.titleMedium),
-                      ),
-                      const SizedBox(width: 4),
-                      if (p.isVerified) const VerifiedBadge(size: 15),
-                      const Spacer(),
-                      Text(_when(connection.connectedAt), style: t.bodySmall?.copyWith(color: c.muted)),
-                    ],
-                  ),
-                  const SizedBox(height: 3),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          locked ? 'Unlock to read and reply' : preview,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: t.bodyMedium?.copyWith(
-                            color: unread && !locked ? c.ink : c.muted,
-                            fontWeight: unread && !locked ? FontWeight.w600 : FontWeight.w400,
-                          ),
-                        ),
-                      ),
-                      if (locked)
-                        Icon(PhosphorIconsFill.lockSimple, size: 15, color: c.muted)
-                      else if (unread)
-                        Container(
-                          constraints: const BoxConstraints(minWidth: 20),
-                          height: 20,
-                          padding: const EdgeInsets.symmetric(horizontal: 6),
-                          decoration: BoxDecoration(color: c.accent, borderRadius: BorderRadius.circular(99)),
-                          alignment: Alignment.center,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(minHeight: 76),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+          child: Row(
+            children: [
+              Avatar(url: p.primaryPhoto, name: p.fullName, size: 52),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Flexible(
                           child: Text(
-                            '${connection.unread}',
-                            style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w600),
+                            p.firstName,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(fontSize: 17, height: 22 / 17, fontWeight: FontWeight.w600, color: c.ink),
                           ),
                         ),
-                    ],
-                  ),
-                ],
+                        if (p.isVerified) ...[const SizedBox(width: 5), const VerifiedBadge(size: 15)],
+                        const Spacer(),
+                        Text(_when(connection.connectedAt), style: TextStyle(fontSize: 13, color: c.muted)),
+                      ],
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      locked ? 'Unlock with Fast-Track to read and reply' : preview,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(fontSize: 15, height: 21 / 15, color: unread && !locked ? c.ink : c.muted),
+                    ),
+                  ],
+                ),
               ),
-            ),
-          ],
+              if (locked) ...[
+                const SizedBox(width: 10),
+                Icon(PhosphorIconsFill.lockSimple, size: 15, color: c.muted),
+              ] else if (unread) ...[
+                const SizedBox(width: 10),
+                Semantics(
+                  label: '${connection.unread} unread',
+                  child: Container(
+                    width: 10,
+                    height: 10,
+                    decoration: BoxDecoration(color: c.accent, shape: BoxShape.circle),
+                  ),
+                ),
+              ],
+            ],
+          ),
         ),
       ),
     );

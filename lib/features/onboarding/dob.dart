@@ -122,7 +122,7 @@ class _DobRequiredScreenState extends ConsumerState<DobRequiredScreen> {
               Text('Add your date of birth', style: t.headlineSmall),
               const SizedBox(height: 8),
               Text(
-                'Finder is for adults only. Other people see your age, never your date of birth. '
+                'Vouby is for adults only. Other people see your age, never your date of birth. '
                 'You can’t change it later, so please check it carefully.',
                 style: t.bodyMedium?.copyWith(color: c.muted),
               ),

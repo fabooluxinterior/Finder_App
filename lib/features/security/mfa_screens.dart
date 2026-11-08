@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+
+import '../../core/theme.dart';
+
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -160,7 +163,7 @@ class _MfaEnrollScreenState extends ConsumerState<MfaEnrollScreen> {
                   ),
                 ),
                 const SizedBox(height: 8),
-                Text('Account: Finder · Type: time-based', style: TextStyle(color: Colors.grey.shade600)),
+                Text('Account: Vouby · Type: time-based', style: TextStyle(color: context.fc.muted)),
                 const SizedBox(height: 20),
                 const Text('2. Enter the 6-digit code the app shows:'),
                 const SizedBox(height: 8),

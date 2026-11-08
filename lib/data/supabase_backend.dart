@@ -271,10 +271,7 @@ class SupabaseBackend implements FinderBackend {
         .from('uploads_quarantine')
         .uploadBinary(path, jpeg, fileOptions: const FileOptions(contentType: 'image/jpeg', upsert: false));
     try {
-      final res = await _db.functions.invoke(
-        'process-image',
-        body: {'path': path, 'kind': kind, 'request_id': ?requestId},
-      );
+      final res = await _db.functions.invoke('process-image', body: {'path': path, 'kind': kind, 'request_id': ?requestId});
       final status = (res.data as Map)['status'];
       return status == 'approved' ? ImageUploadStatus.approved : ImageUploadStatus.pending;
     } on FunctionException catch (e) {
@@ -686,7 +683,7 @@ class SupabaseBackend implements FinderBackend {
     for (final f in factors.all.where((f) => f.status == FactorStatus.unverified)) {
       await _db.auth.mfa.unenroll(f.id);
     }
-    final r = await _db.auth.mfa.enroll(factorType: FactorType.totp, issuer: 'Finder', friendlyName: 'Authenticator app');
+    final r = await _db.auth.mfa.enroll(factorType: FactorType.totp, issuer: 'Vouby', friendlyName: 'Authenticator app');
     return TotpEnrollment(factorId: r.id, secret: r.totp!.secret, uri: r.totp!.uri);
   });
 
@@ -821,7 +818,7 @@ class SupabaseBackend implements FinderBackend {
           AppErrorCode.deviceLimit,
           'You’re signed in on 5 devices. Remove one in Security settings.',
         ),
-        'UNDER_18' => const AppException(AppErrorCode.underage, 'Finder is only for people aged 18 and over.'),
+        'UNDER_18' => const AppException(AppErrorCode.underage, 'Vouby is only for people aged 18 and over.'),
         'DOB_LOCKED' => const AppException(AppErrorCode.dobLocked, 'Your date of birth can’t be changed.'),
         'DOB_REQUIRED' => const AppException(AppErrorCode.dobRequired, 'Add your date of birth first.'),
         'VERIFICATION_PENDING' => const AppException(AppErrorCode.verificationPending, 'Your verification is being reviewed.'),

@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/phosphor.dart';
 
+import '../../core/brand.dart';
 import '../../core/feedback.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
@@ -32,8 +33,16 @@ class _HomeShellState extends ConsumerState<HomeShell> {
       final now = next.value;
       if (before == null || now == null) return;
       final known = before.map((c) => c.profile.id).toSet();
-      for (final c in now.where((c) => !known.contains(c.profile.id) && !MatchScreen.celebrated.contains(c.profile.id))) {
-        showSnack(context, 'You and ${c.profile.firstName} are connected', icon: PhosphorIconsFill.heart);
+      final fresh = now.where((c) => !known.contains(c.profile.id) && !MatchScreen.celebrated.contains(c.profile.id)).toList();
+      if (fresh.length == 1) {
+        // Someone accepted a request you sent.
+        ref.read(myProfileProvider.future).then((me) {
+          if (context.mounted) showMatch(context, me: me, them: fresh.single.profile, acceptedByThem: true);
+        });
+      } else {
+        for (final c in fresh) {
+          showSnack(context, 'You and ${c.profile.firstName} are connected', icon: PhosphorIconsFill.heart);
+        }
       }
       final unreadBefore = before.fold<int>(0, (s, c) => s + c.unread);
       final unreadNow = now.fold<int>(0, (s, c) => s + c.unread);
@@ -62,30 +71,23 @@ class _TabBar extends StatelessWidget {
   final List<int> badges;
   final ValueChanged<int> onTap;
 
-  static const _items = [
-    ('Discover', PhosphorIconsRegular.cards, PhosphorIconsFill.cards),
-    ('Requests', PhosphorIconsRegular.heart, PhosphorIconsFill.heart),
-    ('Chats', PhosphorIconsRegular.chatCircle, PhosphorIconsFill.chatCircle),
-    ('You', PhosphorIconsRegular.user, PhosphorIconsFill.user),
-  ];
+  static const _labels = ['Discover', 'Requests', 'Chats', 'You'];
 
   @override
   Widget build(BuildContext context) {
     final c = context.fc;
     final bottom = MediaQuery.paddingOf(context).bottom;
-    // A live backdrop blur here re-blurs whatever scrolls underneath on every
-    // frame; a near-opaque bar looks the same and costs nothing.
     return RepaintBoundary(
       child: Container(
-        padding: EdgeInsets.fromLTRB(16, 8, 16, bottom > 0 ? bottom : 10),
+        padding: EdgeInsets.fromLTRB(6, 10, 6, bottom > 0 ? bottom : 14),
         decoration: BoxDecoration(
-          color: c.paper.withValues(alpha: 0.97),
-          border: Border(top: BorderSide(color: c.hair)),
+          color: c.paper,
+          border: Border(top: BorderSide(color: c.line)),
         ),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.spaceAround,
           children: [
-            for (var i = 0; i < _items.length; i++)
+            for (var i = 0; i < _labels.length; i++)
               Expanded(
                 child: GestureDetector(
                   behavior: HitTestBehavior.opaque,
@@ -96,27 +98,66 @@ class _TabBar extends StatelessWidget {
                   child: Semantics(
                     selected: i == index,
                     button: true,
-                    label: _items[i].$1,
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Badge(
-                          isLabelVisible: badges[i] > 0,
-                          label: Text('${badges[i]}', style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w600)),
-                          backgroundColor: c.accent,
-                          child: Icon(i == index ? _items[i].$3 : _items[i].$2, size: 26, color: i == index ? c.ink : c.muted),
-                        ),
-                        const SizedBox(height: 3),
-                        Text(
-                          _items[i].$1,
-                          style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w500, color: i == index ? c.ink : c.muted),
-                        ),
-                      ],
+                    label: badges[i] > 0 ? '${_labels[i]}, ${badges[i]} new' : _labels[i],
+                    excludeSemantics: true,
+                    child: SizedBox(
+                      height: 52,
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Stack(
+                            clipBehavior: Clip.none,
+                            children: [
+                              TabIcon(index: i, active: i == index, color: i == index ? c.ink : c.muted),
+                              if (badges[i] > 0) Positioned(top: -6, right: -14, child: _Badge(count: badges[i])),
+                            ],
+                          ),
+                          const SizedBox(height: 5),
+                          Text(
+                            _labels[i],
+                            style: TextStyle(
+                              fontSize: 13,
+                              height: 1,
+                              fontWeight: i == index ? FontWeight.w600 : FontWeight.w500,
+                              color: i == index ? c.ink : c.muted,
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
                 ),
               ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Orange count badge that springs in when it first appears.
+class _Badge extends StatelessWidget {
+  const _Badge({required this.count});
+  final int count;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.fc;
+    return TweenAnimationBuilder<double>(
+      key: ValueKey(count),
+      tween: Tween(begin: 0, end: 1),
+      duration: Motion.of(context, const Duration(milliseconds: 420)),
+      curve: Curves.easeOutBack,
+      builder: (context, v, child) => Transform.scale(scale: v, child: child),
+      child: Container(
+        constraints: const BoxConstraints(minWidth: 20),
+        height: 20,
+        padding: const EdgeInsets.symmetric(horizontal: 5),
+        alignment: Alignment.center,
+        decoration: BoxDecoration(color: c.accent, borderRadius: BorderRadius.circular(999)),
+        child: Text(
+          count > 99 ? '99+' : '$count',
+          style: TextStyle(fontSize: 12, height: 1, fontWeight: FontWeight.w700, color: c.paper),
         ),
       ),
     );

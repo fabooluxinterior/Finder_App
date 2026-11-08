@@ -8,6 +8,7 @@ import '../../core/phosphor.dart';
 
 import '../../core/config.dart';
 import '../../core/errors.dart';
+import '../../core/brand.dart';
 import '../../core/feedback.dart';
 import '../../core/sanitizer.dart';
 import '../../core/theme.dart';
@@ -137,7 +138,6 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   @override
   Widget build(BuildContext context) {
     final c = context.fc;
-    final t = Theme.of(context).textTheme;
     final backend = ref.watch(backendProvider);
     final me = backend.currentUserId;
     final messages = ref.watch(messagesProvider(widget.peer.id));
@@ -162,13 +162,13 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
             height: 64,
             padding: const EdgeInsets.symmetric(horizontal: 6),
             decoration: BoxDecoration(
-              border: Border(bottom: BorderSide(color: c.hair)),
+              border: Border(bottom: BorderSide(color: c.line)),
             ),
             child: Row(
               children: [
                 IconButton(
                   onPressed: () => Navigator.maybePop(context),
-                  icon: Icon(PhosphorIconsBold.caretLeft, color: c.ink),
+                  icon: VIcon(VIcons.back, size: 24, color: c.ink),
                   tooltip: 'Back',
                 ),
                 Expanded(
@@ -178,7 +178,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                     onTap: _openProfile,
                     child: Row(
                       children: [
-                        Avatar(url: widget.peer.primaryPhoto, name: widget.peer.fullName, size: 40),
+                        Avatar(url: widget.peer.primaryPhoto, name: widget.peer.fullName, size: 44),
                         const SizedBox(width: 10),
                         Expanded(
                           child: Column(
@@ -188,31 +188,19 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                               Row(
                                 children: [
                                   Flexible(
-                                    child: Text(widget.peer.firstName, overflow: TextOverflow.ellipsis, style: t.titleMedium),
-                                  ),
-                                  const SizedBox(width: 4),
-                                  if (widget.peer.isVerified) const VerifiedBadge(size: 15),
-                                ],
-                              ),
-                              Row(
-                                children: [
-                                  Icon(
-                                    backend.isEndToEndEncrypted ? PhosphorIconsFill.lockSimple : PhosphorIconsFill.lockSimpleOpen,
-                                    size: 12,
-                                    color: backend.isEndToEndEncrypted ? c.ok : c.gold,
-                                  ),
-                                  const SizedBox(width: 4),
-                                  Flexible(
                                     child: Text(
-                                      backend.isEndToEndEncrypted ? 'End-to-end encrypted' : 'Demo · not encrypted',
+                                      widget.peer.firstName,
                                       overflow: TextOverflow.ellipsis,
-                                      style: t.bodySmall?.copyWith(
-                                        fontSize: 12,
-                                        color: backend.isEndToEndEncrypted ? c.ok : c.gold,
-                                      ),
+                                      style: TextStyle(fontSize: 17, height: 22 / 17, fontWeight: FontWeight.w600, color: c.ink),
                                     ),
                                   ),
+                                  const SizedBox(width: 4),
+                                  if (widget.peer.isVerified) const VerifiedBadge(size: 16),
                                 ],
+                              ),
+                              Text(
+                                widget.peer.city,
+                                style: TextStyle(fontSize: 13, height: 18 / 13, color: c.muted),
                               ),
                             ],
                           ),
@@ -222,7 +210,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                   ),
                 ),
                 PopupMenuButton<String>(
-                  icon: Icon(PhosphorIconsBold.dotsThree, color: c.ink),
+                  icon: VIcon(VIcons.more, size: 24, color: c.ink),
                   color: c.surface,
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
                   onSelected: (v) async {
@@ -262,9 +250,10 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                   : ListView.builder(
                       controller: _scroll,
                       reverse: true,
-                      padding: const EdgeInsets.fromLTRB(14, 12, 14, 8),
-                      itemCount: list.length,
+                      padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+                      itemCount: list.length + 1,
                       itemBuilder: (_, i) {
+                        if (i == list.length) return _PrivacyPill(encrypted: backend.isEndToEndEncrypted);
                         final m = list[list.length - 1 - i];
                         final older = i + 1 < list.length ? list[list.length - 2 - i] : null;
                         final newer = i > 0 ? list[list.length - i] : null;
@@ -351,7 +340,7 @@ class _Composer extends StatelessWidget {
     final c = context.fc;
     final t = Theme.of(context).textTheme;
     return Padding(
-      padding: const EdgeInsets.fromLTRB(12, 8, 12, 10),
+      padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
       child: ValueListenableBuilder<TextEditingValue>(
         valueListenable: controller,
         builder: (_, value, _) {
@@ -371,18 +360,18 @@ class _Composer extends StatelessWidget {
                   decoration: InputDecoration(
                     hintText: 'Message',
                     counterText: '',
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 18, vertical: 13),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 15),
                     border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(24),
+                      borderRadius: BorderRadius.circular(26),
                       borderSide: BorderSide(color: c.hair),
                     ),
                     enabledBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(24),
+                      borderRadius: BorderRadius.circular(26),
                       borderSide: BorderSide(color: c.hair),
                     ),
                     focusedBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(24),
-                      borderSide: BorderSide(color: c.ink2),
+                      borderRadius: BorderRadius.circular(26),
+                      borderSide: BorderSide(color: c.ink3),
                     ),
                   ),
                   onSubmitted: (_) => onSend(),
@@ -393,9 +382,9 @@ class _Composer extends StatelessWidget {
                 onTap: sending ? null : (hasText ? onSend : onMic),
                 semanticLabel: hasText ? 'Send' : 'Record voice note',
                 child: Container(
-                  width: 48,
-                  height: 48,
-                  decoration: BoxDecoration(color: c.ink, shape: BoxShape.circle),
+                  width: 52,
+                  height: 52,
+                  decoration: BoxDecoration(color: c.accent, shape: BoxShape.circle),
                   // Mic ↔ send morph: scale + blur crossfade.
                   child: AnimatedSwitcher(
                     duration: Motion.of(context, Motion.fast),
@@ -422,12 +411,7 @@ class _Composer extends StatelessWidget {
                             height: 18,
                             child: CircularProgressIndicator(strokeWidth: 2, color: c.paper),
                           )
-                        : Icon(
-                            hasText ? PhosphorIconsFill.paperPlaneTilt : PhosphorIconsFill.microphone,
-                            key: ValueKey(hasText),
-                            size: 21,
-                            color: c.paper,
-                          ),
+                        : VIcon(hasText ? VIcons.send : VIcons.voice, key: ValueKey(hasText), size: 22, color: c.paper),
                   ),
                 ),
               ),
@@ -450,22 +434,22 @@ class _Bubble extends StatelessWidget {
     final c = context.fc;
     final time = DateFormat('h:mm a').format(message.createdAt);
     final fg = mine ? c.paper : c.ink;
-    final meta = mine ? c.paper.withValues(alpha: 0.55) : c.muted;
+    final meta = mine ? c.paper.withValues(alpha: 0.6) : c.muted;
     return Align(
       alignment: mine ? Alignment.centerRight : Alignment.centerLeft,
       child: ConstrainedBox(
         constraints: BoxConstraints(maxWidth: MediaQuery.sizeOf(context).width * 0.76),
         child: Container(
-          margin: EdgeInsets.only(top: 2, bottom: tail ? 8 : 2),
-          padding: const EdgeInsets.fromLTRB(14, 10, 12, 8),
+          margin: EdgeInsets.only(top: 3, bottom: tail ? 7 : 2),
+          padding: const EdgeInsets.fromLTRB(15, 11, 13, 8),
           decoration: BoxDecoration(
-            color: mine ? c.ink : c.surface,
+            color: mine ? c.accent : c.surface,
             border: mine ? null : Border.all(color: c.hair),
             borderRadius: BorderRadius.only(
-              topLeft: const Radius.circular(20),
-              topRight: const Radius.circular(20),
-              bottomLeft: Radius.circular(!mine && tail ? 6 : 20),
-              bottomRight: Radius.circular(mine && tail ? 6 : 20),
+              topLeft: const Radius.circular(22),
+              topRight: const Radius.circular(22),
+              bottomLeft: Radius.circular(!mine && tail ? 6 : 22),
+              bottomRight: Radius.circular(mine && tail ? 6 : 22),
             ),
           ),
           child: Column(
@@ -480,7 +464,7 @@ class _Bubble extends StatelessWidget {
                   widthFactor: 1,
                   child: Text(
                     message.content ?? '',
-                    style: TextStyle(fontFamily: 'Geist', color: fg, fontSize: 15.5, height: 1.35),
+                    style: TextStyle(fontFamily: 'Geist', color: fg, fontSize: 16, height: 22 / 16),
                   ),
                 ),
               const SizedBox(height: 2),
@@ -519,7 +503,42 @@ class _DayChip extends StatelessWidget {
         : DateFormat('d MMM yyyy').format(date);
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 12),
-      child: Text(label, style: Theme.of(context).textTheme.bodySmall?.copyWith(color: context.fc.muted)),
+      child: Text(
+        label,
+        style: TextStyle(fontSize: 12, height: 16 / 12, color: context.fc.muted),
+      ),
+    );
+  }
+}
+
+/// "End-to-end encrypted. Screenshots are off." — only claimed when the
+/// backend really encrypts (never in the demo).
+class _PrivacyPill extends StatelessWidget {
+  const _PrivacyPill({required this.encrypted});
+  final bool encrypted;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.fc;
+    return Center(
+      child: Container(
+        margin: const EdgeInsets.only(top: 4, bottom: 4),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+        decoration: BoxDecoration(color: c.surface, borderRadius: BorderRadius.circular(999)),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(encrypted ? PhosphorIconsFill.lockSimple : PhosphorIconsFill.lockSimpleOpen, size: 13, color: c.ink3),
+            const SizedBox(width: 8),
+            Flexible(
+              child: Text(
+                encrypted ? 'End-to-end encrypted. Screenshots are off.' : 'Demo chat, not encrypted. Screenshots are off.',
+                style: TextStyle(fontSize: 13, height: 18 / 13, color: c.ink3),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

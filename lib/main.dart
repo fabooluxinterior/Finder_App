@@ -65,19 +65,19 @@ class _NotConfiguredApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => const MaterialApp(
-        debugShowCheckedModeBanner: false,
-        home: Scaffold(
-          body: Center(
-            child: Padding(
-              padding: EdgeInsets.all(32),
-              child: Text(
-                'This build has no server configuration.\n\n'
-                'Build with --dart-define=SUPABASE_URL=… --dart-define=SUPABASE_ANON_KEY=…, '
-                'or use the demo: --flavor demo --dart-define=DEMO=true',
-                textAlign: TextAlign.center,
-              ),
-            ),
+    debugShowCheckedModeBanner: false,
+    home: Scaffold(
+      body: Center(
+        child: Padding(
+          padding: EdgeInsets.all(32),
+          child: Text(
+            'This build has no server configuration.\n\n'
+            'Build with --dart-define=SUPABASE_URL=… --dart-define=SUPABASE_ANON_KEY=…, '
+            'or use the demo: --flavor demo --dart-define=DEMO=true',
+            textAlign: TextAlign.center,
           ),
         ),
-      );
+      ),
+    ),
+  );
 }

@@ -1,5 +1,8 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+
+import '../../core/theme.dart';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
@@ -57,7 +60,7 @@ class SecurityCenterScreen extends ConsumerWidget {
             title: Text(backend.isEndToEndEncrypted ? 'Chats are end-to-end encrypted' : 'Demo mode: chats are not encrypted'),
             subtitle: Text(
               backend.isEndToEndEncrypted
-                  ? 'Messages and voice notes are encrypted on this device. Finder’s servers only store ciphertext they can’t read.'
+                  ? 'Messages and voice notes are encrypted on this device. Vouby’s servers only store ciphertext they can’t read.'
                   : 'The demo keeps sample messages in memory on this phone. The live app encrypts every chat end-to-end.',
             ),
           ),
@@ -230,7 +233,7 @@ class _Header extends StatelessWidget {
     padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
     child: Text(
       text.toUpperCase(),
-      style: TextStyle(fontSize: 12, letterSpacing: 0.8, fontWeight: FontWeight.w700, color: Colors.grey.shade600),
+      style: TextStyle(fontSize: 12, letterSpacing: 0.8, fontWeight: FontWeight.w700, color: context.fc.muted),
     ),
   );
 }

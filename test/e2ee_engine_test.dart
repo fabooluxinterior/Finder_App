@@ -20,7 +20,12 @@ class FakeDirectory implements KeyDirectory {
   String? caller;
 
   @override
-  Future<String> registerDevice({required String curve25519, required String ed25519, required String label, required String platform}) async {
+  Future<String> registerDevice({
+    required String curve25519,
+    required String ed25519,
+    required String label,
+    required String platform,
+  }) async {
     final existing = devices.values.where((d) => d.curve25519 == curve25519);
     if (existing.isNotEmpty) return existing.first.id;
     final id = 'dev${_n++}';
@@ -107,10 +112,18 @@ void main() {
     expect(reply.map((e) => e.deviceId).toSet(), {alice.deviceId, bobTablet.deviceId});
     dir.caller = 'alice';
     final toAlice = reply.firstWhere((e) => e.deviceId == alice.deviceId);
-    expect(utf8.decode(await alice.decrypt(senderDeviceId: bobPhone.deviceId, type: toAlice.type, ciphertext: toAlice.ciphertext)), 'hey alice');
+    expect(
+      utf8.decode(await alice.decrypt(senderDeviceId: bobPhone.deviceId, type: toAlice.type, ciphertext: toAlice.ciphertext)),
+      'hey alice',
+    );
     dir.caller = 'bob';
     final toTablet = reply.firstWhere((e) => e.deviceId == bobTablet.deviceId);
-    expect(utf8.decode(await bobTablet.decrypt(senderDeviceId: bobPhone.deviceId, type: toTablet.type, ciphertext: toTablet.ciphertext)), 'hey alice');
+    expect(
+      utf8.decode(
+        await bobTablet.decrypt(senderDeviceId: bobPhone.deviceId, type: toTablet.type, ciphertext: toTablet.ciphertext),
+      ),
+      'hey alice',
+    );
 
     // Ratchet continues; tampered ciphertext fails.
     dir.caller = 'alice';
@@ -157,7 +170,13 @@ void main() {
 
   test('attachments: AES-256-GCM roundtrip, wrong context rejected', () async {
     final b = await E2eeEngine.sealAttachment(utf8.encode('voice'), 'voice:1');
-    expect(await E2eeEngine.openAttachment(key: b.key, nonce: b.nonce, ciphertext: b.ciphertext, sha256: b.sha256, aad: 'voice:1'), utf8.encode('voice'));
-    await expectLater(E2eeEngine.openAttachment(key: b.key, nonce: b.nonce, ciphertext: b.ciphertext, sha256: b.sha256, aad: 'voice:2'), throwsA(anything));
+    expect(
+      await E2eeEngine.openAttachment(key: b.key, nonce: b.nonce, ciphertext: b.ciphertext, sha256: b.sha256, aad: 'voice:1'),
+      utf8.encode('voice'),
+    );
+    await expectLater(
+      E2eeEngine.openAttachment(key: b.key, nonce: b.nonce, ciphertext: b.ciphertext, sha256: b.sha256, aad: 'voice:2'),
+      throwsA(anything),
+    );
   });
 }

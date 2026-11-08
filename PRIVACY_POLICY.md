@@ -1,8 +1,8 @@
-# Finder Privacy Policy
+# Vouby Privacy Policy
 
 **Version 2026-11-10.** Draft: have this reviewed by a lawyer before publishing (India's Digital Personal Data Protection Act, 2023, and Google Play's User Data policy).
 
-Finder ("we", "us") is operated by **<FILL: Company name>**, **<FILL: Registered address>**. This policy explains what we collect, how we protect it, and what control you have.
+Vouby ("we", "us") is operated by **<FILL: Company name>**, **<FILL: Registered address>**. This policy explains what we collect, how we protect it, and what control you have.
 
 - **Grievance Officer:** <FILL: Grievance Officer name>, <FILL: Grievance Officer email>
 - **Privacy requests:** <FILL: Privacy email>
@@ -13,7 +13,7 @@ Finder ("we", "us") is operated by **<FILL: Company name>**, **<FILL: Registered
 |---|---|---|
 | Phone number or email | Signing you in with one-time codes | Only you and our systems. Never shown to other users |
 | Date of birth | Confirming you're 18 or older and showing your age | Only you. Other users see your age, never your date of birth |
-| Name, age, district/city, bio, photos, interests | Your profile | Every signed-in Finder user, except people you've blocked or who blocked you |
+| Name, age, district/city, bio, photos, interests | Your profile | Every signed-in Vouby user, except people you've blocked or who blocked you |
 | Verification selfie and the pose you were asked to make | Confirming your photos are really you | Only our trained verification staff. Never other users |
 | Follow requests, passes and matches | Running the app's core features | You and the other person |
 | Messages and voice notes | Chat | **Only you and the other person** (end-to-end encrypted, see §3) |
@@ -22,7 +22,7 @@ Finder ("we", "us") is operated by **<FILL: Company name>**, **<FILL: Registered
 | Policy acceptances (which version, when) | Keeping a record of your consent | You and our systems |
 | Subscription status | The Fast-Track subscription | You. Payment details are handled by Google Play; we never see them |
 | Security logs (sign-in events, rate-limit hits, failed access attempts) | Protecting accounts and detecting abuse | Our security staff |
-| Reports you make or receive | Keeping Finder safe | Our safety team |
+| Reports you make or receive | Keeping Vouby safe | Our safety team |
 
 **What we never show other users:** your phone number, your email, your date of birth, your exact location, or links to other social media. We block phone numbers, social media handles and links in names, bios and interests, and filter them from the first messages of every chat. Your location is only the district or city you choose; we never collect GPS location. We remove location data (GPS) and other hidden metadata from every photo before storing it.
 
@@ -95,7 +95,7 @@ No system is perfectly secure. If we learn of a breach affecting you, we'll noti
 
 ## 9. Age
 
-Finder is only for people aged 18 and over. We check your date of birth at sign-up, and our database refuses anyone younger. We remove accounts we find belong to anyone under 18.
+Vouby is only for people aged 18 and over. We check your date of birth at sign-up, and our database refuses anyone younger. We remove accounts we find belong to anyone under 18.
 
 ## 10. Changes
 

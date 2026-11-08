@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+
+import '../../core/theme.dart';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../models/profile.dart';
@@ -39,7 +42,11 @@ class SafetyNumberScreen extends ConsumerWidget {
             else
               Container(
                 padding: const EdgeInsets.all(20),
-                decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16)),
+                decoration: BoxDecoration(
+                  color: context.fc.surface,
+                  border: Border.all(color: context.fc.hair),
+                  borderRadius: BorderRadius.circular(16),
+                ),
                 child: Wrap(
                   alignment: WrapAlignment.center,
                   spacing: 18,
@@ -57,7 +64,7 @@ class SafetyNumberScreen extends ConsumerWidget {
             Text(
               'Compare this number with the one on ${peer.firstName}’s phone. If they match, your chat is secure. '
               'If they don’t, someone may be interfering: stop sharing sensitive information and report it.',
-              style: TextStyle(color: Colors.grey.shade700),
+              style: TextStyle(color: context.fc.ink3),
             ),
           ],
         ),

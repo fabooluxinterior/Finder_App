@@ -1,4 +1,6 @@
-# Finder
+# Vouby
+
+*(Codebase name: Finder. The app ships as **Vouby**: Android label, launcher icon, splash and in-app copy.)*
 
 A private social connection network for Kerala: Bumble-style swiping on top of Instagram-style private profiles. Built with Flutter, Supabase and RevenueCat.
 
@@ -152,3 +154,12 @@ These rules and the security layer are covered by the SQL suites in `supabase/te
 ### Note on voice-note size
 
 45 s of AAC-LC at 32 kbps is about 176 KB, so it can't also stay under 120 KB. The recorder uses the requested 32 kbps / 45 s, and the `voice_notes` bucket limit is 192 KB. If the 120 KB cap matters more, set `AppConfig.voiceBitRate` to `20000` and the bucket limit to `122880`.
+
+## Design
+
+The UI follows the Vouby design canvas: near-black ground (`#0B0B0C`), cards on `#161618` with `#28282A` hairlines, one orange (`#FF5A3D`) for everything you can act on, gold for Fast-Track and a blue tick for Verified. Type is Geist.
+
+- `lib/core/brand.dart`: the bubble mark, the `vouby.` wordmark, tab and line icons, the opening animation and typing dots. Shapes are drawn from the design's SVG path data via `lib/core/svg_path.dart`.
+- `lib/core/illustrations.dart`: the illustrated people from the design, used for the sign-in card fan in release builds and for locked request placeholders (no real person is depicted).
+- Launcher icons, web icons and the favicon are rendered from the design's app-icon artwork.
+
