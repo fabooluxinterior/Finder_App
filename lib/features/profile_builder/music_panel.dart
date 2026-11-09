@@ -4,6 +4,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/errors.dart';
 import '../../core/phosphor.dart';
+import '../../core/spotify_logo.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/backend.dart';
@@ -343,19 +344,13 @@ class _ArtistVisibilitySheet extends ConsumerWidget {
   }
 }
 
-/// Neutral, original badge for the music integration (a sound-wave glyph on
-/// the service's green), used beside the "Spotify" name.
+/// The Spotify logo beside the "Spotify" name in settings.
 class MusicServiceBadge extends StatelessWidget {
   const MusicServiceBadge({super.key, this.size = 44});
   final double size;
 
   @override
-  Widget build(BuildContext context) => Container(
-    width: size,
-    height: size,
-    decoration: BoxDecoration(color: spotifyGreen, borderRadius: BorderRadius.circular(size * 0.3)),
-    child: Icon(PhosphorIconsFill.waveform, color: const Color(0xFF0B0B0C), size: size * 0.55),
-  );
+  Widget build(BuildContext context) => SpotifyLogo(size: size);
 }
 
 class ArtistAvatar extends StatelessWidget {
@@ -366,15 +361,11 @@ class ArtistAvatar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final c = context.fc;
-    final initials = artist.name.split(RegExp(r'\s+')).where((w) => w.isNotEmpty).take(2).map((w) => w[0]).join();
+    // No photo from Spotify (or it failed to load): a visible person icon.
     final fallback = Container(
-      color: Color.lerp(c.surface, spotifyGreen, 0.18),
+      color: const Color(0xFF2A2A2A),
       alignment: Alignment.center,
-      child: Text(
-        initials,
-        style: TextStyle(fontSize: size * 0.32, fontWeight: FontWeight.w700, color: c.ink),
-      ),
+      child: Icon(PhosphorIconsFill.user, size: size * 0.5, color: const Color(0xFFB3B3B3)),
     );
     return Semantics(
       label: artist.name,

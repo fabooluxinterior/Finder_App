@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../core/brand.dart';
+import '../../core/spotify_logo.dart';
 
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
@@ -491,7 +492,7 @@ class MusicAffinityTag extends StatelessWidget {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.music_note_rounded, size: 16, color: green),
+            const SpotifyLogo(size: 16, semanticLabel: null),
             const SizedBox(width: 6),
             Flexible(
               child: Text(
@@ -509,7 +510,7 @@ class MusicAffinityTag extends StatelessWidget {
     final more = profile.topArtists.length - 2;
     return Row(
       children: [
-        Icon(Icons.music_note_rounded, size: 16, color: c.muted),
+        const SpotifyLogo(size: 15, color: Colors.white, semanticLabel: null),
         const SizedBox(width: 6),
         Flexible(
           child: Text(

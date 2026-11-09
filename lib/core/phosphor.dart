@@ -63,9 +63,10 @@ abstract final class PhosphorIconsFill {
   static const IconData lockSimpleOpen = IconData(0xe30a, fontFamily: 'PhosphorFill');
   static const IconData mapPin = IconData(0xe316, fontFamily: 'PhosphorFill');
   static const IconData microphoneSlash = IconData(0xe328, fontFamily: 'PhosphorFill');
+  static const IconData musicNotes = IconData(0xe340, fontFamily: 'PhosphorFill');
   static const IconData paperPlaneTilt = IconData(0xe398, fontFamily: 'PhosphorFill');
   static const IconData sealCheck = IconData(0xe606, fontFamily: 'PhosphorFill');
   static const IconData shieldCheck = IconData(0xe40c, fontFamily: 'PhosphorFill');
+  static const IconData user = IconData(0xe4c2, fontFamily: 'PhosphorFill');
   static const IconData warningCircle = IconData(0xe4e2, fontFamily: 'PhosphorFill');
-  static const IconData waveform = IconData(0xe802, fontFamily: 'PhosphorFill');
 }

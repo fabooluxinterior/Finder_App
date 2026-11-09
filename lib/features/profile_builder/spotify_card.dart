@@ -1,20 +1,31 @@
-import 'dart:math' as math;
-
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
+
+import '../../core/phosphor.dart';
+import '../../core/spotify_logo.dart';
 
 import '../../models/profile.dart';
 
-/// Light palette for the Spotify card (reference: clean white card, soft
-/// shadow, dark type, light-grey pills, circular artist photos).
+/// Black-theme palette for the Spotify card (approved layout: logo + heading,
+/// artist pills with round photos, dividers between sections).
 class _P {
-  static const card = Color(0xFFFFFFFF);
-  static const pill = Color(0xFFF0F0F2);
-  static const ink = Color(0xFF16161A);
-  static const ink2 = Color(0xFF55555E);
-  static const muted = Color(0xFF8B8B94);
-  static const line = Color(0xFFEDEDF0);
-  static const sharedPill = Color(0xFFE3F8EA);
-  static const sharedRing = Color(0xFF1DB954);
+  static const card = Color(0xFF121212);
+  static const border = Color(0xFF262626);
+  static const pill = Color(0xFF242424);
+  static const ink = Color(0xFFFFFFFF);
+  static const ink2 = Color(0xFFB3B3B3);
+  static const muted = Color(0xFF8A8A8A);
+  static const line = Color(0xFF2A2A2A);
+  static const sharedPill = Color(0x241ED760);
+  static const sharedRing = Color(0xFF1ED760);
+  static const placeholder = Color(0xFF2E2E2E);
+}
+
+/// Opens an artist or track in the Spotify app (or web player). Demo items
+/// have no real Spotify page, so they don't link anywhere.
+Future<void> openOnSpotify(String kind, String id) async {
+  if (id.startsWith('demo')) return;
+  await launchUrl(Uri.parse('https://open.spotify.com/$kind/$id'), mode: LaunchMode.externalApplication);
 }
 
 /// The music part of a profile, in this order: Spotify heading, top artists
@@ -48,7 +59,7 @@ class _SpotifyProfileCardState extends State<SpotifyProfileCard> {
       decoration: BoxDecoration(
         color: _P.card,
         borderRadius: BorderRadius.circular(24),
-        boxShadow: const [BoxShadow(color: Color(0x14000000), blurRadius: 16, offset: Offset(0, 4))],
+        border: Border.all(color: _P.border),
       ),
       child: DefaultTextStyle.merge(
         style: const TextStyle(fontFamily: 'Geist', color: _P.ink),
@@ -57,7 +68,7 @@ class _SpotifyProfileCardState extends State<SpotifyProfileCard> {
           children: [
             Row(
               children: [
-                const SpotifyGlyph(size: 24),
+                const SpotifyLogo(size: 26),
                 const SizedBox(width: 10),
                 Expanded(
                   child: Text(
@@ -75,7 +86,7 @@ class _SpotifyProfileCardState extends State<SpotifyProfileCard> {
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Icon(Icons.music_note_rounded, size: 16, color: _P.sharedRing),
+                    const SpotifyLogo(size: 16, semanticLabel: null),
                     const SizedBox(width: 6),
                     Flexible(
                       child: Text(
@@ -125,6 +136,20 @@ class _SpotifyProfileCardState extends State<SpotifyProfileCard> {
               for (final t in p.recentTracks.take(5))
                 _TrackRow(track: t, trailing: t.playedAt == null ? null : timeAgo(t.playedAt!)),
             ],
+            const _Divider(),
+            const SizedBox(height: 10),
+            const Row(
+              children: [
+                SpotifyLogo(size: 14, color: _P.muted, semanticLabel: null),
+                SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Details from Spotify. Tap an artist or track to open it there.',
+                    style: TextStyle(fontSize: 12, color: _P.muted),
+                  ),
+                ),
+              ],
+            ),
           ],
         ),
       ),
@@ -180,29 +205,33 @@ class _ArtistPill extends StatelessWidget {
   Widget build(BuildContext context) {
     return Semantics(
       label: '${artist.name}${shared ? ', you both listen' : ''}',
+      button: true,
       excludeSemantics: true,
-      child: Container(
-        padding: const EdgeInsets.fromLTRB(3, 3, 16, 3),
-        decoration: BoxDecoration(
-          color: shared ? _P.sharedPill : _P.pill,
-          borderRadius: BorderRadius.circular(999),
-          border: shared ? Border.all(color: _P.sharedRing, width: 1.5) : null,
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            _RoundImage(url: artist.image, size: 38, label: artist.name),
-            const SizedBox(width: 8),
-            ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 190),
-              child: Text(
-                artist.name,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500, color: _P.ink),
+      child: GestureDetector(
+        onTap: () => openOnSpotify('artist', artist.id),
+        child: Container(
+          padding: const EdgeInsets.fromLTRB(3, 3, 16, 3),
+          decoration: BoxDecoration(
+            color: shared ? _P.sharedPill : _P.pill,
+            borderRadius: BorderRadius.circular(999),
+            border: shared ? Border.all(color: _P.sharedRing, width: 1.5) : null,
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _RoundImage(url: artist.image, size: 38, label: artist.name),
+              const SizedBox(width: 8),
+              ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 190),
+                child: Text(
+                  artist.name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500, color: _P.ink),
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -217,14 +246,11 @@ class _RoundImage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final initials = label.split(RegExp(r'\s+')).where((w) => w.isNotEmpty).take(2).map((w) => w[0]).join();
+    // No photo from Spotify: a visible person icon.
     final fallback = Container(
-      color: const Color(0xFFDADADF),
+      color: _P.placeholder,
       alignment: Alignment.center,
-      child: Text(
-        initials,
-        style: TextStyle(fontSize: size * 0.34, fontWeight: FontWeight.w700, color: _P.ink2),
-      ),
+      child: Icon(PhosphorIconsFill.user, size: size * 0.52, color: _P.ink2),
     );
     return SizedBox.square(
       dimension: size,
@@ -250,54 +276,59 @@ class _TrackRow extends StatelessWidget {
       label:
           '${leading != null ? 'Number ${int.tryParse(leading!) ?? leading}: ' : ''}${track.name} by ${track.artistLine}'
           '${trailing != null ? ', $trailing' : ''}',
+      button: true,
       excludeSemantics: true,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 5),
-        child: Row(
-          children: [
-            if (leading != null)
-              SizedBox(
-                width: 28,
-                child: Text(
-                  leading!,
-                  style: const TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                    color: _P.muted,
-                    fontFeatures: [FontFeature.tabularFigures()],
+      child: InkWell(
+        onTap: () => openOnSpotify('track', track.id),
+        borderRadius: BorderRadius.circular(10),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 5),
+          child: Row(
+            children: [
+              if (leading != null)
+                SizedBox(
+                  width: 28,
+                  child: Text(
+                    leading!,
+                    style: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: _P.muted,
+                      fontFeatures: [FontFeature.tabularFigures()],
+                    ),
                   ),
                 ),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(8),
+                child: _Artwork(url: track.image, size: 46),
               ),
-            ClipRRect(
-              borderRadius: BorderRadius.circular(8),
-              child: _Artwork(url: track.image, size: 46),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    track.name,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: _P.ink),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    track.artistLine,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(fontSize: 13.5, color: _P.ink2),
-                  ),
-                ],
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      track.name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: _P.ink),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      track.artistLine,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontSize: 13.5, color: _P.ink2),
+                    ),
+                  ],
+                ),
               ),
-            ),
-            if (trailing != null) ...[
-              const SizedBox(width: 10),
-              Text(trailing!, style: const TextStyle(fontSize: 12.5, color: _P.muted)),
+              if (trailing != null) ...[
+                const SizedBox(width: 10),
+                Text(trailing!, style: const TextStyle(fontSize: 12.5, color: _P.muted)),
+              ],
             ],
-          ],
+          ),
         ),
       ),
     );
@@ -311,11 +342,12 @@ class _Artwork extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // No album art from Spotify: a visible music icon.
     final fallback = Container(
       width: size,
       height: size,
-      color: _P.pill,
-      child: Icon(Icons.music_note_rounded, size: size * 0.45, color: _P.muted),
+      color: _P.placeholder,
+      child: Icon(PhosphorIconsFill.musicNotes, size: size * 0.48, color: _P.ink2),
     );
     if (url == null) return fallback;
     return Image.network(
@@ -327,43 +359,6 @@ class _Artwork extends StatelessWidget {
       errorBuilder: (_, _, _) => fallback,
     );
   }
-}
-
-/// Round mark with three sound arcs, used beside the "on Spotify" heading.
-class SpotifyGlyph extends StatelessWidget {
-  const SpotifyGlyph({super.key, this.size = 24, this.color = _P.ink});
-  final double size;
-  final Color color;
-
-  @override
-  Widget build(BuildContext context) => SizedBox.square(
-    dimension: size,
-    child: CustomPaint(painter: _GlyphPainter(color)),
-  );
-}
-
-class _GlyphPainter extends CustomPainter {
-  _GlyphPainter(this.color);
-  final Color color;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final r = size.width / 2;
-    final center = Offset(r, r);
-    canvas.drawCircle(center, r, Paint()..color = color);
-    final arc = Paint()
-      ..color = Colors.white
-      ..style = PaintingStyle.stroke
-      ..strokeCap = StrokeCap.round;
-    for (final (i, (w, dy)) in [(0.62, -0.18), (0.5, 0.08), (0.38, 0.32)].indexed) {
-      arc.strokeWidth = size.width * (0.11 - i * 0.015);
-      final rect = Rect.fromCenter(center: center.translate(0, r * dy + r * 0.9), width: r * 2 * w * 1.6, height: r * 2 * w);
-      canvas.drawArc(rect, math.pi * 1.18, math.pi * 0.64, false, arc);
-    }
-  }
-
-  @override
-  bool shouldRepaint(_GlyphPainter old) => old.color != color;
 }
 
 /// "10 min ago", "3 h ago", "yesterday", "4 days ago", "12 Oct".
