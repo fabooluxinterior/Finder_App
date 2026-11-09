@@ -181,6 +181,30 @@ class _MusicPanelState extends ConsumerState<MusicPanel> with WidgetsBindingObse
               ),
             ),
           ),
+          if (music.connected && !reauth) ...[
+            const SizedBox(height: 6),
+            _SectionSwitch(
+              title: 'Show most played',
+              subtitle: music.topTracks.isEmpty ? 'Nothing yet' : '${music.topTracks.length} tracks',
+              value: music.showTopTracks,
+              onChanged: (v) => _setSection('top_tracks', v),
+            ),
+            _SectionSwitch(
+              title: 'Show recently played',
+              subtitle: !music.recentScope
+                  ? 'Reconnect Spotify to add this'
+                  : music.recentTracks.isEmpty
+                  ? 'Nothing yet'
+                  : 'Your last ${music.recentTracks.length} plays, with times',
+              value: music.showRecent && music.recentScope,
+              onChanged: music.recentScope ? (v) => _setSection('recent', v) : null,
+            ),
+            if (!music.recentScope)
+              Align(
+                alignment: Alignment.centerLeft,
+                child: TextButton(onPressed: _connect, child: const Text('Reconnect to show recently played')),
+              ),
+          ],
           if (reauth) ...[
             const SizedBox(height: 12),
             PillButton(label: 'Reconnect Spotify', height: 44, onTap: _connect),
@@ -199,12 +223,51 @@ class _MusicPanelState extends ConsumerState<MusicPanel> with WidgetsBindingObse
     );
   }
 
+  Future<void> _setSection(String section, bool visible) async {
+    try {
+      await ref.read(backendProvider).setMusicSectionVisibility(section, visible: visible);
+      _reload();
+    } on AppException catch (e) {
+      if (mounted) showSnack(context, e.message);
+    }
+  }
+
   Future<void> _manage(MusicState music) => showModalBottomSheet<void>(
     context: context,
     isScrollControlled: true,
     useSafeArea: true,
     builder: (_) => const _ArtistVisibilitySheet(),
   );
+}
+
+class _SectionSwitch extends StatelessWidget {
+  const _SectionSwitch({required this.title, required this.subtitle, required this.value, required this.onChanged});
+  final String title;
+  final String subtitle;
+  final bool value;
+  final ValueChanged<bool>? onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.fc;
+    return Row(
+      children: [
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                title,
+                style: TextStyle(fontSize: 15, fontWeight: FontWeight.w500, color: c.ink),
+              ),
+              Text(subtitle, style: TextStyle(fontSize: 13, color: c.muted)),
+            ],
+          ),
+        ),
+        Switch(value: value, activeTrackColor: spotifyGreen, onChanged: onChanged),
+      ],
+    );
+  }
 }
 
 class _ArtistVisibilitySheet extends ConsumerWidget {

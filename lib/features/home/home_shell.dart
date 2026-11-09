@@ -15,6 +15,7 @@ import '../deck/deck_screen.dart';
 import '../match/match_screen.dart';
 import '../profile/my_profile_screen.dart';
 import '../requests/requests_screen.dart';
+import '../suggestions/suggestions_screen.dart';
 
 class HomeShell extends ConsumerStatefulWidget {
   const HomeShell({super.key});
@@ -67,10 +68,13 @@ class _HomeShellState extends ConsumerState<HomeShell> {
       },
       child: Scaffold(
         extendBody: true,
-        body: IndexedStack(index: _tab, children: const [DeckScreen(), RequestsScreen(), ChatsScreen(), MyProfileScreen()]),
+        body: IndexedStack(
+          index: _tab,
+          children: const [DeckScreen(), SuggestionsScreen(), RequestsScreen(), ChatsScreen(), MyProfileScreen()],
+        ),
         bottomNavigationBar: _TabBar(
           index: _tab,
-          badges: [0, pending, unread, 0],
+          badges: [0, 0, pending, unread, 0],
           // Tab switches happen dozens of times a day: no animation.
           onTap: (i) => setState(() => _tab = i),
         ),
@@ -85,7 +89,8 @@ class _TabBar extends StatelessWidget {
   final List<int> badges;
   final ValueChanged<int> onTap;
 
-  static const _labels = ['Discover', 'Requests', 'Chats', 'You'];
+  static const _labels = ['Discover', 'Suggestions', 'Requests', 'Chats', 'You'];
+  static const _kinds = [TabKind.discover, TabKind.suggestions, TabKind.requests, TabKind.chats, TabKind.you];
 
   @override
   Widget build(BuildContext context) {
@@ -122,18 +127,21 @@ class _TabBar extends StatelessWidget {
                           Stack(
                             clipBehavior: Clip.none,
                             children: [
-                              TabIcon(index: i, active: i == index, color: i == index ? c.ink : c.muted),
+                              TabIcon(kind: _kinds[i], active: i == index, color: i == index ? c.ink : c.muted),
                               if (badges[i] > 0) Positioned(top: -6, right: -14, child: _Badge(count: badges[i])),
                             ],
                           ),
                           const SizedBox(height: 5),
-                          Text(
-                            _labels[i],
-                            style: TextStyle(
-                              fontSize: 13,
-                              height: 1,
-                              fontWeight: i == index ? FontWeight.w600 : FontWeight.w500,
-                              color: i == index ? c.ink : c.muted,
+                          FittedBox(
+                            fit: BoxFit.scaleDown,
+                            child: Text(
+                              _labels[i],
+                              style: TextStyle(
+                                fontSize: 13,
+                                height: 1,
+                                fontWeight: i == index ? FontWeight.w600 : FontWeight.w500,
+                                color: i == index ? c.ink : c.muted,
+                              ),
                             ),
                           ),
                         ],

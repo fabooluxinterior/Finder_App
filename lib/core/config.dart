@@ -13,7 +13,7 @@ class AppConfig {
 
   /// Bump when the Terms, Privacy Policy or Community Guidelines change
   /// materially; users who accepted an older version must re-consent.
-  static const policyVersion = '2026-11-11';
+  static const policyVersion = '2026-11-12';
   static const minimumAge = 18;
 
   static const productId = 'fast_track_79_monthly';

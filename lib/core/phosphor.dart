@@ -28,6 +28,7 @@ abstract final class PhosphorIconsRegular {
   static const IconData ruler = IconData(0xe6b8, fontFamily: 'PhosphorRegular');
   static const IconData shieldCheck = IconData(0xe40c, fontFamily: 'PhosphorRegular');
   static const IconData signOut = IconData(0xe42a, fontFamily: 'PhosphorRegular');
+  static const IconData slidersHorizontal = IconData(0xe434, fontFamily: 'PhosphorRegular');
   static const IconData sparkle = IconData(0xe6a2, fontFamily: 'PhosphorRegular');
   static const IconData speakerHigh = IconData(0xe44a, fontFamily: 'PhosphorRegular');
   static const IconData textAa = IconData(0xe6ee, fontFamily: 'PhosphorRegular');
@@ -35,6 +36,7 @@ abstract final class PhosphorIconsRegular {
   static const IconData trash = IconData(0xe4a6, fontFamily: 'PhosphorRegular');
   static const IconData user = IconData(0xe4c2, fontFamily: 'PhosphorRegular');
   static const IconData userMinus = IconData(0xe4ce, fontFamily: 'PhosphorRegular');
+  static const IconData warningCircle = IconData(0xe4e2, fontFamily: 'PhosphorRegular');
   static const IconData wifiSlash = IconData(0xe4f2, fontFamily: 'PhosphorRegular');
   static const IconData wine = IconData(0xe6b2, fontFamily: 'PhosphorRegular');
 }

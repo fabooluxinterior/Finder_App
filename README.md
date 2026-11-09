@@ -178,6 +178,12 @@ The server decides "live": `complete_onboarding()` checks every requirement, and
 
 To enable Spotify: create an app at developer.spotify.com, add the deployed `music-callback` URL as a redirect URI, and set `SPOTIFY_CLIENT_ID`, `SPOTIFY_CLIENT_SECRET`, `SPOTIFY_REDIRECT_URI` (and optionally `MUSIC_RETURN_URL`) as edge-function secrets. New Spotify apps start in development mode (25 allow-listed users) until Spotify approves an extension.
 
+## Spotify card and Suggestions (updates 01–02)
+
+**Spotify card** (`lib/features/profile_builder/spotify_card.dart`): heading, top artists as pills with round photos, "Most played" (Spotify's top-tracks ranking with artwork and 01, 02… ranks; five, then "See all") and "Recently played" (latest five with "10 min ago"). Scopes `user-top-read user-read-recently-played`; imports run in `music-sync` at most hourly when the owner opens the app, never on other people's views or swipes. Connections made before recently-played was requested keep working and show "Reconnect to show recently played". Owners can hide either section and any artist.
+
+**Suggestions** (tab "Suggestions", `lib/features/suggestions/`): "People you might like" plus a "You may like" row. Ranking runs in the database (`get_suggestions`, `suggestion_score`) from explainable signals with configurable weights in `recommendation_config` (defaults: interests 35%, music 20%, lifestyle 15%, hobbies 15%, location 10%, completeness 5%); music only counts when both people linked Spotify, and signals that don't apply are left out of the average. Limits are server-side: 10 per load, 20 per page, 50 new per day; a refresh returns today's people and never resets the allowance; `recommendation_history` avoids repeats for 7 days. Excluded: yourself, blocked, unfinished or hidden profiles, people outside either person's discovery preferences (age range, who to show), and people you already swiped. Location is the district only; there's no GPS.
+
 ## Design
 
 The UI follows the Vouby design canvas: near-black ground (`#0B0B0C`), cards on `#161618` with `#28282A` hairlines, one orange (`#FF5A3D`) for everything you can act on, gold for Fast-Track and a blue tick for Verified. Type is Geist.

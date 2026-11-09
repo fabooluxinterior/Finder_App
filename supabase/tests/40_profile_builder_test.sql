@@ -59,6 +59,12 @@ select pg_temp.expect_fail($$update public.profiles set music_linked = true wher
 select pg_temp.expect_fail($$update public.profiles set music_artist_ids = '{abc}' where id = auth.uid()$$, 'client injects artist ids');
 select pg_temp.expect_fail($$select * from public.music_accounts$$, 'client reads music tokens');
 select pg_temp.expect_fail($$select * from public.music_oauth_states$$, 'client reads oauth states');
+select pg_temp.expect_fail($$select public.service_music_store('00000000-0000-0000-0000-000000000002', 'x', 'v1', '[{"id":"4YRxDV8wJFPHPTeXepOstw","name":"Fake"}]')$$, 'client writes someone''s artists');
+select pg_temp.expect_fail($$select public.service_music_store_v2(auth.uid(), null, null, '[]', '[]', '[]', 'x')$$, 'client calls service import');
+select pg_temp.expect_fail($$select public.service_music_reauth('00000000-0000-0000-0000-000000000002')$$, 'client breaks someone''s Spotify');
+select pg_temp.expect_fail($$select public.refresh_public_music('00000000-0000-0000-0000-000000000002')$$, 'client calls refresh helper');
+select pg_temp.expect_fail($$select public.onboarding_missing('00000000-0000-0000-0000-000000000002')$$, 'client reads someone''s onboarding gaps');
+select pg_temp.expect_fail($$select public.purge_music_states()$$, 'client runs maintenance');
 
 -- ---------------------------------------------------------------- validation
 select pg_temp.expect_fail($$update public.profiles set lifestyle_attributes = '{"drinking":"every night, call me"}' where id = auth.uid()$$, 'free-text lifestyle value');
@@ -123,6 +129,32 @@ select pg_temp.expect(not ('1mYsTxnqsietFxj1OgoGbG' = any (music_artist_ids)), '
   from public.profiles where id = auth.uid();
 select pg_temp.as_user('02');
 select pg_temp.expect(jsonb_array_length(public.music_affinity('00000000-0000-0000-0000-000000000001')) = 1, 'hidden artist never matched');
+-- Top tracks + recently played (Update 01)
+reset role;
+select public.service_music_store_v2('00000000-0000-0000-0000-000000000001', null, null,
+  (select jsonb_agg(x) from public.music_accounts a, jsonb_array_elements(a.all_artists) x where a.user_id = '00000000-0000-0000-0000-000000000001'),
+  '[{"id":"3n3Ppam7vgaVa1iaRUc9Lp","name":"Song A","artists":["Sushin Shyam"],"image":"https://i.scdn.co/image/ab12"},
+    {"id":"bad","name":"dropped"},
+    {"id":"4uLU6hMCjMI75M1A2tKUQC","name":"Song B","artists":["X"],"image":"data:image/png;base64,AAAA"}]',
+  '[{"id":"3n3Ppam7vgaVa1iaRUc9Lp","name":"Song A","artists":["Sushin Shyam"],"played_at":"2026-11-09T10:00:00Z"}]',
+  'user-top-read user-read-recently-played');
+select pg_temp.expect(jsonb_array_length(music_top_tracks) = 2 and (music_top_tracks -> 1 ->> 'rank') = '3'
+  and (music_top_tracks -> 1 ->> 'image') is null and jsonb_array_length(music_recent_tracks) = 1,
+  'tracks normalised (bad ids and non-Spotify images dropped, rank kept)')
+  from public.profiles where id = '00000000-0000-0000-0000-000000000001';
+select public.service_music_store_v2('00000000-0000-0000-0000-000000000001', null, null, '[]', '[]', null, null);
+select pg_temp.expect(jsonb_array_length(music_recent_tracks) = 1, 'missing recently-played scope keeps the stored list')
+  from public.profiles where id = '00000000-0000-0000-0000-000000000001';
+set role authenticated;
+select pg_temp.as_user('01');
+select pg_temp.expect(recent_scope and jsonb_array_length(recent_tracks) = 1, 'owner sees scope + recent list') from public.my_music();
+select public.set_music_section_visibility('recent', false);
+select pg_temp.expect(music_recent_tracks = '[]', 'hidden section leaves the public profile') from public.profiles where id = auth.uid();
+select pg_temp.expect_fail($$select public.set_music_section_visibility('tokens', true)$$, 'unknown section');
+select pg_temp.expect_fail($$update public.profiles set music_recent_tracks = '[{"id":"x"}]' where id = auth.uid()$$, 'client writes tracks');
+select pg_temp.as_user('02');
+select pg_temp.expect(jsonb_array_length(music_top_tracks) = 0, 'others see only public tracks (cleared by import above)')
+  from public.get_profile_card('00000000-0000-0000-0000-000000000001');
 select pg_temp.as_user('01');
 select public.disconnect_music();
 select pg_temp.expect(not music_linked and music_top_artists = '[]' and music_artist_ids = '{}', 'disconnect clears public music')

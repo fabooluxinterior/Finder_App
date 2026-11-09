@@ -26,6 +26,41 @@ class MusicArtist {
       MusicArtist(id: id, name: name, image: image, genres: genres, visible: visible ?? this.visible);
 }
 
+/// A track from Spotify: a top track (with [rank]) or a recent play (with
+/// [playedAt]).
+class MusicTrack {
+  const MusicTrack({required this.id, required this.name, this.artists = const [], this.image, this.rank, this.playedAt});
+
+  final String id;
+  final String name;
+  final List<String> artists;
+
+  /// Album artwork (Spotify CDN), or null.
+  final String? image;
+  final int? rank;
+  final DateTime? playedAt;
+
+  String get artistLine => artists.join(', ');
+
+  factory MusicTrack.fromJson(Map<String, dynamic> m) => MusicTrack(
+    id: m['id'] as String,
+    name: m['name'] as String,
+    artists: ((m['artists'] as List?) ?? const []).cast<String>(),
+    image: m['image'] as String?,
+    rank: (m['rank'] as num?)?.toInt(),
+    playedAt: m['played_at'] == null ? null : DateTime.tryParse(m['played_at'] as String)?.toLocal(),
+  );
+
+  Map<String, Object?> toJson() => {
+    'id': id,
+    'name': name,
+    'artists': artists,
+    'image': image,
+    'rank': ?rank,
+    'played_at': ?playedAt?.toUtc().toIso8601String(),
+  };
+}
+
 /// A structured conversation starter: catalog question + the user's answer.
 class ProfilePrompt {
   const ProfilePrompt({required this.promptId, required this.question, required this.answer});
@@ -68,12 +103,17 @@ class PublicProfile {
     this.languages = const [],
     this.lifestyle = const {},
     this.topArtists = const [],
+    this.topTracks = const [],
+    this.recentTracks = const [],
     this.sharedArtistIds = const [],
     this.sharedInterestCount = 0,
     this.completionScore = 0,
     this.onboardingStage = 1,
     this.isOnboarded = false,
     this.musicLinked = false,
+    this.prefAgeMin = 18,
+    this.prefAgeMax = 60,
+    this.prefGenders = const [],
   });
 
   final String id;
@@ -107,6 +147,12 @@ class PublicProfile {
   /// Publicly visible top artists (hidden ones are never sent).
   final List<MusicArtist> topArtists;
 
+  /// Spotify's ranking of their most-played tracks (public part only).
+  final List<MusicTrack> topTracks;
+
+  /// Latest plays with timestamps (only if they chose to show them).
+  final List<MusicTrack> recentTracks;
+
   /// Artists this profile shares with the viewer (computed server-side).
   final List<String> sharedArtistIds;
   final int sharedInterestCount;
@@ -116,6 +162,13 @@ class PublicProfile {
   final int onboardingStage;
   final bool isOnboarded;
   final bool musicLinked;
+
+  /// Discovery preferences (own profile only; others' are never sent).
+  final int prefAgeMin;
+  final int prefAgeMax;
+
+  /// Empty = everyone.
+  final List<String> prefGenders;
 
   String get firstName => fullName.split(' ').first;
 
@@ -142,6 +195,8 @@ class PublicProfile {
     List<String>? languages,
     Map<String, String>? lifestyle,
     List<MusicArtist>? topArtists,
+    List<MusicTrack>? topTracks,
+    List<MusicTrack>? recentTracks,
     List<String>? sharedArtistIds,
     int? sharedInterestCount,
     int? completionScore,
@@ -149,6 +204,9 @@ class PublicProfile {
     bool? isOnboarded,
     bool? musicLinked,
     int? age,
+    int? prefAgeMin,
+    int? prefAgeMax,
+    List<String>? prefGenders,
     bool clearOccupation = false,
     bool clearEducation = false,
     bool clearHeight = false,
@@ -176,12 +234,17 @@ class PublicProfile {
       languages: languages ?? this.languages,
       lifestyle: lifestyle ?? this.lifestyle,
       topArtists: topArtists ?? this.topArtists,
+      topTracks: topTracks ?? this.topTracks,
+      recentTracks: recentTracks ?? this.recentTracks,
       sharedArtistIds: sharedArtistIds ?? this.sharedArtistIds,
       sharedInterestCount: sharedInterestCount ?? this.sharedInterestCount,
       completionScore: completionScore ?? this.completionScore,
       onboardingStage: onboardingStage ?? this.onboardingStage,
       isOnboarded: isOnboarded ?? this.isOnboarded,
       musicLinked: musicLinked ?? this.musicLinked,
+      prefAgeMin: prefAgeMin ?? this.prefAgeMin,
+      prefAgeMax: prefAgeMax ?? this.prefAgeMax,
+      prefGenders: prefGenders ?? this.prefGenders,
     );
   }
 
@@ -214,6 +277,8 @@ class PublicProfile {
       languages: ((m['languages'] as List?) ?? const []).cast<String>(),
       lifestyle: ((m['lifestyle_attributes'] as Map?) ?? const {}).cast<String, String>(),
       topArtists: _list(m['music_top_artists'], MusicArtist.fromJson),
+      topTracks: _list(m['music_top_tracks'], MusicTrack.fromJson),
+      recentTracks: _list(m['music_recent_tracks'], MusicTrack.fromJson),
       sharedArtistIds: ((m['shared_artist_ids'] as List?) ?? const []).cast<String>(),
       sharedInterestCount: (m['shared_interest_count'] as num?)?.toInt() ?? 0,
       musicLinked: ((m['music_top_artists'] as List?) ?? const []).isNotEmpty,
@@ -247,10 +312,15 @@ class PublicProfile {
       languages: ((m['languages'] as List?) ?? const []).cast<String>(),
       lifestyle: ((m['lifestyle_attributes'] as Map?) ?? const {}).cast<String, String>(),
       topArtists: _list(m['music_top_artists'], MusicArtist.fromJson),
+      topTracks: _list(m['music_top_tracks'], MusicTrack.fromJson),
+      recentTracks: _list(m['music_recent_tracks'], MusicTrack.fromJson),
       completionScore: (m['completion_score'] as num?)?.toInt() ?? 0,
       onboardingStage: (m['onboarding_stage'] as num?)?.toInt() ?? 1,
       isOnboarded: (m['is_onboarded'] as bool?) ?? false,
       musicLinked: (m['music_linked'] as bool?) ?? false,
+      prefAgeMin: (m['pref_age_min'] as num?)?.toInt() ?? 18,
+      prefAgeMax: (m['pref_age_max'] as num?)?.toInt() ?? 60,
+      prefGenders: ((m['pref_genders'] as List?) ?? const []).cast<String>(),
     );
   }
 }
@@ -278,12 +348,40 @@ enum MusicStatus { disconnected, active, reauthRequired }
 
 /// The owner's music connection (never includes tokens).
 class MusicState {
-  const MusicState({this.status = MusicStatus.disconnected, this.artists = const [], this.syncedAt});
+  const MusicState({
+    this.status = MusicStatus.disconnected,
+    this.artists = const [],
+    this.syncedAt,
+    this.topTracks = const [],
+    this.recentTracks = const [],
+    this.showTopTracks = true,
+    this.showRecent = true,
+    this.recentScope = true,
+  });
   final MusicStatus status;
 
   /// Imported top artists with their visibility.
   final List<MusicArtist> artists;
   final DateTime? syncedAt;
+  final List<MusicTrack> topTracks;
+  final List<MusicTrack> recentTracks;
+  final bool showTopTracks;
+  final bool showRecent;
+
+  /// False for connections made before recently played was requested
+  /// (reconnecting adds it).
+  final bool recentScope;
+
+  MusicState copyWith({List<MusicArtist>? artists, bool? showTopTracks, bool? showRecent}) => MusicState(
+    status: status,
+    artists: artists ?? this.artists,
+    syncedAt: syncedAt,
+    topTracks: topTracks,
+    recentTracks: recentTracks,
+    showTopTracks: showTopTracks ?? this.showTopTracks,
+    showRecent: showRecent ?? this.showRecent,
+    recentScope: recentScope,
+  );
 
   bool get connected => status != MusicStatus.disconnected;
   static const disconnected = MusicState();

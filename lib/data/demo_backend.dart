@@ -14,6 +14,8 @@ import '../models/message.dart';
 import '../models/profile.dart';
 import '../models/profile_catalog.dart';
 import '../models/profile_completion.dart';
+import '../models/suggestion.dart';
+import '../models/suggestion_scoring.dart';
 import '../models/security.dart';
 import 'backend.dart';
 import 'memory_images.dart';
@@ -123,6 +125,9 @@ class DemoBackend implements FinderBackend {
         ]);
       final music = m['music'] as Map<String, dynamic>?;
       if (music != null) {
+        List<MusicTrack> tracks(String k) => [
+          for (final t in (music[k] as List? ?? const []).cast<Map<String, dynamic>>()) MusicTrack.fromJson(t),
+        ];
         _music = MusicState(
           status: MusicStatus.active,
           syncedAt: DateTime.tryParse(music['synced'] as String? ?? ''),
@@ -130,6 +135,10 @@ class DemoBackend implements FinderBackend {
             for (final a in (music['artists'] as List).cast<Map<String, dynamic>>())
               MusicArtist.fromJson(a).copyWith(visible: (a['visible'] as bool?) ?? true),
           ],
+          topTracks: tracks('tracks'),
+          recentTracks: tracks('recent'),
+          showTopTracks: (music['showTracks'] as bool?) ?? true,
+          showRecent: (music['showRecent'] as bool?) ?? true,
         );
       }
       final me = m['me'] as Map<String, dynamic>?;
@@ -209,8 +218,13 @@ class DemoBackend implements FinderBackend {
               'languages': me.languages,
               'lifestyle_attributes': me.lifestyle,
               'music_top_artists': [for (final a in me.topArtists) a.toJson()],
+              'music_top_tracks': [for (final t in me.topTracks) t.toJson()],
+              'music_recent_tracks': [for (final t in me.recentTracks) t.toJson()],
               'music_linked': me.musicLinked,
               'onboarding_stage': me.onboardingStage,
+              'pref_age_min': me.prefAgeMin,
+              'pref_age_max': me.prefAgeMax,
+              'pref_genders': me.prefGenders,
               'is_onboarded': me.isOnboarded,
             },
     };
@@ -293,6 +307,9 @@ class DemoBackend implements FinderBackend {
         return ProfilePrompt(promptId: id, question: promptById(id)!.question, answer: (e['answer'] as String).trim());
       }).toList(),
       onboardingStage: v<int>(ProfilePatch.onboardingStage),
+      prefAgeMin: v<int>(ProfilePatch.prefAgeMin),
+      prefAgeMax: v<int>(ProfilePatch.prefAgeMax),
+      prefGenders: (f[ProfilePatch.prefGenders] as List?)?.cast<String>(),
     );
   }
 
@@ -437,6 +454,93 @@ class DemoBackend implements FinderBackend {
     return outcome;
   }
 
+  // --------------------------------------------------------- suggestions ----
+
+  static const suggestionDailyLimit = 50;
+  static const suggestionPageMax = 20;
+  final _suggestionHistory = <String, ({DateTime shownAt, int score, List<SuggestionReason> reasons, String section})>{};
+  final _suggestionsShownByDay = <String, int>{};
+
+  String get _today {
+    final n = DateTime.now();
+    return '${n.year}-${n.month}-${n.day}';
+  }
+
+  @override
+  Future<List<Suggestion>> suggestions({String section = 'main', int limit = 10, List<String> exclude = const []}) async {
+    await _latency();
+    final me = _me;
+    if (me == null || !me.isOnboarded) return const [];
+    final now = DateTime.now();
+    final startOfDay = DateTime(now.year, now.month, now.day);
+    final cap = limit.clamp(1, suggestionPageMax);
+    final weights = section == 'main' ? defaultSuggestionWeights : youMayLikeWeights;
+
+    bool eligible(PublicProfile p) {
+      if (_hiddenPendingReview.contains(p.id) || exclude.contains(p.id)) return false;
+      if (!prefsMatch(me, p)) return false;
+      final mine = _swipes[(meId, p.id)];
+      if (mine != null &&
+          !(mine.action == 'pass' && now.difference(mine.createdAt) > const Duration(days: AppConfig.passHideDays))) {
+        return false;
+      }
+      final theirs = _swipes[(p.id, meId)];
+      return theirs == null || theirs.action == 'follow_requested';
+    }
+
+    final out = <Suggestion>[];
+    // (a) already shown today in this section: a refresh spends nothing.
+    final earlier =
+        _suggestionHistory.entries
+            .where((e) => e.value.section == section && !e.value.shownAt.isBefore(startOfDay))
+            .where((e) => _people[e.key] != null && eligible(_people[e.key]!.profile))
+            .toList()
+          ..sort((a, b) => b.value.score.compareTo(a.value.score));
+    for (final e in earlier.take(cap)) {
+      out.add(
+        Suggestion(
+          profile: _withAffinity(_people[e.key]!.profile),
+          compatibility: e.value.score,
+          reasons: e.value.reasons,
+          section: section,
+        ),
+      );
+    }
+    // (b) new people within the daily allowance and outside the repeat window.
+    final remaining = suggestionDailyLimit - (_suggestionsShownByDay[_today] ?? 0);
+    final room = (cap - out.length).clamp(0, remaining < 0 ? 0 : remaining);
+    if (room > 0) {
+      final fresh = <(PublicProfile, int, List<SuggestionReason>)>[];
+      for (final seed in _people.values) {
+        final p = seed.profile;
+        if (out.any((x) => x.profile.id == p.id) || !eligible(p)) continue;
+        final h = _suggestionHistory[p.id];
+        if (h != null && now.difference(h.shownAt) < const Duration(days: 7)) continue;
+        final r = scoreSuggestion(me, p, weights: weights);
+        fresh.add((p, r.score, r.reasons));
+      }
+      fresh.sort((a, b) => b.$2.compareTo(a.$2));
+      for (final (p, score, reasons) in fresh.take(room)) {
+        _suggestionHistory[p.id] = (shownAt: now, score: score, reasons: reasons, section: section);
+        out.add(Suggestion(profile: _withAffinity(p), compatibility: score, reasons: reasons, section: section));
+      }
+      _suggestionsShownByDay[_today] = (_suggestionsShownByDay[_today] ?? 0) + fresh.take(room).length;
+    }
+    return out;
+  }
+
+  @override
+  Future<SuggestionStatus> suggestionStatus() async {
+    final shown = _suggestionsShownByDay[_today] ?? 0;
+    final now = DateTime.now();
+    return SuggestionStatus(
+      dailyLimit: suggestionDailyLimit,
+      shownToday: shown,
+      remaining: (suggestionDailyLimit - shown).clamp(0, suggestionDailyLimit),
+      resetsAt: DateTime(now.year, now.month, now.day + 1),
+    );
+  }
+
   // -------------------------------------------------------------- music ----
 
   static const _demoArtists = [
@@ -450,10 +554,63 @@ class DemoBackend implements FinderBackend {
     MusicArtist(id: 'demoShreyaGhosh01', name: 'Shreya Ghoshal', genres: ['filmi']),
   ];
 
+  /// Sample tracks for the offline demo (no Spotify there). Titles are
+  /// placeholders, not real songs.
+  static const _demoTrackTitles = [
+    ('Evening Ferry', 'Sushin Shyam'),
+    ('Monsoon Window', 'When Chai Met Toast'),
+    ('Quiet Streets', 'Prateek Kuhad'),
+    ('Backwater Lights', 'Thaikkudam Bridge'),
+    ('Night Bus', 'Hanumankind'),
+    ('Small Hours', 'Prateek Kuhad'),
+    ('Filter Coffee Song', 'Sushin Shyam'),
+    ('Old Harbour', 'A. R. Rahman'),
+  ];
+
+  static List<MusicTrack> demoTopTracks([List<String>? onlyArtists]) {
+    final picked = [
+      for (final (i, (title, artist)) in _demoTrackTitles.indexed)
+        if (onlyArtists == null || onlyArtists.contains(artist)) (i, title, artist),
+    ];
+    // Ranks are 1..n, as in a real Spotify top-tracks list.
+    return [
+      for (final (n, (i, title, artist)) in picked.indexed)
+        MusicTrack(id: 'demoTrack${i.toString().padLeft(8, '0')}', name: title, artists: [artist], rank: n + 1),
+    ];
+  }
+
+  static List<MusicTrack> demoRecent(DateTime now) => [
+    for (final (i, m) in [10, 42, 95, 180, 300, 1500].indexed)
+      MusicTrack(
+        id: 'demoRecent${i.toString().padLeft(8, '0')}',
+        name: _demoTrackTitles[(i * 3) % _demoTrackTitles.length].$1,
+        artists: [_demoTrackTitles[(i * 3) % _demoTrackTitles.length].$2],
+        playedAt: now.subtract(Duration(minutes: m)),
+      ),
+  ];
+
   void _publishMusic() {
     final me = _me;
     if (me == null) return;
-    _setMe(me.copyWith(musicLinked: _music.connected, topArtists: _music.artists.where((a) => a.visible).toList()));
+    _setMe(
+      me.copyWith(
+        musicLinked: _music.connected,
+        topArtists: _music.artists.where((a) => a.visible).toList(),
+        topTracks: _music.showTopTracks ? _music.topTracks : const [],
+        recentTracks: _music.showRecent ? _music.recentTracks : const [],
+      ),
+    );
+  }
+
+  @override
+  Future<void> setMusicSectionVisibility(String section, {required bool visible}) async {
+    if (!_music.connected) throw const AppException(AppErrorCode.unknown, 'Spotify isn’t connected');
+    _music = switch (section) {
+      'top_tracks' => _music.copyWith(showTopTracks: visible),
+      'recent' => _music.copyWith(showRecent: visible),
+      _ => throw const AppException(AppErrorCode.invalidInput, 'Unknown section'),
+    };
+    _publishMusic();
   }
 
   @override
@@ -463,7 +620,13 @@ class DemoBackend implements FinderBackend {
   @override
   Future<Uri> musicAuthorizeUrl() async {
     await _latency();
-    _music = MusicState(status: MusicStatus.active, artists: _demoArtists, syncedAt: DateTime.now());
+    _music = MusicState(
+      status: MusicStatus.active,
+      artists: _demoArtists,
+      syncedAt: DateTime.now(),
+      topTracks: demoTopTracks(),
+      recentTracks: demoRecent(DateTime.now()),
+    );
     _publishMusic();
     return Uri.parse('vouby-demo://music-connected');
   }
@@ -475,11 +638,7 @@ class DemoBackend implements FinderBackend {
   @override
   Future<void> setArtistVisibility(String artistId, {required bool visible}) async {
     if (!_music.artists.any((a) => a.id == artistId)) throw const AppException(AppErrorCode.unknown, 'Artist not found');
-    _music = MusicState(
-      status: _music.status,
-      syncedAt: _music.syncedAt,
-      artists: [for (final a in _music.artists) a.id == artistId ? a.copyWith(visible: visible) : a],
-    );
+    _music = _music.copyWith(artists: [for (final a in _music.artists) a.id == artistId ? a.copyWith(visible: visible) : a]);
     _publishMusic();
   }
 
@@ -1139,6 +1298,8 @@ class _Seed {
         for (final a in DemoBackend._demoArtists)
           if (x.artists.contains(a.name)) a,
       ],
+      topTracks: DemoBackend.demoTopTracks(x.artists),
+      recentTracks: x.artists.isEmpty ? const [] : DemoBackend.demoRecent(DateTime.now()).take(3).toList(),
       musicLinked: x.artists.isNotEmpty,
       isOnboarded: true,
     );

@@ -12,6 +12,7 @@ import '../models/follow_request.dart';
 import '../models/message.dart';
 import '../models/profile.dart';
 import '../models/security.dart';
+import '../models/suggestion.dart';
 import '../security/e2ee_engine.dart';
 import '../security/message_vault.dart';
 import '../security/secure_kv.dart';
@@ -307,6 +308,39 @@ class SupabaseBackend implements FinderBackend {
     return SwipeOutcome.requested;
   });
 
+  // --------------------------------------------------------- suggestions ----
+
+  @override
+  Future<List<Suggestion>> suggestions({String section = 'main', int limit = 10, List<String> exclude = const []}) =>
+      _guard(() async {
+        final rows = (await _db.rpc(
+          'get_suggestions',
+          params: {'p_section': section, 'p_limit': limit, 'p_exclude': exclude},
+        ) as List).cast<Map<String, dynamic>>();
+        return [
+          for (final r in rows)
+            Suggestion(
+              profile: PublicProfile.fromFeedRow(r, resolve: _mediaUrl),
+              compatibility: (r['compatibility'] as num).toInt(),
+              reasons: ((r['reasons'] as List?) ?? const [])
+                  .map((e) => SuggestionReason.fromJson((e as Map).cast<String, dynamic>()))
+                  .toList(),
+              section: r['section'] as String? ?? section,
+            ),
+        ];
+      });
+
+  @override
+  Future<SuggestionStatus> suggestionStatus() => _guard(() async {
+    final r = ((await _db.rpc('suggestion_status') as List).first as Map).cast<String, dynamic>();
+    return SuggestionStatus(
+      dailyLimit: (r['daily_limit'] as num).toInt(),
+      shownToday: (r['shown_today'] as num).toInt(),
+      remaining: (r['remaining'] as num).toInt(),
+      resetsAt: r['resets_at'] == null ? null : DateTime.parse(r['resets_at'] as String).toLocal(),
+    );
+  });
+
   // ------------------------------------------------------------- music ----
 
   @override
@@ -320,6 +354,15 @@ class SupabaseBackend implements FinderBackend {
           .map((e) => MusicArtist.fromJson((e as Map).cast<String, dynamic>()))
           .toList(),
       syncedAt: r['synced_at'] == null ? null : DateTime.parse(r['synced_at'] as String).toLocal(),
+      topTracks: ((r['top_tracks'] as List?) ?? const [])
+          .map((e) => MusicTrack.fromJson((e as Map).cast<String, dynamic>()))
+          .toList(),
+      recentTracks: ((r['recent_tracks'] as List?) ?? const [])
+          .map((e) => MusicTrack.fromJson((e as Map).cast<String, dynamic>()))
+          .toList(),
+      showTopTracks: (r['show_top_tracks'] as bool?) ?? true,
+      showRecent: (r['show_recent'] as bool?) ?? true,
+      recentScope: (r['recent_scope'] as bool?) ?? false,
     );
   });
 
@@ -354,6 +397,10 @@ class SupabaseBackend implements FinderBackend {
   @override
   Future<void> setArtistVisibility(String artistId, {required bool visible}) =>
       _guard(() => _db.rpc('set_music_artist_visibility', params: {'p_artist_id': artistId, 'p_visible': visible}));
+
+  @override
+  Future<void> setMusicSectionVisibility(String section, {required bool visible}) =>
+      _guard(() => _db.rpc('set_music_section_visibility', params: {'p_section': section, 'p_visible': visible}));
 
   @override
   Future<void> disconnectMusic() => _guard(() async {

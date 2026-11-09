@@ -49,7 +49,7 @@ class PolicyScreen extends StatelessWidget {
         builder: (context, snap) {
           if (!snap.hasData) return const SizedBox.shrink();
           // Drop the document's own H1; the app bar already shows the title.
-          final body = snap.data!.replaceFirst(RegExp(r'^# .*\n'), '');
+          final body = policyForScreen(snap.data!);
           return Markdown(
             data: body,
             padding: const EdgeInsets.fromLTRB(20, 8, 20, 40),
@@ -76,4 +76,41 @@ class PolicyScreen extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Prepares a policy Markdown file for a phone screen:
+/// * `<FILL: …>` placeholders (still to be completed by the company) would
+///   otherwise show as raw tag-like code; they become a readable marker.
+/// * Wide tables become stacked blocks, one per row, instead of three
+///   squeezed columns.
+String policyForScreen(String md) {
+  var s = md.replaceFirst(RegExp(r'^# .*\n'), '');
+  s = s.replaceAllMapped(RegExp(r'<FILL:\s*([^>]+)>'), (m) => '*[${m[1]!.trim()} – to be added]*');
+  // Any other angle-bracket tag-like text is shown literally, not as HTML.
+  s = s.replaceAllMapped(RegExp(r'<(/?[A-Za-z][^>]*)>'), (m) => '‹${m[1]}›');
+
+  final lines = s.split('\n');
+  final out = <String>[];
+  List<String> cells(String row) => row.trim().replaceAll(RegExp(r'^\||\|$'), '').split('|').map((c) => c.trim()).toList();
+  bool isSep(String row) => RegExp(r'^\s*\|?\s*:?-{2,}').hasMatch(row);
+  for (var i = 0; i < lines.length; i++) {
+    final l = lines[i];
+    if (l.trimLeft().startsWith('|') && i + 1 < lines.length && isSep(lines[i + 1])) {
+      final head = cells(l);
+      i += 2;
+      while (i < lines.length && lines[i].trimLeft().startsWith('|')) {
+        final row = cells(lines[i]);
+        out.add('- **${row.first}**  ');
+        for (var k = 1; k < row.length && k < head.length; k++) {
+          out.add('  ${head[k]}: ${row[k]}${k < row.length - 1 ? '  ' : ''}');
+        }
+        i++;
+      }
+      out.add('');
+      i--;
+      continue;
+    }
+    out.add(l);
+  }
+  return out.join('\n');
 }

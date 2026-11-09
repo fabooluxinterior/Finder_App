@@ -48,6 +48,18 @@ void main() {
   });
 
   group('consent', () {
+    test('policy text never shows raw placeholder tags or squeezed tables', () {
+      const md =
+          '# Title\n\nRun by **<FILL: Company name>**.\n\n| Information | Why | Visible to |\n|---|---|---|\n| Email | Sign-in | Only you |\n';
+      final out = policyForScreen(md);
+      expect(out, isNot(contains('<FILL')));
+      expect(out, contains('[Company name – to be added]'));
+      expect(out, isNot(contains('|---')));
+      expect(out, contains('- **Email**'));
+      expect(out, contains('Visible to: Only you'));
+      expect(out, isNot(startsWith('# Title')));
+    });
+
     test('policy links resolve to the in-app documents', () {
       expect(Policy.fromHref('PRIVACY_POLICY.md'), Policy.privacy);
       expect(Policy.fromHref('COMMUNITY_GUIDELINES.md'), Policy.guidelines);

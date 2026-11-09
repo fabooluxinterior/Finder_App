@@ -11,6 +11,9 @@ import 'package:finder_app/models/follow_request.dart';
 import 'package:finder_app/models/profile.dart';
 import 'package:finder_app/models/profile_catalog.dart';
 import 'package:finder_app/models/profile_completion.dart';
+import 'package:finder_app/models/suggestion_scoring.dart';
+import 'package:finder_app/features/legal/policy_screen.dart';
+import 'package:finder_app/features/profile_builder/spotify_card.dart';
 import 'package:finder_app/providers.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -256,6 +259,91 @@ void main() {
     final afterSignOut = DemoBackend(persist: true);
     await afterSignOut.restore();
     expect(afterSignOut.currentUserId, isNull, reason: 'signing out really signs out');
+  });
+
+  group('suggestions', () {
+    const base = PublicProfile(id: 'me', fullName: 'Me', age: 26, city: 'Kochi', bio: '', primaryPhoto: null, isPremium: false);
+
+    test('shared signals score higher, with reasons; music only counts when both linked', () {
+      final me = base.copyWith(
+        interestTags: const ['Chai', 'Poetry', 'Football', 'Chess', 'Baking'],
+        lifestyle: const {'intention': 'long_term'},
+      );
+      final close = base.copyWith(
+        interestTags: const ['Chai', 'Poetry', 'Football', 'Chess', 'Yoga'],
+        lifestyle: const {'intention': 'long_term'},
+        completionScore: 80,
+      );
+      final far = base.copyWith(interestTags: const ['Gym', 'Seafood'], city: 'Kozhikode', completionScore: 80);
+      final a = scoreSuggestion(me, close), b = scoreSuggestion(me, far);
+      expect(a.score, greaterThan(b.score));
+      expect(a.reasons.map((r) => r.kind), containsAll(['interests', 'lifestyle', 'city']));
+      expect(a.reasons.first.label, '4 shared interests');
+      expect(a.reasons.any((r) => r.kind == 'music'), isFalse, reason: 'neither linked Spotify');
+    });
+
+    test('preferences are mutual', () {
+      final me = base.copyWith(gender: 'man', prefGenders: const ['woman']);
+      final her = base.copyWith(gender: 'woman', age: 30);
+      expect(prefsMatch(me, her), isTrue);
+      expect(prefsMatch(me, her.copyWith(prefAgeMax: 25)), isFalse, reason: 'I am outside her age range');
+      expect(prefsMatch(me, her.copyWith(prefGenders: const ['woman'])), isFalse, reason: 'she shows women only');
+      expect(prefsMatch(me, base.copyWith(gender: 'man')), isFalse);
+    });
+
+    test('demo: allowance, refresh, load more and exclusions', () async {
+      final b = DemoBackend();
+      await b.verifyOtp(OtpChannel.phone, '+919876543210', '123456');
+      await b.setDob(DateTime(1998, 3, 3));
+      await b.acknowledgeStandards('2026-11-11');
+      await b.createProfile(
+        fullName: 'Asha',
+        city: 'Kochi',
+        details: const ProfilePatch({
+          ProfilePatch.gender: 'woman',
+          ProfilePatch.interestTags: ['Photography', 'Chai', 'Dance', 'Poetry', 'Cafés'],
+          ProfilePatch.prompts: [
+            {'prompt_id': 'p1', 'answer': 'a'},
+            {'prompt_id': 'p2', 'answer': 'b'},
+          ],
+        }),
+      );
+      for (var i = 0; i < 4; i++) {
+        await b.uploadPhoto(Uint8List(10), mime: 'image/webp');
+      }
+      await b.completeOnboarding();
+
+      final first = await b.suggestions(limit: 5);
+      expect(first, hasLength(5));
+      expect(first.first.compatibility, greaterThanOrEqualTo(first.last.compatibility));
+      final spent = (await b.suggestionStatus()).shownToday;
+      final again = await b.suggestions(limit: 5);
+      expect(again.map((s) => s.profile.id), first.map((s) => s.profile.id), reason: 'refresh shows the same people');
+      expect((await b.suggestionStatus()).shownToday, spent, reason: 'refresh spends nothing');
+
+      final more = await b.suggestions(limit: 50, exclude: first.map((s) => s.profile.id).toList());
+      expect(more.length, lessThanOrEqualTo(20), reason: 'page max');
+      expect(more.any((s) => first.any((f) => f.profile.id == s.profile.id)), isFalse);
+
+      await b.swipe(first.first.profile.id, follow: false);
+      expect(
+        (await b.suggestions(limit: 20)).any((s) => s.profile.id == first.first.profile.id),
+        isFalse,
+        reason: 'passed people drop out',
+      );
+    });
+  });
+
+  test('Spotify card: relative times for recent plays', () {
+    final now = DateTime(2026, 11, 9, 12);
+    expect(timeAgo(now.subtract(const Duration(minutes: 10)), now: now), '10 min ago');
+    expect(timeAgo(now.subtract(const Duration(hours: 3)), now: now), '3 h ago');
+    expect(timeAgo(now.subtract(const Duration(days: 1)), now: now), 'yesterday');
+    expect(timeAgo(DateTime(2026, 10, 12), now: now), '12 Oct');
+  });
+
+  test('policy files ship with no raw tags on screen', () {
+    expect(policyForScreen('Run by **<FILL: Company name>**'), isNot(contains('<')));
   });
 
   testWidgets('onboarding starts with the community standards and moves on after agreeing', (tester) async {

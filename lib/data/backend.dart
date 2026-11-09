@@ -4,6 +4,7 @@ import '../models/follow_request.dart';
 import '../models/message.dart';
 import '../models/profile.dart';
 import '../models/security.dart';
+import '../models/suggestion.dart';
 
 enum OtpChannel { email, phone }
 
@@ -28,6 +29,9 @@ class ProfilePatch {
   static const interestTags = 'interest_tags';
   static const prompts = 'prompts';
   static const onboardingStage = 'onboarding_stage';
+  static const prefAgeMin = 'pref_age_min';
+  static const prefAgeMax = 'pref_age_max';
+  static const prefGenders = 'pref_genders';
 }
 
 enum MusicSyncResult { synced, cached, reauthRequired, disconnected }
@@ -86,6 +90,14 @@ abstract class FinderBackend {
   /// follow request (chat stays locked until they accept).
   Future<SwipeOutcome> replyToPrompt(String targetId, String promptId, String text);
 
+  // Suggestions
+  /// Personalised suggestions computed on the server. [section] is 'main'
+  /// ("People you might like") or 'you_may_like'. People already shown today
+  /// come back first (a refresh never spends the daily allowance); [exclude]
+  /// skips people already on screen when loading more.
+  Future<List<Suggestion>> suggestions({String section = 'main', int limit = 10, List<String> exclude = const []});
+  Future<SuggestionStatus> suggestionStatus();
+
   // Music connector (Spotify)
   Future<MusicState> musicState();
 
@@ -95,6 +107,9 @@ abstract class FinderBackend {
   /// Re-imports top artists at most every 12 h (or when [force]d).
   Future<MusicSyncResult> syncMusic({bool force = false});
   Future<void> setArtistVisibility(String artistId, {required bool visible});
+
+  /// Show or hide a whole section on the profile: 'top_tracks' or 'recent'.
+  Future<void> setMusicSectionVisibility(String section, {required bool visible});
   Future<void> disconnectMusic();
 
   Future<List<PublicProfile>> fetchFeed();

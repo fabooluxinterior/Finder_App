@@ -3,7 +3,8 @@ import encodeWebp from "npm:@jsquash/webp@1.5.0/encode.js";
 import { fitBox, RejectedImage, sanitizeImage, sniff, stripWebp, webpInfo } from "../image.ts";
 import { openMedia, openSecret, resetKeyringForTests, rewrapDek, sealMedia, sealSecret } from "../media_crypto.ts";
 import {
-  authorizeUrl, exchangeCode, mapArtists, pickImage, ReauthRequired, refreshAccess, SpotifyRateLimited, topArtists,
+  authorizeUrl, exchangeCode, importAll, mapArtists, mapTrack, pickImage, ReauthRequired, recentlyPlayed, refreshAccess,
+  ScopeMissing, SpotifyRateLimited, topArtists,
 } from "../spotify.ts";
 import { decide } from "../moderation.ts";
 
@@ -162,7 +163,7 @@ Deno.test("music: OAuth requests stay server-side and handle edge cases", async 
   Deno.env.set("SPOTIFY_CLIENT_SECRET", "csecret");
   Deno.env.set("SPOTIFY_REDIRECT_URI", "https://ref.supabase.co/functions/v1/music-callback");
   const url = new URL(authorizeUrl("s".repeat(43)));
-  assertEquals(url.searchParams.get("scope"), "user-top-read");
+  assertEquals(url.searchParams.get("scope"), "user-top-read user-read-recently-played");
   assert(!url.toString().includes("csecret"), "secret never in the browser URL");
 
   let sentBody = "";
@@ -175,9 +176,9 @@ Deno.test("music: OAuth requests stay server-side and handle edge cases", async 
     assert(u.includes("/me/top/artists?limit=10&time_range=medium_term"));
     return Response.json({ items: [] });
   });
-  assertEquals(await exchangeCode("code123", ok), { access: "acc", refresh: "rot" });
+  assertEquals(await exchangeCode("code123", ok), { access: "acc", refresh: "rot", scope: null });
   assert(sentBody.includes("grant_type=authorization_code") && sentBody.includes("code=code123"));
-  assertEquals(await refreshAccess("old", ok), { access: "acc", refresh: "rot" }, "rotated refresh token surfaced");
+  assertEquals(await refreshAccess("old", ok), { access: "acc", refresh: "rot", scope: null }, "rotated refresh token surfaced");
   assertEquals(await topArtists("acc", ok), [], "zero listening history is a valid, empty result");
 
   const revoked = fakeFetch(() => Response.json({ error: "invalid_grant" }, { status: 400 }));
@@ -187,4 +188,29 @@ Deno.test("music: OAuth requests stay server-side and handle edge cases", async 
   assertEquals((err as SpotifyRateLimited).retryAfter, 12);
   const expired = fakeFetch(() => new Response("", { status: 401 }));
   await assertRejects(() => topArtists("acc", expired), ReauthRequired);
+});
+
+Deno.test("music: top tracks and recently played, with old grants and empty history", async () => {
+  const album = { images: [{ url: "https://i.scdn.co/image/a640", width: 640 }, { url: "https://i.scdn.co/image/a300", width: 300 }] };
+  assertEquals(mapTrack({ id: "3n3Ppam7vgaVa1iaRUc9Lp", name: "Song", artists: [{ name: "A" }, { name: "B" }], album }),
+    { id: "3n3Ppam7vgaVa1iaRUc9Lp", name: "Song", artists: ["A", "B"], image: "https://i.scdn.co/image/a300" });
+  assertEquals(mapTrack({ id: "x", name: "bad id" }), null);
+  assertEquals(mapTrack({ id: "3n3Ppam7vgaVa1iaRUc9Lp", name: "No art", artists: [] })!.image, null);
+
+  const played = { items: [{ played_at: "2026-11-09T10:00:00.000Z", track: { id: "3n3Ppam7vgaVa1iaRUc9Lp", name: "Song", artists: [], album } }] };
+  const full = fakeFetch((u) =>
+    u.includes("/recently-played") ? Response.json(played) : Response.json({ items: [] })
+  );
+  const r = await recentlyPlayed("acc", full);
+  assertEquals(r[0].played_at, "2026-11-09T10:00:00.000Z");
+  const all = await importAll("acc", full);
+  assertEquals([all.artists.length, all.tracks.length, all.recent!.length], [0, 0, 1]);
+
+  // Granted before the recently-played scope existed: Spotify answers 403.
+  const oldGrant = fakeFetch((u) => u.includes("/recently-played") ? new Response("", { status: 403 }) : Response.json({ items: [] }));
+  await assertRejects(() => recentlyPlayed("acc", oldGrant), ScopeMissing);
+  assertEquals((await importAll("acc", oldGrant)).recent, null, "recently played is optional");
+
+  const expired = fakeFetch(() => new Response("", { status: 401 }));
+  await assertRejects(() => importAll("acc", expired), ReauthRequired);
 });

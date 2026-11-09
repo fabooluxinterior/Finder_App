@@ -1,6 +1,6 @@
 # Vouby Terms of Service
 
-**Version 2026-11-11.** Draft: have this reviewed by a lawyer before publishing.
+**Version 2026-11-12.** Draft: have this reviewed by a lawyer before publishing.
 
 These terms are an agreement between you and **<FILL: Company name>**, **<FILL: Registered address>** ("Vouby", "we", "us"). By creating an account you accept these terms, our [Privacy Policy](PRIVACY_POLICY.md) and our [Community Guidelines](COMMUNITY_GUIDELINES.md).
 

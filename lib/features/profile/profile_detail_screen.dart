@@ -9,7 +9,7 @@ import '../../providers.dart';
 import '../deck/profile_card.dart';
 import '../onboarding/onboarding_flow.dart' show lifestyleIcon;
 import '../profile_builder/icebreaker_sheet.dart';
-import '../profile_builder/music_panel.dart' show ArtistAvatar;
+import '../profile_builder/spotify_card.dart';
 import '../../core/phosphor.dart';
 import '../../models/profile_catalog.dart';
 import '../safety/safety_actions.dart';
@@ -90,10 +90,10 @@ class _ProfileDetailScreenState extends ConsumerState<ProfileDetailScreen> {
         if (i < prompts.length) promptCard(prompts[i]),
         if (i == 0) _BasicsSection(profile: profile),
         if (i < extra.length) _PhotoCard(url: extra[i], name: profile.fullName),
-        if (i == 1 && profile.topArtists.isNotEmpty) _MusicSection(profile: profile),
+        if (i == 1 && SpotifyProfileCard.hasContent(profile)) SpotifyProfileCard(profile: profile),
       ],
       if (prompts.isEmpty && extra.isEmpty) _BasicsSection(profile: profile),
-      if (profile.topArtists.isNotEmpty && prompts.length < 2 && extra.length < 2) _MusicSection(profile: profile),
+      if (SpotifyProfileCard.hasContent(profile) && prompts.length < 2 && extra.length < 2) SpotifyProfileCard(profile: profile),
     ];
 
     return Scaffold(
@@ -609,54 +609,6 @@ class _BasicsSection extends StatelessWidget {
                 ],
               ),
             ),
-        ],
-      ),
-    );
-  }
-}
-
-/// Their visible top artists; shared ones get a green ring and the tag.
-class _MusicSection extends StatelessWidget {
-  const _MusicSection({required this.profile});
-  final PublicProfile profile;
-
-  @override
-  Widget build(BuildContext context) {
-    final c = context.fc;
-    final shared = profile.sharedArtistIds.toSet();
-    return _Section(
-      title: 'Top artists on Spotify',
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          if (shared.isNotEmpty) ...[MusicAffinityTag(profile: profile), const SizedBox(height: 14)],
-          SizedBox(
-            height: 96,
-            child: ListView.separated(
-              scrollDirection: Axis.horizontal,
-              itemCount: profile.topArtists.length,
-              separatorBuilder: (_, _) => const SizedBox(width: 14),
-              itemBuilder: (_, i) {
-                final a = profile.topArtists[i];
-                return SizedBox(
-                  width: 68,
-                  child: Column(
-                    children: [
-                      ArtistAvatar(artist: a, size: 60, highlight: shared.contains(a.id)),
-                      const SizedBox(height: 6),
-                      Text(
-                        a.name,
-                        maxLines: 2,
-                        textAlign: TextAlign.center,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(fontSize: 12, height: 1.2, color: shared.contains(a.id) ? c.ink : c.ink3),
-                      ),
-                    ],
-                  ),
-                );
-              },
-            ),
-          ),
         ],
       ),
     );

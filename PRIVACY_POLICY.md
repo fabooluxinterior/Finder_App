@@ -1,6 +1,6 @@
 # Vouby Privacy Policy
 
-**Version 2026-11-11.** Draft: have this reviewed by a lawyer before publishing (India's Digital Personal Data Protection Act, 2023, and Google Play's User Data policy).
+**Version 2026-11-12.** Draft: have this reviewed by a lawyer before publishing (India's Digital Personal Data Protection Act, 2023, and Google Play's User Data policy).
 
 Vouby ("we", "us") is operated by **<FILL: Company name>**, **<FILL: Registered address>**. This policy explains what we collect, how we protect it, and what control you have.
 
@@ -18,6 +18,9 @@ Vouby ("we", "us") is operated by **<FILL: Company name>**, **<FILL: Registered 
 | Prompt answers (up to 3, 150 characters each) | Conversation starters on your profile | Every signed-in Vouby user, as above |
 | A reply someone sends to one of your prompts, or you send to theirs | Starting a conversation; travels with the follow request | You and the other person. **Not end-to-end encrypted**, because it's sent before the chat opens |
 | If you connect Spotify: your top 10 artists (name, picture, genres) | Showing your music taste and shared artists | Artists you leave visible: every signed-in Vouby user, as above. Hidden artists: only you |
+| If you connect Spotify: your top 10 tracks (Spotify's ranking) and your last 10 plays with their times | The "Most played" and "Recently played" parts of your music card | Each section you leave on: every signed-in Vouby user, as above. Turned off: only you |
+| Discovery preferences (age range, who you want to see) | Choosing who appears in Discover and Suggestions, both ways | Only you and our systems. Other users never see them |
+| Who we suggested to you, when, and why (shared interests, artists, lifestyle answers, district) | Not repeating suggestions and keeping to the daily limit | Only you and our systems |
 | If you connect Spotify: an access token from Spotify | Refreshing your top artists | Our systems only (encrypted, never shown to anyone) |
 | Verification selfie and the pose you were asked to make | Confirming your photos are really you | Only our trained verification staff. Never other users |
 | Follow requests, passes and matches | Running the app's core features | You and the other person |
@@ -40,7 +43,9 @@ Vouby ("we", "us") is operated by **<FILL: Company name>**, **<FILL: Registered 
 
 **Photos are optimised on your phone.** Before any upload, the app resizes each photo to at most 1080 pixels and converts it to a compact WebP file (under 100 KB). When you replace or remove a photo, we delete the stored file straight away.
 
-**Spotify.** Connecting Spotify asks Spotify for permission to read your top artists (scope `user-top-read`) and nothing else: we can't see your playlists, individual plays, followers, email or account details. We refresh the list at most twice a day. You can hide any artist; hidden artists are never shown or used to find shared artists. Disconnecting deletes the token and every imported artist from our systems. You can also remove Vouby's access in your Spotify account under Apps.
+**Spotify.** Connecting Spotify asks Spotify for permission to read your top artists and top tracks (scope "user-top-read") and your recently played tracks (scope "user-read-recently-played"), and nothing else: we can't see your playlists, followers, email or account details. We refresh your music at most once an hour, only when you open the app. You can turn off "Most played" or "Recently played" at any time. You can hide any artist; hidden artists are never shown or used to find shared artists. Disconnecting deletes the token and every imported artist from our systems. You can also remove Vouby's access in your Spotify account under Apps.
+
+**Suggestions.** We suggest people using shared interests, shared artists (only artists both of you left visible, and only if you both connected Spotify), matching lifestyle answers, being in the same district, and how complete their profile is. Each suggestion shows why. We never use your messages, your photos' content or your exact location for this.
 
 ## 3. How your conversations are protected
 
@@ -68,7 +73,8 @@ Because chats are end-to-end encrypted, moderators can't see them unless **you c
 | Undelivered encrypted messages | Until delivered, or at most 30 days |
 | Message metadata | Until you or the other person unmatches or blocks, or either account is deleted |
 | Prompt replies sent with a request | Same as message metadata, or until the request is declined |
-| Spotify token and imported artists | Until you disconnect Spotify or delete your account |
+| Spotify token, imported artists and tracks | Until you disconnect Spotify or delete your account |
+| Suggestion history | 90 days |
 | Removed photos | Unavailable immediately; deleted from storage within 24 hours |
 | Report evidence | 90 days after the report is resolved |
 | Security logs | 1 year |

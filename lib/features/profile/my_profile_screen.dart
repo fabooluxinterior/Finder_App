@@ -10,6 +10,8 @@ import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../providers.dart';
 import 'profile_editor_screen.dart';
+import '../suggestions/discovery_preferences_screen.dart';
+import '../../models/profile_catalog.dart' show genderLabel;
 import '../profile_builder/completion_meter.dart';
 import '../paywall/paywall_sheet.dart';
 import '../security/security_center_screen.dart';
@@ -246,6 +248,14 @@ class _MyProfileScreenState extends ConsumerState<MyProfileScreen> {
                       if (v) Fx.instance.request();
                     },
                   ),
+                ),
+                _Row(
+                  icon: PhosphorIconsRegular.slidersHorizontal,
+                  title: 'Discovery preferences',
+                  subtitle:
+                      '${me.prefGenders.isEmpty ? 'Everyone' : me.prefGenders.map((g) => genderLabel(g) ?? g).join(', ')} · '
+                      '${me.prefAgeMin}–${me.prefAgeMax >= 80 ? '80+' : me.prefAgeMax}',
+                  onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const DiscoveryPreferencesScreen())),
                 ),
                 _Row(
                   icon: PhosphorIconsRegular.shieldCheck,

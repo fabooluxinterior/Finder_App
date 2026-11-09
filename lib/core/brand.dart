@@ -183,11 +183,20 @@ class _IconPainter extends CustomPainter {
   bool shouldRepaint(_IconPainter old) => old.color != color || old.paths != paths;
 }
 
+enum TabKind { discover, suggestions, requests, chats, you }
+
 /// Tab-bar icons: outline when idle; when active they fill in and cut their
 /// detail out, like the mark. The Chats tab becomes the logo itself.
 class TabIcon extends StatelessWidget {
-  const TabIcon({super.key, required this.index, required this.active, required this.color, this.size = 26});
-  final int index;
+  const TabIcon({super.key, required this.kind, required this.active, required this.color, this.size = 26});
+  final TabKind kind;
+  int get index => switch (kind) {
+    TabKind.discover => 0,
+    TabKind.requests => 1,
+    TabKind.chats => 2,
+    TabKind.you => 3,
+    TabKind.suggestions => 4,
+  };
   final bool active;
   final Color color;
   final double size;
@@ -240,6 +249,18 @@ class _TabPainter extends CustomPainter {
       case 2: // Chats: bubble with the v
         canvas.drawPath(_cached(VIcons.chat), stroke);
         canvas.drawPath(_cached(VIcons.chatV), stroke);
+      case 4: // Suggestions: compass (needle cut out when active)
+        if (active) {
+          canvas.drawCircle(const Offset(12, 12), 10, fill);
+          canvas.drawPath(
+            _cached('M15.5 8.5l-2 5-5 2 2-5z'),
+            Paint()
+              ..color = const Color(0xFF0B0B0C)
+              ..style = PaintingStyle.fill,
+          );
+        } else {
+          canvas.drawPath(_cached('M3 12a9 9 0 1 0 18 0a9 9 0 1 0-18 0M15.5 8.5l-2 5-5 2 2-5z'), stroke);
+        }
       case 3: // You
         if (active) {
           canvas.drawCircle(const Offset(12, 8), 4.5, fill);

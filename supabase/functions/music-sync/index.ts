@@ -1,14 +1,15 @@
 // POST { action: "sync", force? } | { action: "disconnect" }
-// sync: refreshes the imported top artists at most every 12 hours (feeds and
-//   swipes never call Spotify; they read the stored list). Rotated refresh
+// sync: refreshes artists, top tracks and recently played at most once an
+//   hour, when the owner opens the app (feeds, swipes and other people's
+//   views never call Spotify; they read the stored lists). Rotated refresh
 //   tokens are stored; a revoked token marks the account "reauth_required".
 // disconnect: deletes tokens and imported artists, and clears the profile.
 import { admin, rateLimit, requireUser } from "../_shared/auth.ts";
 import { handle, HttpError, json } from "../_shared/http.ts";
 import { openSecret, sealSecret } from "../_shared/media_crypto.ts";
-import { ReauthRequired, refreshAccess, SpotifyRateLimited, topArtists } from "../_shared/spotify.ts";
+import { importAll, ReauthRequired, refreshAccess, SpotifyRateLimited } from "../_shared/spotify.ts";
 
-const FRESH_MS = 12 * 3600_000;
+const FRESH_MS = 3600_000;
 
 Deno.serve((req) =>
   handle(req, async () => {
@@ -36,13 +37,14 @@ Deno.serve((req) =>
     try {
       const refresh = await openSecret(`music:${user.id}`, acct.refresh_token_enc, acct.kek_id);
       const tokens = await refreshAccess(refresh);
-      const artists = await topArtists(tokens.access);
+      const { artists, tracks, recent } = await importAll(tokens.access);
       const rotated = tokens.refresh && tokens.refresh !== refresh ? await sealSecret(`music:${user.id}`, tokens.refresh) : null;
-      const { error } = await admin.rpc("service_music_store", {
-        p_user: user.id, p_token_enc: rotated?.sealed ?? null, p_kek: rotated?.kekId ?? null, p_artists: artists,
+      const { error } = await admin.rpc("service_music_store_v2", {
+        p_user: user.id, p_token_enc: rotated?.sealed ?? null, p_kek: rotated?.kekId ?? null,
+        p_artists: artists, p_tracks: tracks, p_recent: recent, p_scopes: tokens.scope,
       });
       if (error) throw error;
-      return json(req, { status: "synced", count: artists.length });
+      return json(req, { status: "synced", count: artists.length, recent_available: recent !== null });
     } catch (e) {
       if (e instanceof ReauthRequired) {
         await admin.rpc("service_music_reauth", { p_user: user.id });

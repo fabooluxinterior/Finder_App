@@ -4,7 +4,7 @@
 // app. Nothing secret appears in the URL the app receives.
 import { admin, securityEvent } from "../_shared/auth.ts";
 import { sealSecret } from "../_shared/media_crypto.ts";
-import { exchangeCode, ReauthRequired, topArtists } from "../_shared/spotify.ts";
+import { exchangeCode, importAll, ReauthRequired } from "../_shared/spotify.ts";
 
 const RETURN = Deno.env.get("MUSIC_RETURN_URL") ?? "vouby://music";
 
@@ -45,15 +45,16 @@ Deno.serve(async (req) => {
 
   try {
     const tokens = await exchangeCode(code);
-    const artists = await topArtists(tokens.access);
+    const { artists, tracks, recent } = await importAll(tokens.access);
     const sealed = tokens.refresh ? await sealSecret(`music:${row.user_id}`, tokens.refresh) : null;
-    const { error } = await admin.rpc("service_music_store", {
-      p_user: row.user_id, p_token_enc: sealed?.sealed ?? null, p_kek: sealed?.kekId ?? null, p_artists: artists,
+    const { error } = await admin.rpc("service_music_store_v2", {
+      p_user: row.user_id, p_token_enc: sealed?.sealed ?? null, p_kek: sealed?.kekId ?? null,
+      p_artists: artists, p_tracks: tracks, p_recent: recent, p_scopes: tokens.scope,
     });
     if (error) throw error;
-    return page("connected", artists.length
-      ? "Spotify is connected. Your top artists are on your profile."
-      : "Spotify is connected. Listen a little more and your top artists will appear soon.");
+    return page("connected", artists.length || tracks.length
+      ? "Spotify is connected. Your music is on your profile."
+      : "Spotify is connected. Listen a little more and your music will appear soon.");
   } catch (e) {
     console.error("music callback", e instanceof ReauthRequired ? "rejected" : e instanceof Error ? e.name : "error");
     return page("error", "We couldn't connect Spotify. Please try again.");
