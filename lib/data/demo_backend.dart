@@ -19,6 +19,8 @@ import '../models/suggestion_scoring.dart';
 import '../models/security.dart';
 import 'backend.dart';
 import 'memory_images.dart';
+import 'spotify_direct.dart';
+import '../security/secure_kv.dart';
 
 /// Fully offline backend used when no Supabase credentials are supplied.
 /// Mirrors the server rules (limits, RLS visibility, mutual consent) so the
@@ -27,9 +29,22 @@ class DemoBackend implements FinderBackend {
   /// [persist]: remember the session and your own profile on this device
   /// (shared preferences / browser storage), so closing the app or going
   /// back never means signing in and setting up again.
-  DemoBackend({this.persist = false}) {
+  ///
+  /// [spotify]: a real Spotify connection (PKCE, straight from the app).
+  /// Defaults to one when the build sets SPOTIFY_CLIENT_ID; otherwise
+  /// connecting imports sample artists.
+  DemoBackend({this.persist = false, SpotifyDirect? spotify, SecureKv? secrets})
+    : _spotify = spotify ?? (SpotifyDirect.configured ? SpotifyDirect(clientId: SpotifyDirect.envClientId) : null),
+      _secrets = secrets ?? (persist ? PlatformSecureKv() : MemorySecureKv()) {
     _seed();
   }
+
+  final SpotifyDirect? _spotify;
+  final SecureKv _secrets;
+  static const _spotifyKey = 'vouby_demo_spotify_tokens';
+
+  /// Whether connecting uses a real Spotify account.
+  bool get realSpotify => _spotify != null;
 
   final bool persist;
   static const _stateKey = 'vouby_demo_state_v1';
@@ -84,6 +99,9 @@ class DemoBackend implements FinderBackend {
   @override
   Future<void> signOut() async {
     _uid = null;
+    try {
+      await _secrets.delete(_spotifyKey);
+    } catch (_) {}
     _auth.add(null);
     if (persist) {
       try {
@@ -129,7 +147,8 @@ class DemoBackend implements FinderBackend {
           for (final t in (music[k] as List? ?? const []).cast<Map<String, dynamic>>()) MusicTrack.fromJson(t),
         ];
         _music = MusicState(
-          status: MusicStatus.active,
+          status: MusicStatus.values.firstWhere((v) => v.name == music['status'], orElse: () => MusicStatus.active),
+          recentScope: (music['recentScope'] as bool?) ?? true,
           syncedAt: DateTime.tryParse(music['synced'] as String? ?? ''),
           artists: [
             for (final a in (music['artists'] as List).cast<Map<String, dynamic>>())
@@ -193,9 +212,15 @@ class DemoBackend implements FinderBackend {
       'music': _music.connected
           ? {
               'synced': _music.syncedAt?.toIso8601String(),
+              'status': _music.status.name,
+              'recentScope': _music.recentScope,
               'artists': [
                 for (final a in _music.artists) {...a.toJson(), 'visible': a.visible},
               ],
+              'tracks': [for (final t in _music.topTracks) t.toJson()],
+              'recent': [for (final t in _music.recentTracks) t.toJson()],
+              'showTracks': _music.showTopTracks,
+              'showRecent': _music.showRecent,
             }
           : null,
       'me': me == null
@@ -616,24 +641,96 @@ class DemoBackend implements FinderBackend {
   @override
   Future<MusicState> musicState() async => _music;
 
-  /// No Spotify in the offline demo: connecting imports a sample list.
+  /// With a Spotify client ID: the real consent flow, then an import from
+  /// the person's own account. Without one: a sample list.
   @override
   Future<Uri> musicAuthorizeUrl() async {
-    await _latency();
-    _music = MusicState(
-      status: MusicStatus.active,
-      artists: _demoArtists,
-      syncedAt: DateTime.now(),
-      topTracks: demoTopTracks(),
-      recentTracks: demoRecent(DateTime.now()),
-    );
-    _publishMusic();
+    final sp = _spotify;
+    if (sp == null) {
+      await _latency();
+      _music = MusicState(
+        status: MusicStatus.active,
+        artists: _demoArtists,
+        syncedAt: DateTime.now(),
+        topTracks: demoTopTracks(),
+        recentTracks: demoRecent(DateTime.now()),
+      );
+      _publishMusic();
+      return Uri.parse('vouby-demo://music-connected');
+    }
+    final tokens = await sp.connect();
+    await _saveTokens(tokens);
+    await _importSpotify(sp, tokens);
     return Uri.parse('vouby-demo://music-connected');
   }
 
+  Future<void> _saveTokens(SpotifyTokens t) =>
+      _secrets.write(_spotifyKey, jsonEncode({'a': t.access, 'r': t.refresh, 'e': t.expiresAt.toIso8601String(), 's': t.scope}));
+
+  Future<SpotifyTokens?> _loadTokens() async {
+    try {
+      final raw = await _secrets.read(_spotifyKey);
+      if (raw == null) return null;
+      final m = jsonDecode(raw) as Map<String, dynamic>;
+      return SpotifyTokens(
+        access: m['a'] as String,
+        refresh: m['r'] as String,
+        expiresAt: DateTime.parse(m['e'] as String),
+        scope: m['s'] as String,
+      );
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<void> _importSpotify(SpotifyDirect sp, SpotifyTokens tokens) async {
+    final data = await sp.importAll(tokens.access);
+    final hidden = {
+      for (final a in _music.artists)
+        if (!a.visible) a.id,
+    };
+    _music = MusicState(
+      status: MusicStatus.active,
+      artists: [for (final a in data.artists) a.copyWith(visible: !hidden.contains(a.id))],
+      syncedAt: DateTime.now(),
+      topTracks: data.tracks,
+      recentTracks: data.recent ?? _music.recentTracks,
+      showTopTracks: _music.connected ? _music.showTopTracks : true,
+      showRecent: _music.connected ? _music.showRecent : true,
+      recentScope: data.recent != null,
+    );
+    _publishMusic();
+  }
+
+  /// Real Spotify: refreshes at most hourly (or when [force]d).
   @override
-  Future<MusicSyncResult> syncMusic({bool force = false}) async =>
-      _music.connected ? MusicSyncResult.cached : MusicSyncResult.disconnected;
+  Future<MusicSyncResult> syncMusic({bool force = false}) async {
+    if (!_music.connected) return MusicSyncResult.disconnected;
+    final sp = _spotify;
+    if (sp == null) return MusicSyncResult.cached;
+    final synced = _music.syncedAt;
+    if (!force && synced != null && DateTime.now().difference(synced) < const Duration(hours: 1)) {
+      return MusicSyncResult.cached;
+    }
+    var tokens = await _loadTokens();
+    if (tokens == null) return _needsReauth();
+    try {
+      if (tokens.expired) {
+        tokens = await sp.refresh(tokens);
+        await _saveTokens(tokens);
+      }
+      await _importSpotify(sp, tokens);
+      return MusicSyncResult.synced;
+    } on SpotifyReauthRequired {
+      return _needsReauth();
+    }
+  }
+
+  MusicSyncResult _needsReauth() {
+    _music = _music.copyWith(status: MusicStatus.reauthRequired);
+    _persist();
+    return MusicSyncResult.reauthRequired;
+  }
 
   @override
   Future<void> setArtistVisibility(String artistId, {required bool visible}) async {
@@ -645,6 +742,7 @@ class DemoBackend implements FinderBackend {
   @override
   Future<void> disconnectMusic() async {
     await _latency();
+    await _secrets.delete(_spotifyKey);
     _music = MusicState.disconnected;
     _publishMusic();
   }

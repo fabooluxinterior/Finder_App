@@ -12,4 +12,5 @@ s = open('pubspec.yaml').read()
 s = re.sub(r"    - path: assets/demo/\n      flavors:\n        - demo\n", "    - assets/demo/\n", s)
 open('pubspec.yaml', 'w').write(s)
 PY
-flutter build web --release --no-web-resources-cdn --pwa-strategy=none --no-wasm-dry-run --dart-define=DEMO=true "$@"
+flutter build web --release --no-web-resources-cdn --pwa-strategy=none --no-wasm-dry-run --dart-define=DEMO=true \
+  --dart-define=SPOTIFY_CLIENT_ID="${SPOTIFY_CLIENT_ID:-}" "$@"

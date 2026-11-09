@@ -5,6 +5,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../core/errors.dart';
 import '../../core/phosphor.dart';
 import '../../core/spotify_logo.dart';
+import '../../data/demo_backend.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/backend.dart';
@@ -70,7 +71,11 @@ class _MusicPanelState extends ConsumerState<MusicPanel> with WidgetsBindingObse
     try {
       final url = await ref.read(backendProvider).musicAuthorizeUrl();
       if (url.scheme == 'vouby-demo') {
-        _reload(); // offline demo imports sample artists directly
+        _reload(); // demo: already imported (from Spotify, or sample artists)
+        final b = ref.read(backendProvider);
+        if (mounted && b is DemoBackend && !b.realSpotify) {
+          showSnack(context, 'Sample artists added. This build has no Spotify app ID set.');
+        }
       } else {
         _awaitingReturn = true;
         await launchUrl(url, mode: LaunchMode.externalApplication);

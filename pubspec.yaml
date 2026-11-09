@@ -54,6 +54,9 @@ dependencies:
   flutter_secure_storage: ^11.2.0
   shared_preferences: ^2.5.6
   flutter_markdown_plus: ^1.0.12
+  flutter_web_auth_2: ^5.1.0
+  crypto: ^3.0.8
+  http: ^1.6.0
 
 dev_dependencies:
   flutter_test:

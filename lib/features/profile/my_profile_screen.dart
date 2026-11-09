@@ -8,6 +8,7 @@ import '../../core/config.dart';
 import '../../core/feedback.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
+import '../../models/security.dart';
 import '../../providers.dart';
 import 'profile_editor_screen.dart';
 import '../suggestions/discovery_preferences_screen.dart';
@@ -31,7 +32,18 @@ class _MyProfileScreenState extends ConsumerState<MyProfileScreen> {
   Widget build(BuildContext context) {
     final c = context.fc;
     final t = Theme.of(context).textTheme;
-    final me = ref.watch(myProfileProvider).value;
+    // Approval happens later (staff review), so refresh the profile when the
+    // status flips and show the badge right away.
+    ref.listen(verificationStatusProvider, (prev, next) {
+      if (next.value == VerificationStatus.approved && prev?.value != VerificationStatus.approved) {
+        ref.invalidate(myProfileProvider);
+      }
+    });
+    final status = ref.watch(verificationStatusProvider).value;
+    final loaded = ref.watch(myProfileProvider).value;
+    final me = loaded == null || loaded.isVerified || status != VerificationStatus.approved
+        ? loaded
+        : loaded.copyWith(isVerified: true);
     final premium = isPremium(ref);
     if (me == null) return const Scaffold(body: SizedBox.shrink());
     // extendBody: the shell already adds the tab bar to the bottom padding.

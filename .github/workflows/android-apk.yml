@@ -87,9 +87,15 @@ jobs:
 
       # Demo APK (`demo` flavor): offline sample data, no secrets needed.
       # The `prod` flavor never contains demo code or assets/demo/.
+      # SPOTIFY_CLIENT_ID (a repository *variable*; a public ID, not a secret)
+      # turns on real Spotify sign-in (PKCE) in the demo. Unset: sample artists.
       - name: Build demo APK
+        env:
+          SPOTIFY_CLIENT_ID: ${{ vars.SPOTIFY_CLIENT_ID }}
         run: |
-          flutter build apk --release --flavor demo --dart-define=DEMO=true --split-per-abi --target-platform android-arm64,android-arm
+          flutter build apk --release --flavor demo --dart-define=DEMO=true \
+            --dart-define=SPOTIFY_CLIENT_ID="$SPOTIFY_CLIENT_ID" \
+            --split-per-abi --target-platform android-arm64,android-arm
           mkdir -p out
           ls build/app/outputs/flutter-apk/
           cp build/app/outputs/flutter-apk/*arm64*demo*release.apk out/finder-demo-arm64.apk

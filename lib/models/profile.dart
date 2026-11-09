@@ -372,8 +372,8 @@ class MusicState {
   /// (reconnecting adds it).
   final bool recentScope;
 
-  MusicState copyWith({List<MusicArtist>? artists, bool? showTopTracks, bool? showRecent}) => MusicState(
-    status: status,
+  MusicState copyWith({MusicStatus? status, List<MusicArtist>? artists, bool? showTopTracks, bool? showRecent}) => MusicState(
+    status: status ?? this.status,
     artists: artists ?? this.artists,
     syncedAt: syncedAt,
     topTracks: topTracks,
