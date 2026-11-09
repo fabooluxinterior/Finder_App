@@ -213,7 +213,7 @@ class _ProfileCardState extends State<ProfileCard> {
                     opacity: progress,
                     child: Transform.scale(
                       scale: 0.85 + 0.15 * progress,
-                      child: _SwipeIcon(
+                      child: SwipeIntentIcon(
                         icon: requesting ? VIcons.plus : VIcons.close,
                         color: requesting ? c.accent : Colors.white,
                       ),
@@ -449,8 +449,9 @@ class _Stat extends StatelessWidget {
   }
 }
 
-class _SwipeIcon extends StatelessWidget {
-  const _SwipeIcon({required this.icon, required this.color});
+/// Transparent ring with an icon, shown while a card is dragged.
+class SwipeIntentIcon extends StatelessWidget {
+  const SwipeIntentIcon({super.key, required this.icon, required this.color});
   final String icon;
   final Color color;
 

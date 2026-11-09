@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_card_swiper/flutter_card_swiper.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/brand.dart';
@@ -11,7 +12,7 @@ import '../../models/follow_request.dart';
 import '../../models/profile.dart';
 import '../../models/suggestion.dart';
 import '../../providers.dart';
-import '../deck/profile_card.dart' show MusicAffinityTag;
+import '../deck/profile_card.dart' show MusicAffinityTag, SwipeIntentIcon;
 import '../match/match_screen.dart';
 import '../profile/profile_detail_screen.dart';
 import 'discovery_preferences_screen.dart';
@@ -42,6 +43,16 @@ class _SuggestionsScreenState extends ConsumerState<SuggestionsScreen> {
   /// Everyone shown in this session (for "next page").
   final _seen = <String>{};
 
+  /// Sliding cards for the best matches: index of the card on top.
+  final _swiper = CardSwiperController();
+  int _top = 0;
+
+  @override
+  void dispose() {
+    _swiper.dispose();
+    super.dispose();
+  }
+
   @override
   void initState() {
     super.initState();
@@ -62,6 +73,7 @@ class _SuggestionsScreenState extends ConsumerState<SuggestionsScreen> {
       if (!mounted) return;
       setState(() {
         _main = main;
+        _top = 0;
         _mayLike = mayLike;
         _status = status;
         _seen.addAll([...main, ...mayLike].map((s) => s.profile.id));
@@ -88,7 +100,12 @@ class _SuggestionsScreenState extends ConsumerState<SuggestionsScreen> {
       final status = await backend.suggestionStatus();
       if (!mounted) return;
       setState(() {
-        _main = nextPage ? more : [..._main, ...more];
+        if (nextPage || _top >= _main.length) {
+          _main = more;
+          _top = 0;
+        } else {
+          _main = [..._main, ...more];
+        }
         _seen.addAll(more.map((s) => s.profile.id));
         _status = status;
       });
@@ -107,6 +124,10 @@ class _SuggestionsScreenState extends ConsumerState<SuggestionsScreen> {
 
   Future<void> _act(PublicProfile p, {required bool follow}) async {
     _remove(p.id);
+    await _send(p, follow: follow);
+  }
+
+  Future<void> _send(PublicProfile p, {required bool follow}) async {
     follow ? Fx.instance.request() : Fx.instance.pass();
     try {
       final outcome = await ref.read(backendProvider).swipe(p.id, follow: follow);
@@ -121,15 +142,26 @@ class _SuggestionsScreenState extends ConsumerState<SuggestionsScreen> {
     }
   }
 
+  bool _onSwipe(int previous, int? current, CardSwiperDirection direction) {
+    final p = _main[previous].profile;
+    setState(() => _top = current ?? _main.length);
+    _send(p, follow: direction == CardSwiperDirection.right);
+    return true;
+  }
+
+  bool _isTop(Suggestion s) => _top < _main.length && _main[_top].profile.id == s.profile.id;
+
   void _open(Suggestion s) {
+    // From the top sliding card, Pass/Request in the profile slide it away.
+    final top = _isTop(s);
     Navigator.push(
       context,
       MaterialPageRoute(
         builder: (_) => ProfileDetailScreen(
           profile: s.profile,
-          onPass: () => _act(s.profile, follow: false),
-          onRequest: () => _act(s.profile, follow: true),
-          onReplied: () => _remove(s.profile.id),
+          onPass: () => top ? _swiper.swipe(CardSwiperDirection.left) : _act(s.profile, follow: false),
+          onRequest: () => top ? _swiper.swipe(CardSwiperDirection.right) : _act(s.profile, follow: true),
+          onReplied: () => top ? setState(() => _top++) : _remove(s.profile.id),
         ),
       ),
     );
@@ -274,28 +306,43 @@ class _SuggestionsScreenState extends ConsumerState<SuggestionsScreen> {
       ],
       if (_main.isNotEmpty)
         const SliverToBoxAdapter(child: SectionLabel('Best matches for you', padding: EdgeInsets.fromLTRB(20, 22, 20, 10))),
-      SliverPadding(
-        padding: const EdgeInsets.symmetric(horizontal: 12),
-        sliver: SliverList.separated(
-          itemCount: _main.length,
-          separatorBuilder: (_, _) => const SizedBox(height: 12),
-          itemBuilder: (_, i) {
-            final s = _main[i];
-            return Dismissible(
-              key: ValueKey('sugg-${s.profile.id}'),
-              background: const _SwipeHint(follow: true),
-              secondaryBackground: const _SwipeHint(follow: false),
-              onDismissed: (d) => _act(s.profile, follow: d == DismissDirection.startToEnd),
-              child: SuggestionCard(
-                suggestion: s,
-                onTap: () => _open(s),
-                onPass: () => _act(s.profile, follow: false),
-                onRequest: () => _act(s.profile, follow: true),
-              ),
-            );
-          },
+      if (_main.isNotEmpty)
+        SliverToBoxAdapter(
+          child: SizedBox(
+            height: 600,
+            child: _top >= _main.length
+                ? Center(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 32),
+                      child: Text(
+                        'You’ve gone through these suggestions.',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(fontSize: 15, color: c.muted),
+                      ),
+                    ),
+                  )
+                : CardSwiper(
+                    key: ValueKey(_main),
+                    controller: _swiper,
+                    cardsCount: _main.length,
+                    numberOfCardsDisplayed: _main.length - _top >= 2 ? 2 : 1,
+                    isLoop: false,
+                    initialIndex: _top.clamp(0, _main.length - 1),
+                    duration: Motion.of(context, const Duration(milliseconds: 220)),
+                    threshold: 35,
+                    maxAngle: 12,
+                    scale: 0.95,
+                    backCardOffset: const Offset(0, 12),
+                    padding: const EdgeInsets.fromLTRB(12, 0, 12, 14),
+                    allowedSwipeDirection: const AllowedSwipeDirection.symmetric(horizontal: true),
+                    onSwipe: _onSwipe,
+                    cardBuilder: (context, index, dx, dy) {
+                      final s = _main[index];
+                      return SuggestionCard(suggestion: s, dragX: index == _top ? dx : 0, onTap: () => _open(s));
+                    },
+                  ),
+          ),
         ),
-      ),
       SliverToBoxAdapter(
         child: Padding(
           padding: EdgeInsets.fromLTRB(20, 16, 20, bottomBar + 24),
@@ -326,18 +373,22 @@ class _SuggestionsScreenState extends ConsumerState<SuggestionsScreen> {
 /// Full suggestion card: photo, name, age, short bio, district, the reasons
 /// (shared interests, music, lifestyle) and a compatibility indicator.
 class SuggestionCard extends StatelessWidget {
-  const SuggestionCard({super.key, required this.suggestion, required this.onTap, required this.onPass, required this.onRequest});
+  const SuggestionCard({super.key, required this.suggestion, required this.onTap, this.dragX = 0});
   final Suggestion suggestion;
   final VoidCallback onTap;
-  final VoidCallback onPass;
-  final VoidCallback onRequest;
+
+  /// Horizontal drag (percent of the threshold, from the card swiper):
+  /// right = request, left = pass. Shows the transparent ring icon.
+  final int dragX;
 
   @override
   Widget build(BuildContext context) {
     final c = context.fc;
     final p = suggestion.profile;
-    final reasons = suggestion.reasons.where((r) => r.kind != 'interests' && r.kind != 'music').toList();
-    return Container(
+    final reasons = suggestion.reasons.where((r) => r.kind != 'interests' && r.kind != 'music').take(2).toList();
+    final progress = (dragX.abs() / 100).clamp(0.0, 1.0);
+    final requesting = dragX > 0;
+    final card = Container(
       padding: const EdgeInsets.all(6),
       decoration: BoxDecoration(
         color: c.surface,
@@ -347,75 +398,76 @@ class SuggestionCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          GestureDetector(
-            onTap: onTap,
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(26),
-              child: AspectRatio(
-                aspectRatio: 4 / 4.2,
-                child: Stack(
-                  fit: StackFit.expand,
-                  children: [
-                    ProfilePhoto(url: p.primaryPhoto, name: p.fullName),
-                    const DecoratedBox(
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          begin: Alignment.topCenter,
-                          end: Alignment.bottomCenter,
-                          stops: [0.55, 1],
-                          colors: [Color(0x000B0B0C), Color(0xE60B0B0C)],
+          Expanded(
+            child: GestureDetector(
+              onTap: onTap,
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(26),
+                child: SizedBox(
+                  child: Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      ProfilePhoto(url: p.primaryPhoto, name: p.fullName),
+                      const DecoratedBox(
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            begin: Alignment.topCenter,
+                            end: Alignment.bottomCenter,
+                            stops: [0.55, 1],
+                            colors: [Color(0x000B0B0C), Color(0xE60B0B0C)],
+                          ),
                         ),
                       ),
-                    ),
-                    Positioned(top: 12, right: 12, child: CompatibilityBadge(value: suggestion.compatibility)),
-                    Positioned(
-                      left: 16,
-                      right: 16,
-                      bottom: 14,
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              Flexible(
-                                child: Text.rich(
-                                  TextSpan(
-                                    children: [
-                                      TextSpan(text: p.firstName),
-                                      TextSpan(
-                                        text: ' ${p.age}',
-                                        style: const TextStyle(fontWeight: FontWeight.w400, color: Color(0xFFC9C9CF)),
-                                      ),
-                                    ],
-                                  ),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: const TextStyle(
-                                    fontSize: 30,
-                                    fontWeight: FontWeight.w700,
-                                    letterSpacing: -0.8,
-                                    color: Colors.white,
+                      Positioned(top: 12, right: 12, child: CompatibilityBadge(value: suggestion.compatibility)),
+                      Positioned(
+                        left: 16,
+                        right: 16,
+                        bottom: 14,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Flexible(
+                                  child: Text.rich(
+                                    TextSpan(
+                                      children: [
+                                        TextSpan(text: p.firstName),
+                                        TextSpan(
+                                          text: ' ${p.age}',
+                                          style: const TextStyle(fontWeight: FontWeight.w400, color: Color(0xFFC9C9CF)),
+                                        ),
+                                      ],
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(
+                                      fontSize: 30,
+                                      fontWeight: FontWeight.w700,
+                                      letterSpacing: -0.8,
+                                      color: Colors.white,
+                                    ),
                                   ),
                                 ),
-                              ),
-                              if (p.isVerified) ...[const SizedBox(width: 8), const VerifiedBadge(size: 22)],
-                            ],
-                          ),
-                          const SizedBox(height: 4),
-                          Row(
-                            children: [
-                              Icon(PhosphorIconsFill.mapPin, size: 15, color: c.ink3),
-                              const SizedBox(width: 5),
-                              Text(
-                                p.city,
-                                style: TextStyle(fontSize: 15, fontWeight: FontWeight.w500, color: c.ink),
-                              ),
-                            ],
-                          ),
-                        ],
+                                if (p.isVerified) ...[const SizedBox(width: 8), const VerifiedBadge(size: 22)],
+                              ],
+                            ),
+                            const SizedBox(height: 4),
+                            Row(
+                              children: [
+                                Icon(PhosphorIconsFill.mapPin, size: 15, color: c.ink3),
+                                const SizedBox(width: 5),
+                                Text(
+                                  p.city,
+                                  style: TextStyle(fontSize: 15, fontWeight: FontWeight.w500, color: c.ink),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -473,32 +525,35 @@ class SuggestionCard extends StatelessWidget {
                       ],
                     ),
                   ),
-                const SizedBox(height: 8),
-                Row(
-                  children: [
-                    RoundButton(
-                      icon: Icons.close,
-                      iconWidget: VIcon(VIcons.close, size: 20, color: c.ink, stroke: 2.4),
-                      size: 48,
-                      onTap: onPass,
-                      semanticLabel: 'Pass on ${p.firstName}',
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: PillButton(
-                        label: 'Request',
-                        height: 48,
-                        trailing: VIcon(VIcons.plus, size: 18, color: c.paper, stroke: 2.4),
-                        onTap: onRequest,
-                      ),
-                    ),
-                  ],
-                ),
               ],
             ),
           ),
         ],
       ),
+    );
+    if (progress == 0) return card;
+    return Stack(
+      fit: StackFit.passthrough,
+      children: [
+        card,
+        Positioned.fill(
+          child: Align(
+            alignment: const Alignment(0, -0.45),
+            child: IgnorePointer(
+              child: Opacity(
+                opacity: progress,
+                child: Transform.scale(
+                  scale: 0.85 + 0.15 * progress,
+                  child: SwipeIntentIcon(
+                    icon: requesting ? VIcons.plus : VIcons.close,
+                    color: requesting ? c.accent : Colors.white,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
     );
   }
 }
@@ -604,30 +659,6 @@ class _MiniCard extends StatelessWidget {
               ),
           ],
         ),
-      ),
-    );
-  }
-}
-
-/// Swipe background: an icon only (request or pass), no text label.
-class _SwipeHint extends StatelessWidget {
-  const _SwipeHint({required this.follow});
-  final bool follow;
-
-  @override
-  Widget build(BuildContext context) {
-    final c = context.fc;
-    return Container(
-      alignment: follow ? Alignment.centerLeft : Alignment.centerRight,
-      padding: const EdgeInsets.symmetric(horizontal: 28),
-      child: Container(
-        width: 64,
-        height: 64,
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          border: Border.all(color: (follow ? c.accent : c.ink).withValues(alpha: 0.85), width: 2),
-        ),
-        child: Center(child: VIcon(follow ? VIcons.plus : VIcons.close, size: 28, color: follow ? c.accent : c.ink, stroke: 2.6)),
       ),
     );
   }
