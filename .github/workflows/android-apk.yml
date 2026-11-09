@@ -27,9 +27,15 @@ jobs:
         working-directory: rust
         run: cargo test --locked
 
-      - uses: denoland/setup-deno@v2
+      # Deno from the npm registry (pinned). The GitHub release download used
+      # by setup-deno kept failing with HTTP 504.
+      - uses: actions/setup-node@v4
         with:
-          deno-version: v2.5.6
+          node-version: 22
+      - name: Install Deno
+        run: |
+          for i in 1 2 3; do npm install -g deno@2.5.6 && break; sleep 10; done
+          deno --version
       - name: Edge function tests
         working-directory: supabase/functions
         run: |
