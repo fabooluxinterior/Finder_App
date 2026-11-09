@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 
-import 'package:flutter/services.dart';
 
 import '../../core/brand.dart';
 import '../../core/spotify_logo.dart';
@@ -71,26 +70,17 @@ class ProfileCard extends StatefulWidget {
 }
 
 class _ProfileCardState extends State<ProfileCard> {
-  int _page = 0;
-  late List<CardPage> _pages = cardPages(widget.profile);
+  // The card shows only the main photo: tapping it opens the full profile
+  // (all photos and prompts are there), it doesn't flip through photos.
+  final int _page = 0;
+  late List<CardPage> _pages = cardPages(widget.profile).take(1).toList();
 
   @override
   void didUpdateWidget(ProfileCard old) {
     super.didUpdateWidget(old);
     if (old.profile.id != widget.profile.id) {
-      _pages = cardPages(widget.profile);
-      _page = 0;
+      _pages = cardPages(widget.profile).take(1).toList();
     }
-  }
-
-  void _step(int d) {
-    final next = (_page + d).clamp(0, _pages.length - 1);
-    if (next == _page) {
-      HapticFeedback.lightImpact(); // edge of the stack
-      return;
-    }
-    HapticFeedback.selectionClick();
-    setState(() => _page = next);
   }
 
   @override
@@ -148,38 +138,15 @@ class _ProfileCardState extends State<ProfileCard> {
                   ),
                 ),
               ),
-            // Tap left / right to move through photos and prompts. On a prompt
-            // page only the edges flip, so the answer and Reply stay tappable.
-            if (interactive && _pages.length > 1 && page is PhotoPage)
+            if (interactive)
               Positioned.fill(
                 bottom: 260,
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: _TapZone(label: 'Previous', onTap: () => _step(-1)),
-                    ),
-                    Expanded(
-                      child: _TapZone(label: 'Next', onTap: () => _step(1)),
-                    ),
-                  ],
+                child: Semantics(
+                  button: true,
+                  label: 'Open ${profile.firstName}’s profile',
+                  child: GestureDetector(behavior: HitTestBehavior.opaque, onTap: widget.onTap),
                 ),
               ),
-            if (interactive && _pages.length > 1 && page is PromptPage) ...[
-              Positioned(
-                left: 0,
-                top: 0,
-                bottom: 260,
-                width: 56,
-                child: _TapZone(label: 'Previous', onTap: () => _step(-1)),
-              ),
-              Positioned(
-                right: 0,
-                top: 0,
-                bottom: 260,
-                width: 56,
-                child: _TapZone(label: 'Next', onTap: () => _step(1)),
-              ),
-            ],
             if (_pages.length > 1)
               Positioned(
                 top: 12,
@@ -244,19 +211,6 @@ class _ProfileCardState extends State<ProfileCard> {
       ),
     );
   }
-}
-
-class _TapZone extends StatelessWidget {
-  const _TapZone({required this.label, required this.onTap});
-  final String label;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) => Semantics(
-    button: true,
-    label: label,
-    child: GestureDetector(behavior: HitTestBehavior.opaque, onTap: onTap),
-  );
 }
 
 /// A prompt between photos: the question, the answer, and a reply action.
