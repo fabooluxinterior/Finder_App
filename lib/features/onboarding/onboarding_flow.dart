@@ -58,6 +58,19 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
   late String? _education = widget.profile?.education;
   late String _city = widget.profile?.city ?? AppConfig.keralaCities.first;
 
+  /// Who you'd like to meet (separate from your own gender): 'man',
+  /// 'woman' or 'everyone'. Null until chosen.
+  late String? _interestedIn = switch (widget.profile?.prefGenders) {
+    null => null,
+    final g when g.length == 1 => g.single,
+    final g when g.isEmpty && widget.profile!.onboardingStage > 2 => 'everyone',
+    _ => null,
+  };
+  late RangeValues _ageRange = RangeValues(
+    (widget.profile?.prefAgeMin ?? 18).toDouble(),
+    (widget.profile?.prefAgeMax ?? 60).clamp(18, 80).toDouble(),
+  );
+
   // Stage 3
   late final Map<String, String> _lifestyle = {...?widget.profile?.lifestyle};
   late List<String> _languages = [...?widget.profile?.languages];
@@ -92,7 +105,7 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
   FinderBackend get _backend => ref.read(backendProvider);
 
   bool get _canContinue => switch (_stage) {
-    2 => _name.text.trim().length >= 2 && (_hasDob || _dob != null) && _gender != null,
+    2 => _name.text.trim().length >= 2 && (_hasDob || _dob != null) && _gender != null && _interestedIn != null,
     4 => _tags.length >= interestsMin,
     5 => (ref.watch(photoSlotsProvider).value ?? const []).where((s) => !s.pending).length >= photosMin,
     6 =>
@@ -103,7 +116,7 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
   };
 
   String get _blockedReason => switch (_stage) {
-    2 => 'Add your name, birthdate and gender to continue.',
+    2 => 'Add your name, birthdate, gender and who you’d like to meet to continue.',
     4 => 'Pick at least $interestsMin interests.',
     5 => 'Add at least $photosMin photos.',
     6 => 'Answer at least $promptsMin prompts.',
@@ -135,6 +148,14 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
               ProfilePatch.occupation: _occupation,
               ProfilePatch.education: _education,
               ProfilePatch.onboardingStage: 3,
+            }),
+          );
+          // Discovery preferences (filtered on the server, both ways).
+          await _backend.updateProfile(
+            ProfilePatch({
+              ProfilePatch.prefGenders: _interestedIn == 'everyone' ? const <String>[] : [_interestedIn!],
+              ProfilePatch.prefAgeMin: _ageRange.start.round(),
+              ProfilePatch.prefAgeMax: _ageRange.end.round() >= 80 ? 99 : _ageRange.end.round(),
             }),
           );
         case 3:
@@ -391,6 +412,50 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
           for (final g in genders)
             TagChip(label: g.label, selected: _gender == g.value, onTap: () => setState(() => _gender = g.value)),
         ],
+      ),
+      const SectionLabel('Interested in', padding: EdgeInsets.fromLTRB(2, 20, 2, 10)),
+      Wrap(
+        spacing: 8,
+        runSpacing: 8,
+        children: [
+          for (final (value, label) in const [('man', 'Men'), ('woman', 'Women'), ('everyone', 'Everyone')])
+            TagChip(label: label, selected: _interestedIn == value, onTap: () => setState(() => _interestedIn = value)),
+        ],
+      ),
+      Padding(
+        padding: const EdgeInsets.fromLTRB(4, 16, 4, 0),
+        child: Row(
+          children: [
+            Expanded(
+              child: Text(
+                'Age range',
+                style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: c.ink),
+              ),
+            ),
+            Text(
+              '${_ageRange.start.round()} – ${_ageRange.end.round() >= 80 ? '80+' : _ageRange.end.round()}',
+              style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: c.ink2),
+            ),
+          ],
+        ),
+      ),
+      RangeSlider(
+        values: _ageRange,
+        min: 18,
+        max: 80,
+        divisions: 62,
+        activeColor: c.accent,
+        inactiveColor: c.hair,
+        labels: RangeLabels('${_ageRange.start.round()}', '${_ageRange.end.round()}'),
+        onChanged: (v) => setState(() => _ageRange = v.end - v.start < 2 ? _ageRange : v),
+      ),
+      Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 4),
+        child: Text(
+          'You’ll see people who match this, and who are looking for someone like you. Change it any time in '
+          'You → Settings → Discovery preferences.',
+          style: TextStyle(fontSize: 13, height: 1.4, color: c.muted),
+        ),
       ),
       const SectionLabel('Details', padding: EdgeInsets.fromLTRB(2, 22, 2, 8)),
       AttributeRow(

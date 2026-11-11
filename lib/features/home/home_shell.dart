@@ -15,6 +15,7 @@ import '../deck/deck_screen.dart';
 import '../match/match_screen.dart';
 import '../profile/my_profile_screen.dart';
 import '../profile_builder/profile_update_banner.dart';
+import '../subscription/trial_banner.dart';
 import '../requests/requests_screen.dart';
 import '../suggestions/suggestions_screen.dart';
 
@@ -81,7 +82,10 @@ class _HomeShellState extends ConsumerState<HomeShell> {
                 left: 12,
                 right: 12,
                 bottom: MediaQuery.paddingOf(context).bottom + 12,
-                child: const ProfileUpdateBanner(),
+                child: const Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [TrialNoticeBanner(), SizedBox(height: 8), ProfileUpdateBanner()],
+                ),
               ),
             ),
           ],

@@ -18,6 +18,10 @@ import '../profile_builder/profile_update_banner.dart';
 import '../paywall/paywall_sheet.dart';
 import '../security/security_center_screen.dart';
 import '../legal/policy_screen.dart';
+import '../help/help_center_screen.dart';
+import '../help/my_tickets_screen.dart';
+import '../help/notifications_screen.dart';
+import '../subscription/trial_banner.dart';
 import '../verification/verification_screen.dart';
 import 'profile_detail_screen.dart';
 
@@ -46,6 +50,7 @@ class _MyProfileScreenState extends ConsumerState<MyProfileScreen> {
         ? loaded
         : loaded.copyWith(isVerified: true);
     final premium = isPremium(ref);
+    final unread = (ref.watch(notificationsProvider).value ?? const []).where((n) => n.readAt == null).length;
     if (me == null) return const Scaffold(body: SizedBox.shrink());
     // extendBody: the shell already adds the tab bar to the bottom padding.
     final bottomBar = MediaQuery.paddingOf(context).bottom;
@@ -207,6 +212,7 @@ class _MyProfileScreenState extends ConsumerState<MyProfileScreen> {
               onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ProfileEditorScreen())),
             ),
             const Padding(padding: EdgeInsets.fromLTRB(4, 6, 4, 0), child: ProfileUpdateStatusRow()),
+            const Padding(padding: EdgeInsets.only(top: 10), child: TrialStatusRow()),
             if (me.bio.isNotEmpty) ...[
               const SizedBox(height: 14),
               Container(
@@ -276,6 +282,32 @@ class _MyProfileScreenState extends ConsumerState<MyProfileScreen> {
                   title: 'Privacy & security',
                   subtitle: 'Two-step verification, devices, sessions',
                   onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SecurityCenterScreen())),
+                ),
+                _Row(
+                  icon: PhosphorIconsRegular.bell,
+                  title: 'Notifications',
+                  subtitle: unread == 0 ? 'Trial reminders, ticket updates' : '$unread new',
+                  onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const NotificationsScreen()),
+                  ).then((_) => ref.invalidate(notificationsProvider)),
+                ),
+              ],
+            ),
+            const SectionLabel('Help', padding: EdgeInsets.fromLTRB(4, 24, 4, 8)),
+            _Card(
+              children: [
+                _Row(
+                  icon: PhosphorIconsRegular.lifebuoy,
+                  title: 'Help & support',
+                  subtitle: 'Answers to common questions, contact us',
+                  onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const HelpCenterScreen())),
+                ),
+                _Row(
+                  icon: PhosphorIconsRegular.ticket,
+                  title: 'My tickets',
+                  subtitle: 'Your support requests and their status',
+                  onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const MyTicketsScreen())),
                 ),
               ],
             ),

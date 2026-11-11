@@ -10,11 +10,11 @@ import 'package:intl/intl.dart';
 import '../../core/widgets.dart';
 import '../../models/security.dart';
 import '../../providers.dart';
+import 'moderation_tabs.dart';
 
 final _overviewProvider = FutureProvider.autoDispose<Map<String, dynamic>>(
   (ref) => ref.watch(backendProvider).securityOverview(),
 );
-final _reportsProvider = FutureProvider.autoDispose<List<ReportSummary>>((ref) => ref.watch(backendProvider).openReports());
 final _pendingMediaProvider = FutureProvider.autoDispose<List<PendingMedia>>((ref) => ref.watch(backendProvider).pendingMedia());
 final _verificationProvider = FutureProvider.autoDispose<List<VerificationItem>>(
   (ref) => ref.watch(backendProvider).verificationQueue(),
@@ -29,7 +29,7 @@ class AdminDashboardScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     return DefaultTabController(
-      length: 4,
+      length: 5,
       child: Scaffold(
         appBar: AppBar(
           title: const Text('Safety dashboard'),
@@ -41,10 +41,13 @@ class AdminDashboardScreen extends ConsumerWidget {
               Tab(text: 'Reports'),
               Tab(text: 'Photo review'),
               Tab(text: 'Verification'),
+              Tab(text: 'Support'),
             ],
           ),
         ),
-        body: const TabBarView(children: [_SecurityTab(), _ReportsTab(), _MediaTab(), _VerificationTab()]),
+        body: const TabBarView(
+          children: [_SecurityTab(), ModerationReportsTab(), _MediaTab(), _VerificationTab(), SupportTicketsTab()],
+        ),
       ),
     );
   }
@@ -148,108 +151,6 @@ class _Stat extends StatelessWidget {
       ],
     ),
   );
-}
-
-class _ReportsTab extends ConsumerWidget {
-  const _ReportsTab();
-
-  Future<void> _open(BuildContext context, WidgetRef ref, ReportSummary r) async {
-    final reason = TextEditingController();
-    final go = await showDialog<bool>(
-      context: context,
-      builder: (c) => AlertDialog(
-        title: const Text('Open report evidence'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Text('Your access is recorded in the audit log with this reason.'),
-            TextField(
-              controller: reason,
-              decoration: const InputDecoration(labelText: 'Reason for access'),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Cancel')),
-          TextButton(onPressed: () => Navigator.pop(c, true), child: const Text('Open')),
-        ],
-      ),
-    );
-    if (go != true || !context.mounted) return;
-    try {
-      final d = await ref.read(backendProvider).openReportEvidence(r.id, reason.text);
-      if (!context.mounted) return;
-      final resolution = TextEditingController();
-      await showDialog<void>(
-        context: context,
-        builder: (c) => AlertDialog(
-          title: Text('Report · ${r.reason}'),
-          content: SingleChildScrollView(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text('Details: ${d['details'] ?? '—'}'),
-                const SizedBox(height: 8),
-                const Text('Shared messages (decrypted by the reporter):', style: TextStyle(fontWeight: FontWeight.w700)),
-                for (final m in ((d['evidence'] as List?) ?? const []).cast<Map>())
-                  Padding(
-                    padding: const EdgeInsets.only(top: 4),
-                    child: Text('${m['from_reported_user'] == true ? 'Reported user' : 'Reporter'}: ${m['text']}'),
-                  ),
-                TextField(
-                  controller: resolution,
-                  decoration: const InputDecoration(labelText: 'Resolution note'),
-                ),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () async {
-                await ref.read(backendProvider).resolveReport(r.id, actioned: false, resolution: resolution.text);
-                if (c.mounted) Navigator.pop(c);
-              },
-              child: const Text('Dismiss'),
-            ),
-            TextButton(
-              onPressed: () async {
-                await ref.read(backendProvider).resolveReport(r.id, actioned: true, resolution: resolution.text);
-                if (c.mounted) Navigator.pop(c);
-              },
-              child: const Text('Action taken'),
-            ),
-          ],
-        ),
-      );
-      ref.invalidate(_reportsProvider);
-    } catch (e) {
-      if (context.mounted) showSnack(context, '$e', icon: Icons.error_outline);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final reports = ref.watch(_reportsProvider);
-    return reports.when(
-      loading: () => const Center(child: CircularProgressIndicator()),
-      error: (e, _) => Center(child: Text('$e')),
-      data: (list) => list.isEmpty
-          ? const Center(child: Text('No open reports'))
-          : ListView(
-              children: [
-                for (final r in list)
-                  ListTile(
-                    leading: Icon(r.hasEvidence ? Icons.chat_outlined : Icons.flag_outlined),
-                    title: Text(r.reason),
-                    subtitle: Text('User ${r.reportedId.substring(0, 8)}… · ${r.reportCount} report(s) total'),
-                    trailing: Text(DateFormat('d MMM').format(r.createdAt)),
-                    onTap: () => _open(context, ref, r),
-                  ),
-              ],
-            ),
-    );
-  }
 }
 
 class _MediaTab extends ConsumerWidget {

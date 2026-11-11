@@ -5,7 +5,9 @@
 import 'package:flutter/widgets.dart';
 
 abstract final class PhosphorIconsRegular {
+  static const IconData arrowLeft = IconData(0xe058, fontFamily: 'PhosphorRegular');
   static const IconData barbell = IconData(0xe0b6, fontFamily: 'PhosphorRegular');
+  static const IconData bell = IconData(0xe0ce, fontFamily: 'PhosphorRegular');
   static const IconData briefcase = IconData(0xe0ee, fontFamily: 'PhosphorRegular');
   static const IconData cake = IconData(0xe780, fontFamily: 'PhosphorRegular');
   static const IconData camera = IconData(0xe10e, fontFamily: 'PhosphorRegular');
@@ -22,9 +24,13 @@ abstract final class PhosphorIconsRegular {
   static const IconData heart = IconData(0xe2a8, fontFamily: 'PhosphorRegular');
   static const IconData hourglass = IconData(0xe2b2, fontFamily: 'PhosphorRegular');
   static const IconData identificationBadge = IconData(0xe6f6, fontFamily: 'PhosphorRegular');
+  static const IconData image = IconData(0xe2ca, fontFamily: 'PhosphorRegular');
+  static const IconData imageBroken = IconData(0xe7a8, fontFamily: 'PhosphorRegular');
   static const IconData info = IconData(0xe2ce, fontFamily: 'PhosphorRegular');
+  static const IconData lifebuoy = IconData(0xe63a, fontFamily: 'PhosphorRegular');
   static const IconData mapPin = IconData(0xe316, fontFamily: 'PhosphorRegular');
   static const IconData moonStars = IconData(0xe58e, fontFamily: 'PhosphorRegular');
+  static const IconData plus = IconData(0xe3d4, fontFamily: 'PhosphorRegular');
   static const IconData prohibit = IconData(0xe3de, fontFamily: 'PhosphorRegular');
   static const IconData ruler = IconData(0xe6b8, fontFamily: 'PhosphorRegular');
   static const IconData shieldCheck = IconData(0xe40c, fontFamily: 'PhosphorRegular');
@@ -33,6 +39,7 @@ abstract final class PhosphorIconsRegular {
   static const IconData sparkle = IconData(0xe6a2, fontFamily: 'PhosphorRegular');
   static const IconData speakerHigh = IconData(0xe44a, fontFamily: 'PhosphorRegular');
   static const IconData textAa = IconData(0xe6ee, fontFamily: 'PhosphorRegular');
+  static const IconData ticket = IconData(0xe490, fontFamily: 'PhosphorRegular');
   static const IconData translate = IconData(0xe4a2, fontFamily: 'PhosphorRegular');
   static const IconData trash = IconData(0xe4a6, fontFamily: 'PhosphorRegular');
   static const IconData user = IconData(0xe4c2, fontFamily: 'PhosphorRegular');
@@ -51,6 +58,7 @@ abstract final class PhosphorIconsBold {
 }
 
 abstract final class PhosphorIconsFill {
+  static const IconData bell = IconData(0xe0ce, fontFamily: 'PhosphorFill');
   static const IconData camera = IconData(0xe10e, fontFamily: 'PhosphorFill');
   static const IconData chatCircle = IconData(0xe168, fontFamily: 'PhosphorFill');
   static const IconData chatsCircle = IconData(0xe17e, fontFamily: 'PhosphorFill');
@@ -59,6 +67,9 @@ abstract final class PhosphorIconsFill {
   static const IconData eye = IconData(0xe220, fontFamily: 'PhosphorFill');
   static const IconData handshake = IconData(0xe582, fontFamily: 'PhosphorFill');
   static const IconData heart = IconData(0xe2a8, fontFamily: 'PhosphorFill');
+  static const IconData hourglass = IconData(0xe2b2, fontFamily: 'PhosphorFill');
+  static const IconData image = IconData(0xe2ca, fontFamily: 'PhosphorFill');
+  static const IconData lifebuoy = IconData(0xe63a, fontFamily: 'PhosphorFill');
   static const IconData lightbulb = IconData(0xe2dc, fontFamily: 'PhosphorFill');
   static const IconData lightning = IconData(0xe2de, fontFamily: 'PhosphorFill');
   static const IconData lockSimple = IconData(0xe308, fontFamily: 'PhosphorFill');
@@ -69,6 +80,7 @@ abstract final class PhosphorIconsFill {
   static const IconData paperPlaneTilt = IconData(0xe398, fontFamily: 'PhosphorFill');
   static const IconData sealCheck = IconData(0xe606, fontFamily: 'PhosphorFill');
   static const IconData shieldCheck = IconData(0xe40c, fontFamily: 'PhosphorFill');
+  static const IconData shieldWarning = IconData(0xe412, fontFamily: 'PhosphorFill');
   static const IconData sparkle = IconData(0xe6a2, fontFamily: 'PhosphorFill');
   static const IconData user = IconData(0xe4c2, fontFamily: 'PhosphorFill');
   static const IconData warningCircle = IconData(0xe4e2, fontFamily: 'PhosphorFill');

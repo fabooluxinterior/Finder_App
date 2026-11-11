@@ -7,6 +7,7 @@ import '../../core/widgets.dart';
 import '../../models/profile_update.dart';
 import '../../providers.dart';
 import '../profile/profile_editor_screen.dart';
+import '../suggestions/discovery_preferences_screen.dart';
 
 /// "Your profile needs a small update": shown to users who are missing a
 /// detail introduced after launch. Appears at most once every 7 days per
@@ -38,7 +39,12 @@ class _ProfileUpdateBannerState extends ConsumerState<ProfileUpdateBanner> {
   }
 
   Future<void> _complete(ProfileUpdate u) async {
-    await Navigator.push(context, MaterialPageRoute(builder: (_) => ProfileEditorScreen(openField: u.key)));
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => u.form == 'discovery' ? const DiscoveryPreferencesScreen() : ProfileEditorScreen(openField: u.key),
+      ),
+    );
     ref.invalidate(profileUpdatesProvider);
   }
 

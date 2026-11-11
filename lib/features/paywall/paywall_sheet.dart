@@ -7,6 +7,7 @@ import '../../core/config.dart';
 import '../../core/feedback.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
+import '../../models/access.dart';
 import '../../providers.dart';
 
 final _priceProvider = FutureProvider<String>((ref) => ref.watch(purchasesProvider).priceLabel());
@@ -14,7 +15,9 @@ final _priceProvider = FutureProvider<String>((ref) => ref.watch(purchasesProvid
 enum PaywallReason { general, requests, messaging }
 
 /// Fast-Track sheet. Springs up, drags down, leaves the screen behind it
-/// visible. No free trial: the plain monthly base plan only.
+/// visible. The 7-day free trial is separate (started by the server when a new
+/// account finishes setup, no card needed); buying here is always the plain
+/// monthly base plan, and only after the user confirms in Google Play.
 /// Returns true if the subscription is active afterwards.
 Future<bool> showPaywall(BuildContext context, {PaywallReason reason = PaywallReason.general}) async {
   final result = await showModalBottomSheet<bool>(
@@ -68,7 +71,9 @@ class _PaywallSheetState extends ConsumerState<_PaywallSheet> {
   Widget build(BuildContext context) {
     final c = context.fc;
     final t = Theme.of(context).textTheme;
-    final price = ref.watch(_priceProvider).value ?? '₹79';
+    final price = ref.watch(_priceProvider).value ?? '₹$fastTrackMonthlyRupees';
+    final perDay = perDayFromLabel(price);
+    final access = ref.watch(accessStatusProvider).value;
     final headline = switch (widget.reason) {
       PaywallReason.requests => 'See who wants to follow you',
       PaywallReason.messaging => 'Start the conversation',
@@ -110,7 +115,17 @@ class _PaywallSheetState extends ConsumerState<_PaywallSheet> {
             ],
           ),
           const SizedBox(height: 4),
-          Text('Billed monthly through Google Play. Cancel anytime.', style: t.bodySmall?.copyWith(color: c.muted)),
+          Text(
+            [
+              if (perDay != null) 'About $perDay a day, less than a cup of tea.',
+              'Billed monthly through Google Play. Cancel anytime.',
+            ].join(' '),
+            style: t.bodySmall?.copyWith(color: c.muted),
+          ),
+          if (access != null && access.trialUsed && !access.hasChatAccess || access?.inTrial == true) ...[
+            const SizedBox(height: 12),
+            _TrialNote(access: access!),
+          ],
           const SizedBox(height: 14),
           const _Perk(
             icon: PhosphorIconsFill.eye,
@@ -120,14 +135,16 @@ class _PaywallSheetState extends ConsumerState<_PaywallSheet> {
           const _Perk(
             icon: PhosphorIconsFill.chatCircle,
             title: 'Message your connections',
-            subtitle: 'End-to-end encrypted text and voice notes.',
+            subtitle: 'End-to-end encrypted text, voice notes and photos.',
           ),
           const _Perk(icon: PhosphorIconsFill.mapPin, title: 'Kerala City Boost', subtitle: 'Top of your city’s Discover deck.'),
           const SizedBox(height: 16),
           PillButton(label: 'Continue with Google Play', busy: _busy, onTap: () => _buy()),
           const SizedBox(height: 10),
           Text(
-            AppConfig.isDemo ? 'Demo mode: no payment is taken.' : 'UPI · Google Pay · Cards',
+            AppConfig.isDemo
+                ? 'Demo mode: no payment is taken.'
+                : 'UPI · Google Pay · Cards. You’re charged only after you confirm in Google Play.',
             textAlign: TextAlign.center,
             style: t.bodySmall?.copyWith(color: c.muted),
           ),
@@ -137,6 +154,38 @@ class _PaywallSheetState extends ConsumerState<_PaywallSheet> {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// Per-day price from the store's label, only when it's a plain rupee amount
+/// (e.g. "₹79" -> "₹2.63"); otherwise null so no comparison is shown.
+String? perDayFromLabel(String label) {
+  final m = RegExp(r'^₹\s?(\d+(?:\.\d{1,2})?)$').firstMatch(label.replaceAll(',', '').trim());
+  if (m == null) return null;
+  final monthly = double.parse(m.group(1)!);
+  if (monthly <= 0) return null;
+  return '₹${(monthly / 30).toStringAsFixed(2)}';
+}
+
+class _TrialNote extends StatelessWidget {
+  const _TrialNote({required this.access});
+  final AccessStatus access;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.fc;
+    final now = DateTime.now();
+    final end = access.trialEndsAt;
+    final text = access.inTrial
+        ? 'Your free trial is active: ${access.daysLeft(now)} ${access.daysLeft(now) == 1 ? 'day' : 'days'} left'
+              '${end == null ? '' : ' (ends ${MaterialLocalizations.of(context).formatMediumDate(end)})'}. '
+              'Nothing is charged when it ends; requests and chat simply pause until you choose Fast-Track.'
+        : 'Your free trial has ended. Your matches and messages are saved and come back as soon as you get Fast-Track.';
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(color: c.goldSoft, borderRadius: BorderRadius.circular(16)),
+      child: Text(text, style: TextStyle(fontSize: 13.5, height: 1.35, color: c.ink)),
     );
   }
 }

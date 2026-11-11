@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'data/backend.dart';
 import 'data/media_service.dart';
 import 'data/purchases_service.dart';
+import 'models/access.dart';
 import 'models/follow_request.dart';
 import 'models/message.dart';
 import 'models/profile.dart';
@@ -129,5 +130,32 @@ final profileUpdatesProvider = FutureProvider<List<ProfileUpdate>>((ref) async {
     return await ref.watch(backendProvider).profileUpdates();
   } catch (_) {
     return const []; // never block the app on this
+  }
+});
+
+/// Plan, trial dates and due reminders, from the server. Refreshes with
+/// social changes and purchases.
+final accessStatusProvider = FutureProvider<AccessStatus>((ref) async {
+  final uid = ref.watch(authUserProvider).value;
+  if (uid == null) return const AccessStatus();
+  ref.watch(socialTickProvider);
+  ref.watch(premiumProvider);
+  try {
+    return await ref.watch(backendProvider).accessStatus();
+  } catch (_) {
+    return const AccessStatus();
+  }
+});
+
+/// In-app notices (trial reminders, ticket updates, moderation notices).
+final notificationsProvider = FutureProvider<List<AppNotification>>((ref) async {
+  final uid = ref.watch(authUserProvider).value;
+  if (uid == null) return const [];
+  ref.watch(socialTickProvider);
+  ref.watch(accessStatusProvider);
+  try {
+    return await ref.watch(backendProvider).notifications();
+  } catch (_) {
+    return const [];
   }
 });

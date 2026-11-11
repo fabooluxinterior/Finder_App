@@ -986,7 +986,13 @@ class DemoBackend implements FinderBackend {
           return Connection(
             profile: _people[peer]!.profile,
             connectedAt: r.respondedAt ?? r.createdAt,
-            lastMessage: last == null ? null : (last.isVoice ? '🎤 Voice note' : last.content),
+            lastMessage: last == null
+                ? null
+                : (last.isImage
+                      ? '📷 Photo'
+                      : last.isVoice
+                      ? '🎤 Voice note'
+                      : last.content),
             unread: thread.where((m) => m.receiverId == meId && !m.isRead).length,
             introPromptId: r.introPromptId,
             introText: r.introText,

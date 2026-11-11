@@ -1,6 +1,10 @@
+import 'dart:typed_data';
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
+
+import '../../core/image_optimizer.dart';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
@@ -40,6 +44,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   final _recorder = VoiceRecorder();
   bool _recording = false;
   bool _sending = false;
+
+  /// Messages picked (long-press) to report as evidence.
+  final _selected = <String>{};
 
   /// Messages present when the thread opened don't animate; new ones do.
   Set<String>? _initialIds;
@@ -133,6 +140,37 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     } finally {
       if (mounted) setState(() => _sending = false);
     }
+  }
+
+  Future<void> _sendPhoto() async {
+    if (!isPremium(ref)) {
+      await showPaywall(context, reason: PaywallReason.messaging);
+      return;
+    }
+    try {
+      final raw = await ref.read(mediaProvider).pickOriginalPhoto();
+      if (raw == null) return;
+      setState(() => _sending = true);
+      // Resized to ≤1080 px and compressed on the device, then encrypted.
+      final img = await ImageOptimizer.optimize(raw);
+      await ref.read(backendProvider).sendImage(widget.peer.id, img.bytes, width: img.width, height: img.height);
+      Fx.instance.sent();
+      _scrollToLatest();
+    } catch (e) {
+      await _handleError(e);
+    } finally {
+      if (mounted) setState(() => _sending = false);
+    }
+  }
+
+  void _toggle(ChatMessage m) => setState(() => _selected.contains(m.id) ? _selected.remove(m.id) : _selected.add(m.id));
+
+  Future<void> _reportSelected(List<ChatMessage> thread) async {
+    final picked = thread.where((m) => _selected.contains(m.id)).toList();
+    final sent = await showReportSheet(context, widget.peer, thread: thread, selected: picked);
+    if (!mounted) return;
+    setState(_selected.clear);
+    if (sent) Navigator.pop(context);
   }
 
   void _openProfile() => Navigator.push(context, MaterialPageRoute(builder: (_) => ProfileDetailScreen(profile: widget.peer)));
@@ -285,7 +323,23 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                         final mine = m.senderId == me;
                         // Group consecutive bubbles from the same sender.
                         final tail = newer == null || newer.senderId != m.senderId;
-                        final bubble = _Bubble(message: m, mine: mine, tail: tail);
+                        final picked = _selected.contains(m.id);
+                        final bubble = GestureDetector(
+                          behavior: HitTestBehavior.translucent,
+                          onLongPress: () {
+                            Fx.instance.tap();
+                            _toggle(m);
+                          },
+                          onTap: _selected.isEmpty ? null : () => _toggle(m),
+                          child: AnimatedContainer(
+                            duration: Motion.of(context, Motion.fast),
+                            decoration: BoxDecoration(
+                              color: picked ? c.accent.withValues(alpha: 0.16) : Colors.transparent,
+                              borderRadius: BorderRadius.circular(16),
+                            ),
+                            child: _Bubble(message: m, mine: mine, tail: tail),
+                          ),
+                        );
                         return Column(
                           children: [
                             if (showDay) _DayChip(m.createdAt),
@@ -301,7 +355,14 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
             child: AnimatedSwitcher(
               duration: Motion.of(context, Motion.fast),
               switchInCurve: Motion.easeOut,
-              child: _recording
+              child: _selected.isNotEmpty
+                  ? _SelectionBar(
+                      key: const ValueKey('select'),
+                      count: _selected.length,
+                      onCancel: () => setState(_selected.clear),
+                      onReport: () => _reportSelected(thread),
+                    )
+                  : _recording
                   ? VoiceRecorderBar(
                       key: const ValueKey('rec'),
                       recorder: _recorder,
@@ -314,6 +375,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                       sending: _sending,
                       onSend: () => _sendText(thread),
                       onMic: _startRecording,
+                      onPhoto: _sendPhoto,
                     ),
             ),
           ),
@@ -353,11 +415,19 @@ class _Arrive extends StatelessWidget {
 }
 
 class _Composer extends StatelessWidget {
-  const _Composer({super.key, required this.controller, required this.sending, required this.onSend, required this.onMic});
+  const _Composer({
+    super.key,
+    required this.controller,
+    required this.sending,
+    required this.onSend,
+    required this.onMic,
+    required this.onPhoto,
+  });
   final TextEditingController controller;
   final bool sending;
   final VoidCallback onSend;
   final VoidCallback onMic;
+  final VoidCallback onPhoto;
 
   @override
   Widget build(BuildContext context) {
@@ -372,6 +442,14 @@ class _Composer extends StatelessWidget {
           return Row(
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
+              Padding(
+                padding: const EdgeInsets.only(bottom: 2),
+                child: IconButton(
+                  onPressed: sending ? null : onPhoto,
+                  tooltip: 'Send a photo',
+                  icon: Icon(PhosphorIconsRegular.image, size: 26, color: c.ink2),
+                ),
+              ),
               Expanded(
                 child: TextField(
                   controller: controller,
@@ -480,7 +558,9 @@ class _Bubble extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.end,
             mainAxisSize: MainAxisSize.min,
             children: [
-              if (message.isVoice)
+              if (message.isImage)
+                _PhotoContent(message: message)
+              else if (message.isVoice)
                 VoiceBubble(message: message, color: fg)
               else
                 Align(
@@ -508,6 +588,112 @@ class _Bubble extends StatelessWidget {
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// End-to-end encrypted photo: downloaded and decrypted on this device.
+class _PhotoContent extends ConsumerWidget {
+  const _PhotoContent({required this.message});
+  final ChatMessage message;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final c = context.fc;
+    final img = message.image;
+    final ratio = img != null && img.width > 0 && img.height > 0 ? img.width / img.height : 4 / 5;
+    final future = ref.read(backendProvider).imageBytes(message);
+    return Semantics(
+      image: true,
+      label: 'Photo',
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(16),
+        child: SizedBox(
+          width: 220,
+          child: AspectRatio(
+            aspectRatio: ratio.clamp(0.6, 1.6),
+            child: FutureBuilder(
+              future: future,
+              builder: (context, s) {
+                if (s.hasError) {
+                  return ColoredBox(
+                    color: c.hair,
+                    child: Center(child: Icon(PhosphorIconsRegular.imageBroken, color: c.muted)),
+                  );
+                }
+                if (!s.hasData) {
+                  return ColoredBox(
+                    color: c.hair,
+                    child: const Center(child: SizedBox.square(dimension: 20, child: CircularProgressIndicator(strokeWidth: 2))),
+                  );
+                }
+                return GestureDetector(
+                  onTap: () => Navigator.push(
+                    context,
+                    PageRouteBuilder<void>(
+                      opaque: false,
+                      barrierColor: Colors.black,
+                      pageBuilder: (_, _, _) => _PhotoViewer(bytes: s.data!),
+                      transitionsBuilder: (_, a, _, child) => FadeTransition(opacity: a, child: child),
+                    ),
+                  ),
+                  child: Image.memory(s.data!, fit: BoxFit.cover, gaplessPlayback: true),
+                );
+              },
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _PhotoViewer extends StatelessWidget {
+  const _PhotoViewer({required this.bytes});
+  final Uint8List bytes;
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+    backgroundColor: Colors.black,
+    appBar: AppBar(backgroundColor: Colors.black, foregroundColor: Colors.white),
+    body: Center(child: InteractiveViewer(maxScale: 4, child: Image.memory(bytes))),
+  );
+}
+
+class _SelectionBar extends StatelessWidget {
+  const _SelectionBar({super.key, required this.count, required this.onCancel, required this.onReport});
+  final int count;
+  final VoidCallback onCancel;
+  final VoidCallback onReport;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.fc;
+    return Container(
+      padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
+      decoration: BoxDecoration(
+        border: Border(top: BorderSide(color: c.line)),
+      ),
+      child: Row(
+        children: [
+          IconButton(
+            onPressed: onCancel,
+            tooltip: 'Cancel',
+            icon: Icon(PhosphorIconsRegular.x, color: c.ink2),
+          ),
+          Expanded(
+            child: Text(
+              '$count selected',
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: c.ink),
+            ),
+          ),
+          FilledButton.icon(
+            onPressed: onReport,
+            icon: const Icon(PhosphorIconsRegular.flag, size: 18),
+            label: const Text('Report'),
+          ),
+        ],
       ),
     );
   }

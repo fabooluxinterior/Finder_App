@@ -589,7 +589,13 @@ class SupabaseBackend implements FinderBackend {
         Connection(
           profile: peer,
           connectedAt: DateTime.parse((r['responded_at'] ?? r['created_at']) as String).toLocal(),
-          lastMessage: last == null ? null : (last.isVoice ? '🎤 Voice note' : last.content),
+          lastMessage: last == null
+              ? null
+              : (last.isImage
+                    ? '📷 Photo'
+                    : last.isVoice
+                    ? '🎤 Voice note'
+                    : last.content),
           unread: thread.where((m) => m.receiverId == me && !m.isRead).length,
           introPromptId: r['intro_prompt_id'] as String?,
           introText: r['intro_text'] as String?,
@@ -678,10 +684,12 @@ class SupabaseBackend implements FinderBackend {
     if (problem != null) throw AppException(AppErrorCode.invalidInput, problem);
     String? path;
     if (screenshotWebp != null) {
-      path = '$_me/${_uuid.v4()}.webp';
+      // The optimizer outputs WebP (JPEG where a browser can't encode WebP).
+      final webp = screenshotWebp.length > 12 && String.fromCharCodes(screenshotWebp.sublist(8, 12)) == 'WEBP';
+      path = '$_me/${_uuid.v4()}.${webp ? 'webp' : 'jpg'}';
       await _db.storage
           .from('support_attachments')
-          .uploadBinary(path, screenshotWebp, fileOptions: const FileOptions(contentType: 'image/webp'));
+          .uploadBinary(path, screenshotWebp, fileOptions: FileOptions(contentType: webp ? 'image/webp' : 'image/jpeg'));
     }
     final rows = await _db.rpc(
       'submit_support_ticket',
@@ -921,10 +929,12 @@ class SupabaseBackend implements FinderBackend {
     final reportId = r['id'] as String;
     // Photos the reporter selected, decrypted on this device, sent with consent.
     for (final (i, (messageId, bytes)) in evidence.images.take(10).indexed) {
-      final path = '$reportId/$i.webp';
+      final data = Uint8List.fromList(bytes);
+      final webp = data.length > 12 && String.fromCharCodes(data.sublist(8, 12)) == 'WEBP';
+      final path = '$reportId/$i.${webp ? 'webp' : 'jpg'}';
       await _db.storage
           .from('report_evidence')
-          .uploadBinary(path, Uint8List.fromList(bytes), fileOptions: const FileOptions(contentType: 'image/webp'));
+          .uploadBinary(path, data, fileOptions: FileOptions(contentType: webp ? 'image/webp' : 'image/jpeg'));
       await _db.rpc(
         'add_report_evidence',
         params: {'p_report': reportId, 'p_kind': 'image', 'p_message_ref': messageId, 'p_path': path},
