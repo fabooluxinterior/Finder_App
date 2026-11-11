@@ -1,6 +1,6 @@
 # Vouby Privacy Policy
 
-**Version 2026-11-12.** Draft: have this reviewed by a lawyer before publishing (India's Digital Personal Data Protection Act, 2023, and Google Play's User Data policy).
+**Version 2026-11-15.** Draft: have this reviewed by a lawyer before publishing (India's Digital Personal Data Protection Act, 2023, and Google Play's User Data policy).
 
 Vouby ("we", "us") is operated by **<FILL: Company name>**, **<FILL: Registered address>**. This policy explains what we collect, how we protect it, and what control you have.
 
@@ -24,13 +24,16 @@ Vouby ("we", "us") is operated by **<FILL: Company name>**, **<FILL: Registered 
 | If you connect Spotify: an access token from Spotify | Refreshing your top artists | Our systems only (encrypted, never shown to anyone) |
 | Verification selfie and the pose you were asked to make | Confirming your photos are really you | Only our trained verification staff. Never other users |
 | Follow requests, passes and matches | Running the app's core features | You and the other person |
-| Messages and voice notes | Chat | **Only you and the other person** (end-to-end encrypted, see §3) |
+| Messages, voice notes and photos you send in chat | Chat | **Only you and the other person** (end-to-end encrypted, see §3) |
 | Message metadata: who messaged whom, when, read status | Delivering messages and unread counts | Our systems. Not readable by other users |
 | Device keys (public) and device type | Making encryption work across your devices | People you're connected to (public keys only) |
 | Policy acceptances (which version, when) | Keeping a record of your consent | You and our systems |
 | Subscription status | The Fast-Track subscription | You. Payment details are handled by Google Play; we never see them |
+| Free trial: when it started and ended, and a one-way fingerprint (salted hash) of your phone number or email | Giving each person one 7-day free trial; the fingerprint can't be turned back into your number or email and is kept after account deletion only to stop repeat trials | Our systems only |
+| In-app notices (trial reminders, support updates, safety notices) | Telling you about your account | Only you |
+| Support requests: category, subject, description, optional screenshot, your registered email and ticket history | Answering your request | You and our support staff |
 | Security logs (sign-in events, rate-limit hits, failed access attempts) | Protecting accounts and detecting abuse | Our security staff |
-| Reports you make or receive | Keeping Vouby safe | Our safety team |
+| Reports you make or receive, with the evidence the reporter chose to share, moderation decisions and any account restrictions | Keeping Vouby safe and reviewing reports fairly | Our safety team. A restricted user is told the restriction and reason, never who reported them |
 
 **What we never show other users:** your phone number, your email, your date of birth, your exact location, or links to other social media. We block phone numbers, social media handles and links in names, bios and interests, and filter them from the first messages of every chat. Your location is only the district or city you choose; we never collect GPS location. We remove location data (GPS) and other hidden metadata from every photo before storing it.
 
@@ -49,7 +52,7 @@ Vouby ("we", "us") is operated by **<FILL: Company name>**, **<FILL: Registered 
 
 ## 3. How your conversations are protected
 
-- Messages and voice notes are **end-to-end encrypted** on your phone before they're sent, using the Olm / Double Ratchet protocol (the protocol used by Matrix, via the independently audited `vodozemac` library). Only your devices and the other person's devices have the keys.
+- Messages, voice notes and photos are **end-to-end encrypted** on your phone before they're sent (photos are also resized and compressed on your phone first), using the Olm / Double Ratchet protocol (the protocol used by Matrix, via the independently audited `vodozemac` library). Only your devices and the other person's devices have the keys.
 - **We can't read your messages or listen to your voice notes**, and we have no way to decrypt them. That includes our staff, our hosting providers, and anyone who obtains our servers' data.
 - We can see that a message was sent, between whom, and when. We need this to deliver it.
 - Encrypted copies are deleted from our servers once your device receives them, or after 30 days if a device never collects them.
@@ -58,7 +61,8 @@ Vouby ("we", "us") is operated by **<FILL: Company name>**, **<FILL: Registered 
 ## 4. Moderation and what moderators can see
 
 Because chats are end-to-end encrypted, moderators can't see them unless **you choose to share them**.
-- When you report someone, you can tick a box to include up to 20 of their recent messages. They're decrypted on your phone and sent with your report. We tell you this on the report screen before you send.
+- When you report someone, you choose exactly which messages or photos to include (long-press them in the chat). You see a preview and confirm before anything is sent; they're decrypted on your phone and nothing else from the chat is shared. We never take screenshots of your screen or other apps.
+- Every report is reviewed by a person. Accounts are never restricted automatically because of the number of reports; possible outcomes are no action, a warning, limits, suspension, a ban or content removal, and false reports are recorded.
 - Only trained members of our safety team can open report evidence. They must use two-step verification and record a reason, and every access is permanently logged.
 - If someone reports that a profile **appears to belong to someone under 18**, we hide that profile from Discover until a moderator reviews it.
 - Report evidence is deleted 90 days after the report is closed.
@@ -77,6 +81,9 @@ Because chats are end-to-end encrypted, moderators can't see them unless **you c
 | Suggestion history | 90 days |
 | Removed photos | Unavailable immediately; deleted from storage within 24 hours |
 | Report evidence | 90 days after the report is resolved |
+| Moderation decisions and restrictions | As long as the account exists, so repeated problems can be judged fairly |
+| Support requests and screenshots | Until you delete your account, or 2 years after the ticket is closed |
+| Free-trial record | Trial dates: until you delete your account. The one-way fingerprint: kept to prevent repeat trials |
 | Security logs | 1 year |
 | Backups | Rolling, up to <FILL: Backup retention> days |
 

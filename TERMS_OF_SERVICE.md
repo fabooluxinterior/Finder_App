@@ -1,6 +1,6 @@
 # Vouby Terms of Service
 
-**Version 2026-11-12.** Draft: have this reviewed by a lawyer before publishing.
+**Version 2026-11-15.** Draft: have this reviewed by a lawyer before publishing.
 
 These terms are an agreement between you and **<FILL: Company name>**, **<FILL: Registered address>** ("Vouby", "we", "us"). By creating an account you accept these terms, our [Privacy Policy](PRIVACY_POLICY.md) and our [Community Guidelines](COMMUNITY_GUIDELINES.md).
 
@@ -31,12 +31,14 @@ You must follow the [Community Guidelines](COMMUNITY_GUIDELINES.md). In short, n
 ## 5. Safety
 
 - We screen photos and act on reports, but **we don't run background checks on users**. Use your judgement, meet in public places first, and never send money to someone you've met on Vouby.
-- Chats are end-to-end encrypted, so we can't see them unless someone reports a conversation and chooses to share it with us.
+- Chats are end-to-end encrypted, so we can't see them unless someone reports a conversation and chooses which messages or photos to share with us.
+- A person reviews every report. Depending on what happened we may take no action, warn you, limit your account, suspend it for a period, ban it, or remove content; we tell you the reason and you can appeal through Help & support. We don't act on the number of reports alone, and knowingly false reports can themselves lead to action.
 
 ## 6. Fast-Track subscription
 
 - Vouby is free to browse and to send follow requests. Seeing who requested you, accepting requests and messaging need the **Fast-Track** subscription (₹79 per month, or the price shown in the app).
-- **There is no free trial.** You're charged through Google Play when you subscribe. The subscription renews monthly until you cancel.
+- **7-day free trial for new accounts.** When a new account finishes profile setup it gets Fast-Track free for exactly 7 days (168 hours), once per person (one phone number or email). No payment details are needed and **nothing is charged when it ends**: requests and chat simply pause until you choose to subscribe. Your matches and messages are kept. We remind you in the app 24 hours before it ends and when it ends.
+- **Paid subscription:** you're charged through Google Play only after you confirm the purchase there. The subscription renews monthly until you cancel. Subscribing after a trial (or after a lapse) restores access to your existing conversations.
 - **Cancelling:** Google Play → Profile → Payments & subscriptions → Subscriptions → Vouby → Cancel. You keep access until the end of the paid period.
 - **Refunds** follow Google Play's refund policy. Request one through Google Play, or contact us at <FILL: Privacy email> and we'll help. Nothing in these terms limits your rights under the Consumer Protection Act, 2019.
 - If we remove your account for breaking these terms, we don't refund the current period.
