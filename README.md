@@ -69,6 +69,9 @@ lib/
     security/                  MFA, devices & sessions, delete account, safety numbers
     safety/                    block, unmatch, report (with consent screen)
     admin/                     staff dashboard: security events, reports, photo review
+admin/                         separate staff web app: safety, Database & Data Migration, integrations (see admin/README.md)
+docs/MIGRATIONS.md             safe database update runbook (additive migrations, before/after checks)
+tool/check_migrations.py       CI guard against destructive migrations; tool/verify_migration.sh: before/after check
 rust/                          finder_crypto: vodozemac + AES-256-GCM wrapper (with tests)
 supabase/
   migrations/20261107000000_init_finder.sql   schema, RLS, RPCs, storage, realtime

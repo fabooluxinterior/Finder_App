@@ -16,6 +16,7 @@ analyzer:
     - lib/src/rust/**
     - android/**
     - web/**
+    - admin/**   # separate package (vouby_admin), analysed in its own CI job
 
 linter:
   # The lint rules applied to this project can be customized in the

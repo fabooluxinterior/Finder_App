@@ -23,6 +23,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Data preservation: new migrations must be additive (CLAUDE.md).
+      - name: Migration guard
+        run: |
+          python3 tool/check_migrations.py
+          python3 tool/gen_admin_manifest.py
+          git diff --exit-code admin/lib/generated || { echo "Run tool/gen_admin_manifest.py and commit."; exit 1; }
+
       - name: Rust crypto core tests
         working-directory: rust
         run: cargo test --locked
@@ -40,8 +47,10 @@ jobs:
         working-directory: supabase/functions
         run: |
           deno test --allow-read --allow-env _shared/tests/
-          for f in process-image media delete-account media-maintenance revenuecat-webhook photo-remove music-connect music-callback music-sync; do deno check $f/index.ts; done
+          for f in process-image media delete-account media-maintenance revenuecat-webhook photo-remove music-connect music-callback music-sync admin-config-status; do deno check $f/index.ts; done
 
+      # Includes the upgrade-preservation suite: seeded data must survive
+      # every new migration unchanged.
       - name: Database RLS / attack-scenario tests
         env:
           PGURL: postgres://postgres:postgres@localhost:5432/postgres
@@ -58,6 +67,47 @@ jobs:
           flutter pub get
           flutter analyze
           flutter test
+
+  # Separate admin web app (admin/). Built with public values only; a sample-
+  # data preview build is always produced, a live build when the Supabase
+  # URL/anon key secrets exist.
+  admin-web:
+    needs: security-tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+    defaults:
+      run:
+        working-directory: admin
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: 3.47.9
+          cache: true
+      - run: flutter pub get
+      - run: flutter analyze
+      - run: flutter test
+      - name: Build preview (sample data)
+        run: |
+          flutter build web --release --no-web-resources-cdn --pwa-strategy=none --dart-define=ADMIN_DEMO=true
+          mv build/web ../admin-web-preview
+      - name: Build live
+        if: ${{ env.SUPABASE_URL != '' }}
+        run: |
+          flutter build web --release --no-web-resources-cdn --pwa-strategy=none \
+            --dart-define=SUPABASE_URL="$SUPABASE_URL" --dart-define=SUPABASE_ANON_KEY="$SUPABASE_ANON_KEY"
+          mv build/web ../admin-web-live
+      - uses: actions/upload-artifact@v4
+        with:
+          name: vouby-admin-web
+          path: |
+            admin-web-preview
+            admin-web-live
+          if-no-files-found: warn
 
   build:
     needs: security-tests

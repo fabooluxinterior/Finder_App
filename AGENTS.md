@@ -115,3 +115,5 @@ Proceed only after explicit approval.
 - Flutter: `export PATH=/opt/flutter/bin:$PATH`; format with `dart format -l 130`.
 - SQL tests: `PGURL=postgres://postgres:postgres@localhost:5432/postgres bash supabase/tests/run.sh`.
 - Edge function tests: `cd supabase/functions && deno test --allow-read --allow-env _shared/tests/`.
+- Admin web app (separate package): `cd admin && flutter test`; after adding a migration run
+  `python3 tool/gen_admin_manifest.py` (CI checks it).
