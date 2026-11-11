@@ -47,7 +47,7 @@ jobs:
         working-directory: supabase/functions
         run: |
           deno test --allow-read --allow-env _shared/tests/
-          for f in process-image media delete-account media-maintenance revenuecat-webhook photo-remove music-connect music-callback music-sync admin-config-status; do deno check $f/index.ts; done
+          for f in process-image media delete-account media-maintenance revenuecat-webhook photo-remove music-connect music-callback music-sync admin-config-status support-notify evidence-url; do deno check $f/index.ts; done
 
       # Includes the upgrade-preservation suite: seeded data must survive
       # every new migration unchanged.

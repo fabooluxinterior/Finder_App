@@ -41,6 +41,12 @@ export const SERVICES: ServiceSpec[] = [
     setup: "Google Cloud → Vision API key restricted to the Vision API; supabase secrets set GOOGLE_VISION_API_KEY=...",
   },
   {
+    service: "support_email", label: "Support ticket emails", required: false,
+    vars: ["RESEND_API_KEY", "SUPPORT_EMAIL_TO"],
+    optionalVars: ["SUPPORT_EMAIL_FROM"],
+    setup: "Create a Resend API key (resend.com); supabase secrets set RESEND_API_KEY=... SUPPORT_EMAIL_TO=you@example.com. Tickets are stored and shown to staff even without it.",
+  },
+  {
     service: "cors", label: "Allowed web origins", required: false,
     vars: ["ALLOWED_ORIGINS"],
     setup: "supabase secrets set ALLOWED_ORIGINS=https://your-admin-host,https://your-web-app (comma-separated).",

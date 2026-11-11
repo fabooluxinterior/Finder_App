@@ -1,6 +1,8 @@
 // Service-only maintenance (call from a scheduled job with the service key):
 //   POST { task: "purge" }   delete encrypted objects of removed media
 //   POST { task: "rewrap" }  re-wrap data keys under MEDIA_KEK_ACTIVE (KEK rotation)
+//   POST { task: "daily" }   trial reminders (24 h before / at expiry) and
+//                            report evidence older than 90 days after closing
 import { admin } from "../_shared/auth.ts";
 import { handle, HttpError, json } from "../_shared/http.ts";
 import { rewrapDek } from "../_shared/media_crypto.ts";
@@ -32,6 +34,17 @@ Deno.serve((req) =>
         n++;
       }
       return json(req, { rewrapped: n, remaining: Math.max(0, (data?.length ?? 0) - n) });
+    }
+    if (task === "daily") {
+      const { data: reminders, error } = await admin.rpc("service_trial_reminders");
+      if (error) throw error;
+      const { data: expired } = await admin.rpc("service_expired_evidence");
+      const rows = (expired ?? []) as { id: string; storage_path: string }[];
+      if (rows.length) {
+        await admin.storage.from("report_evidence").remove(rows.map((r) => r.storage_path));
+        await admin.rpc("service_forget_evidence", { p_ids: rows.map((r) => r.id) });
+      }
+      return json(req, { reminders, evidence_purged: rows.length });
     }
     throw new HttpError(400, "bad_request", "Unknown task.");
   })
