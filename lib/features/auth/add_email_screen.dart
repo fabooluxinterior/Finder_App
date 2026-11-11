@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -19,7 +21,9 @@ final _emailPattern = RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$');
 
 /// Asked right after the mobile number is verified (new accounts), or opened
 /// from the "small update" prompt (existing phone-only accounts). The email
-/// is attached to the account only once its 6-digit code is confirmed.
+/// is attached to the account once it is confirmed: with the 6-digit code
+/// when the email shows one, or by opening the link in the email (the screen
+/// notices by itself, so both kinds of email work).
 class AddEmailScreen extends ConsumerStatefulWidget {
   const AddEmailScreen({super.key, this.inSetup = false});
 
@@ -35,6 +39,7 @@ class _AddEmailScreenState extends ConsumerState<AddEmailScreen> {
   final _code = TextEditingController();
   bool _codeSent = false;
   bool _busy = false;
+  Timer? _poll;
 
   String get _address => _email.text.trim().toLowerCase();
   bool get _valid => _emailPattern.hasMatch(_address);
@@ -59,23 +64,43 @@ class _AddEmailScreenState extends ConsumerState<AddEmailScreen> {
     _run(() async {
       await ref.read(backendProvider).sendEmailCode(_address);
       setState(() => _codeSent = true);
+      _startPolling();
     });
+  }
+
+  /// Emails that carry a link instead of a code: check every few seconds
+  /// whether the address has been confirmed, then continue.
+  void _startPolling() {
+    _poll?.cancel();
+    _poll = Timer.periodic(const Duration(seconds: 3), (_) async {
+      bool done = false;
+      try {
+        done = await ref.read(backendProvider).hasConfirmedEmail();
+      } catch (_) {}
+      if (done) _finish();
+    });
+  }
+
+  void _finish() {
+    _poll?.cancel();
+    ref.invalidate(emailConfirmedProvider);
+    ref.invalidate(profileUpdatesProvider);
+    if (!mounted) return;
+    showSnack(context, 'Email added', icon: PhosphorIconsFill.checkCircle);
+    if (!widget.inSetup && Navigator.canPop(context)) Navigator.pop(context);
   }
 
   void _verify() {
     if (_busy || _code.text.length != 6) return;
     _run(() async {
       await ref.read(backendProvider).verifyEmailCode(_address, _code.text);
-      ref.invalidate(emailConfirmedProvider);
-      ref.invalidate(profileUpdatesProvider);
-      if (!mounted) return;
-      showSnack(context, 'Email added', icon: PhosphorIconsFill.checkCircle);
-      if (!widget.inSetup && Navigator.canPop(context)) Navigator.pop(context);
+      _finish();
     });
   }
 
   @override
   void dispose() {
+    _poll?.cancel();
     _email.dispose();
     _code.dispose();
     super.dispose();
@@ -135,7 +160,11 @@ class _AddEmailScreenState extends ConsumerState<AddEmailScreen> {
                 const SizedBox(height: 16),
                 PillButton(label: 'Send code', height: 58, busy: _busy, onTap: _valid ? _send : null),
               ] else ...[
-                Text('Enter the code sent to $_address', style: t.bodyMedium),
+                Text(
+                  'We emailed $_address. Open the link in that email and this screen continues by itself. '
+                  'If the email shows a 6-digit code instead, enter it below.',
+                  style: t.bodyMedium,
+                ),
                 const SizedBox(height: 10),
                 TextField(
                   controller: _code,

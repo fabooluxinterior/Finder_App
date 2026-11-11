@@ -90,7 +90,12 @@ class SupabaseBackend implements FinderBackend {
 
   @override
   Future<bool> hasConfirmedEmail() async {
-    final u = _db.auth.currentUser;
+    // Ask the server (the confirmation may have just happened in the email's
+    // link, which this session hasn't seen yet).
+    var u = _db.auth.currentUser;
+    try {
+      u = (await _db.auth.getUser()).user ?? u;
+    } catch (_) {}
     return (u?.email ?? '').isNotEmpty && u?.emailConfirmedAt != null;
   }
 
