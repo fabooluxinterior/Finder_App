@@ -161,3 +161,19 @@ owner:
 Only after written approval, add
 `-- APPROVED-DESTRUCTIVE: <reason>; approved by <owner> on <date>` on the line
 above the statement.
+
+## Hosted Supabase grants (learned connecting the live project)
+
+Supabase's hosted Postgres grants EXECUTE on every new `public` function to
+`PUBLIC`, `anon` and `authenticated`, which the scratch test database does not.
+Migration `20261117000001` closes this for new functions (`alter default
+privileges ... revoke execute ... from public / anon`), so from now on:
+
+- a function the app calls while signed in needs an explicit
+  `grant execute on function ... to authenticated;`
+- server-only functions need nothing (they stay closed) and are granted to
+  `service_role` only.
+
+After applying migrations to the live project, check that signed-out users
+reach nothing:
+`select count(*) from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and has_function_privilege('anon', p.oid, 'execute');` must return 0.

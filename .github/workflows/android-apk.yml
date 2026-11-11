@@ -76,8 +76,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
-      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-      SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+      # Public identifiers (safe in builds); a repository secret overrides them.
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL || 'https://smwqghjyicpjulrnkcqp.supabase.co' }}
+      SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNtd3FnaGp5aWNwanVscm5rY3FwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTQ0MDk1OTcsImV4cCI6MjEwOTk4NTU5N30.TbQ878BIk59dZiqcbxA-yVAa2-f4RUKREQ6SzSUSN9k' }}
     defaults:
       run:
         working-directory: admin
@@ -114,8 +115,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 60
     env:
-      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-      SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+      # Public identifiers (safe in builds); a repository secret overrides them.
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL || 'https://smwqghjyicpjulrnkcqp.supabase.co' }}
+      SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNtd3FnaGp5aWNwanVscm5rY3FwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTQ0MDk1OTcsImV4cCI6MjEwOTk4NTU5N30.TbQ878BIk59dZiqcbxA-yVAa2-f4RUKREQ6SzSUSN9k' }}
       REVENUECAT_ANDROID_KEY: ${{ secrets.REVENUECAT_ANDROID_KEY }}
     steps:
       - uses: actions/checkout@v4
