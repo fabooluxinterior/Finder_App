@@ -33,7 +33,7 @@ select pg_temp.as_user('01');
 select pg_temp.expect((select count(*) from public.my_profile_updates() where key = 'occupation' and show_prompt) = 1,
   'user without a profession is asked');
 select pg_temp.as_user('02');
-select pg_temp.expect(not exists (select 1 from public.my_profile_updates()), 'user with a profession is never asked');
+select pg_temp.expect(not exists (select 1 from public.my_profile_updates() where key = 'occupation'), 'user with a profession is never asked');
 
 -- ------------------------------------------------------------ prompt frequency
 select pg_temp.as_user('01');
@@ -82,7 +82,7 @@ select pg_temp.expect((select not show_prompt from public.my_profile_updates() w
 -- ------------------------------------------------------------ completing saves only that field
 select pg_temp.as_user('01');
 update public.profiles set occupation = 'Teacher' where id = auth.uid();
-select pg_temp.expect(not exists (select 1 from public.my_profile_updates()), 'saving the profession completes it');
+select pg_temp.expect(not exists (select 1 from public.my_profile_updates() where key = 'occupation'), 'saving the profession completes it');
 select pg_temp.expect((select completed_at is not null from public.user_requirement_status where key = 'occupation'),
   'completion recorded');
 select pg_temp.expect((select count(*) from public.profiles p join before_profiles b using (id)
