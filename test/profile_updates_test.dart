@@ -15,9 +15,13 @@ Uint8List _bytes(int n) => Uint8List.fromList(List.filled(n, 7));
 
 /// A live (onboarded) demo user without a profession: an existing account
 /// from before the Profession detail was introduced.
-Future<DemoBackend> _existingUser({String? occupation, bool prefs = true}) async {
+Future<DemoBackend> _existingUser({String? occupation, bool prefs = true, bool email = true}) async {
   final b = DemoBackend();
   await b.verifyOtp(OtpChannel.phone, '+919876543210', '123456');
+  if (email) {
+    await b.sendEmailCode('asha@example.com');
+    await b.verifyEmailCode('asha@example.com', '123456');
+  }
   await b.setDob(DateTime(1998, 3, 3));
   await b.acknowledgeStandards('2026-11-11');
   await b.createProfile(
@@ -82,6 +86,19 @@ void main() {
       expect((await b.profileUpdates()).map((u) => u.key), ['discovery_prefs']);
       await b.updateProfile(const ProfilePatch({ProfilePatch.prefAgeMin: 18}));
       expect(await b.profileUpdates(), isEmpty, reason: 'saving (even the defaults) counts as choosing');
+    });
+
+    test('email: phone-only accounts are asked (optional) until they confirm one', () async {
+      final b = await _existingUser(occupation: 'Architect', email: false);
+      expect(await b.hasConfirmedEmail(), isFalse);
+      final u = (await b.profileUpdates()).single;
+      expect((u.key, u.form, u.optional), ('email', 'email', true));
+      await expectLater(b.verifyEmailCode('a@b.co', '123456'), throwsA(isA<AppException>()), reason: 'no code sent yet');
+      await b.sendEmailCode('Asha@Example.com');
+      await b.verifyEmailCode('asha@example.com', '654321');
+      expect(await b.hasConfirmedEmail(), isTrue);
+      expect(await b.profileUpdates(), isEmpty);
+      expect(await b.supportEmail(), 'asha@example.com');
     });
 
     test('summary for the You tab', () {

@@ -185,14 +185,16 @@ class _AuthScreenState extends ConsumerState<AuthScreen> with SingleTickerProvid
                           // OTP can't be requested until the user is 18+ and has agreed.
                           onTap: _targetValid && _agreed ? _sendCode : null,
                         ),
+                        // Mobile number only for new accounts; email sign-in stays
+                        // for accounts created with an email before this change.
                         TextButton(
                           onPressed: () => setState(() {
                             _channel = _channel == OtpChannel.phone ? OtpChannel.email : OtpChannel.phone;
                             _target.clear();
                           }),
                           child: Text(
-                            _channel == OtpChannel.phone ? 'Use email instead' : 'Use phone instead',
-                            style: TextStyle(fontSize: 15, fontWeight: FontWeight.w500, color: c.ink2),
+                            _channel == OtpChannel.phone ? 'Signed up with email? Sign in with email' : 'Use mobile number',
+                            style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: c.muted),
                           ),
                         ),
                       ] else ...[

@@ -71,7 +71,9 @@ class SupabaseBackend implements FinderBackend {
   @override
   Future<void> sendOtp(OtpChannel channel, String target) => _guard(() async {
     if (channel == OtpChannel.email) {
-      await _db.auth.signInWithOtp(email: target, shouldCreateUser: true);
+      // Email sign-in is kept for accounts that already use it; new
+      // accounts sign up with their mobile number and add an email after.
+      await _db.auth.signInWithOtp(email: target, shouldCreateUser: false);
     } else {
       await _db.auth.signInWithOtp(phone: target, shouldCreateUser: true);
     }
@@ -84,6 +86,26 @@ class SupabaseBackend implements FinderBackend {
     } else {
       await _db.auth.verifyOTP(phone: target, token: code, type: OtpType.sms);
     }
+  });
+
+  @override
+  Future<bool> hasConfirmedEmail() async {
+    final u = _db.auth.currentUser;
+    return (u?.email ?? '').isNotEmpty && u?.emailConfirmedAt != null;
+  }
+
+  /// Supabase Auth sends the code to the new address ("Change email address"
+  /// template, which must show {{ .Token }}). The address only becomes the
+  /// account's email once the code is confirmed.
+  @override
+  Future<void> sendEmailCode(String email) => _guard(() async {
+    await _db.auth.updateUser(UserAttributes(email: email));
+  });
+
+  @override
+  Future<void> verifyEmailCode(String email, String code) => _guard(() async {
+    await _db.auth.verifyOTP(email: email, token: code, type: OtpType.emailChange);
+    await _db.auth.refreshSession();
   });
 
   /// Secure logout: revoke this device's encryption identity, end the
@@ -1229,7 +1251,17 @@ class SupabaseBackend implements FinderBackend {
               : const AppException(AppErrorCode.unknown, 'Something went wrong. Try again.'),
       };
     }
-    if (e is AuthException) return AppException(AppErrorCode.unknown, e.message);
+    if (e is AuthException) {
+      return switch (e.code) {
+        'otp_disabled' || 'signup_disabled' || 'user_not_found' => const AppException(
+          AppErrorCode.unknown,
+          'No account uses this email. New accounts sign up with a mobile number.',
+        ),
+        'email_exists' => const AppException(AppErrorCode.unknown, 'This email is already used by another account.'),
+        'otp_expired' => const AppException(AppErrorCode.unknown, 'That code is wrong or has expired. Try again.'),
+        _ => AppException(AppErrorCode.unknown, e.message),
+      };
+    }
     if (e is StorageException) return const AppException(AppErrorCode.unknown, 'Upload failed. Try again.');
     return const AppException(AppErrorCode.network, 'Something went wrong. Check your connection.');
   }

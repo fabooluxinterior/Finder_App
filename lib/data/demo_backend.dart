@@ -101,6 +101,34 @@ class DemoBackend implements FinderBackend {
     _persist();
   }
 
+  String? _pendingEmail;
+
+  @override
+  Future<bool> hasConfirmedEmail() async => (_email ?? '').isNotEmpty;
+
+  @override
+  Future<void> sendEmailCode(String email) async {
+    await _latency();
+    if (!RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(email.trim())) {
+      throw const AppException(AppErrorCode.unknown, 'Enter a valid email address.');
+    }
+    _pendingEmail = email.trim().toLowerCase();
+  }
+
+  @override
+  Future<void> verifyEmailCode(String email, String code) async {
+    await _latency();
+    if (_pendingEmail == null || _pendingEmail != email.trim().toLowerCase()) {
+      throw const AppException(AppErrorCode.unknown, 'Send a code to this email first.');
+    }
+    if (!RegExp(r'^\d{6}$').hasMatch(code)) {
+      throw const AppException(AppErrorCode.unknown, 'Enter the 6-digit code (any digits work in demo).');
+    }
+    _email = _pendingEmail;
+    _pendingEmail = null;
+    _persist();
+  }
+
   @override
   Future<void> signOut() async {
     _uid = null;
@@ -627,6 +655,12 @@ class DemoBackend implements FinderBackend {
       description: 'Choose who you’re interested in and an age range.',
       form: 'discovery',
     ),
+    ProfileUpdate(
+      key: 'email',
+      label: 'Email address',
+      description: 'Add an email so we can reach you about your account and support tickets.',
+      form: 'email',
+    ),
   ];
 
   /// Same as profiles.prefs_set_at (stamped when preferences are saved).
@@ -640,6 +674,7 @@ class DemoBackend implements FinderBackend {
     'occupation' => (_me?.occupation ?? '').trim().isEmpty,
     'discovery_prefs' =>
       !_prefsSet && (_me?.prefGenders.isEmpty ?? true) && (_me?.prefAgeMin ?? 18) == 18 && (_me?.prefAgeMax ?? 60) == 60,
+    'email' => (_email ?? '').isEmpty,
     _ => false,
   };
 

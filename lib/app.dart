@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'core/brand.dart';
 import 'core/theme.dart';
+import 'features/auth/add_email_screen.dart';
 import 'features/auth/auth_screen.dart';
 import 'features/home/home_shell.dart';
 import 'features/legal/consent.dart';
@@ -61,7 +62,15 @@ class _AuthGate extends ConsumerWidget {
           data: (p) {
             // First run (or an unfinished setup): the 7-stage wizard, resumed
             // at the saved stage. The server decides when it's complete.
-            if (p == null || !p.isOnboarded) return OnboardingFlow(key: ValueKey(p?.id), profile: p);
+            if (p == null || !p.isOnboarded) {
+              // Sign-up is by mobile number; the email is added and confirmed
+              // right after, before setup. Existing accounts are never blocked
+              // for it (they get the optional "small update" prompt instead).
+              final email = ref.watch(emailConfirmedProvider);
+              if (email.isLoading && !email.hasValue) return const _Splash();
+              if (email.value != true) return const AddEmailScreen(inSetup: true);
+              return OnboardingFlow(key: ValueKey(p?.id), profile: p);
+            }
             // Accounts created before DOBs were required must add one once.
             final dob = ref.watch(hasDobProvider);
             if (dob.isLoading && !dob.hasValue) return const _Splash();

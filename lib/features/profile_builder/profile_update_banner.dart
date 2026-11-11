@@ -6,6 +6,7 @@ import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../models/profile_update.dart';
 import '../../providers.dart';
+import '../auth/add_email_screen.dart';
 import '../profile/profile_editor_screen.dart';
 import '../suggestions/discovery_preferences_screen.dart';
 
@@ -39,12 +40,7 @@ class _ProfileUpdateBannerState extends ConsumerState<ProfileUpdateBanner> {
   }
 
   Future<void> _complete(ProfileUpdate u) async {
-    await Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => u.form == 'discovery' ? const DiscoveryPreferencesScreen() : ProfileEditorScreen(openField: u.key),
-      ),
-    );
+    await Navigator.push(context, MaterialPageRoute(builder: (_) => profileUpdateEditor(u)));
     ref.invalidate(profileUpdatesProvider);
   }
 
@@ -81,6 +77,13 @@ class _ProfileUpdateBannerState extends ConsumerState<ProfileUpdateBanner> {
     );
   }
 }
+
+/// The screen that completes one detail (and saves only that detail).
+Widget profileUpdateEditor(ProfileUpdate u) => switch (u.form) {
+  'discovery' => const DiscoveryPreferencesScreen(),
+  'email' => const AddEmailScreen(),
+  _ => ProfileEditorScreen(openField: u.key),
+};
 
 class _Card extends StatelessWidget {
   const _Card({required this.items, required this.onComplete, required this.onLater, required this.onSkip});
@@ -182,7 +185,7 @@ class ProfileUpdateStatusRow extends ConsumerWidget {
       borderRadius: BorderRadius.circular(12),
       onTap: tappable
           ? () async {
-              await Navigator.push(context, MaterialPageRoute(builder: (_) => ProfileEditorScreen(openField: updates.first.key)));
+              await Navigator.push(context, MaterialPageRoute(builder: (_) => profileUpdateEditor(updates.first)));
               ref.invalidate(profileUpdatesProvider);
             }
           : null,
