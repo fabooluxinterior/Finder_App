@@ -3,10 +3,20 @@ import encodeWebp from "npm:@jsquash/webp@1.5.0/encode.js";
 import { fitBox, RejectedImage, sanitizeImage, sniff, stripWebp, webpInfo } from "../image.ts";
 import { openMedia, openSecret, resetKeyringForTests, rewrapDek, sealMedia, sealSecret } from "../media_crypto.ts";
 import {
-  authorizeUrl, exchangeCode, importAll, mapArtists, mapTrack, pickImage, ReauthRequired, recentlyPlayed, refreshAccess,
-  ScopeMissing, SpotifyRateLimited, topArtists,
+  authorizeUrl,
+  exchangeCode,
+  importAll,
+  mapArtists,
+  mapTrack,
+  pickImage,
+  ReauthRequired,
+  recentlyPlayed,
+  refreshAccess,
+  ScopeMissing,
+  SpotifyRateLimited,
+  topArtists,
 } from "../spotify.ts";
-import { decide } from "../moderation.ts";
+import { decide, decideOpenAI, moderate } from "../moderation.ts";
 
 const dir = new URL(".", import.meta.url);
 const key = () => btoa(String.fromCharCode(...crypto.getRandomValues(new Uint8Array(32))));
@@ -43,7 +53,8 @@ Deno.test("media crypto: roundtrip, tamper, swapped id, rotation", async () => {
   const row = { wrapped_dek: s.wrappedDek, kek_id: s.kekId, nonce: s.nonce, sha256: s.sha256 };
   assertEquals(await openMedia(id, row, s.ciphertext), plain);
 
-  const bad = s.ciphertext.slice(); bad[0] ^= 1;
+  const bad = s.ciphertext.slice();
+  bad[0] ^= 1;
   await assertRejects(() => openMedia(id, row, bad));
   await assertRejects(() => openMedia(crypto.randomUUID(), row, s.ciphertext)); // AAD binds the id
 
@@ -54,7 +65,7 @@ Deno.test("media crypto: roundtrip, tamper, swapped id, rotation", async () => {
   assertEquals(next.kekId, "v2");
   assertEquals(await openMedia(id, { ...row, wrapped_dek: next.wrappedDek, kek_id: "v2" }, s.ciphertext), plain);
 
-  Deno.env.set("MEDIA_KEKS", JSON.stringify({ v2 }));  // v1 retired
+  Deno.env.set("MEDIA_KEKS", JSON.stringify({ v2 })); // v1 retired
   resetKeyringForTests();
   await assertRejects(() => openMedia(id, row, s.ciphertext));
 });
@@ -66,6 +77,76 @@ Deno.test("moderation thresholds", () => {
   assertEquals(decide({ adult: "LIKELY" }), "rejected");
   assertEquals(decide({ racy: "VERY_LIKELY" }), "rejected");
   assertEquals(decide({}), "approved");
+});
+
+Deno.test("moderation (OpenAI scores): safe passes, doubtful goes to a person, explicit is rejected", () => {
+  assertEquals(decideOpenAI({ sexual: 0.02, violence: 0.01 }), "approved");
+  assertEquals(decideOpenAI({ sexual: 0.12 }), "approved", "swimwear-level scores pass");
+  assertEquals(decideOpenAI({ sexual: 0.45 }), "pending");
+  assertEquals(decideOpenAI({ sexual: 0.01 }, { sexual: true }), "pending", "anything OpenAI flags is reviewed");
+  assertEquals(decideOpenAI({ "violence/graphic": 0.4 }), "pending");
+  assertEquals(decideOpenAI({ "sexual/minors": 0.08 }), "pending");
+  assertEquals(decideOpenAI({ sexual: 0.93 }), "rejected");
+  assertEquals(decideOpenAI({ "sexual/minors": 0.5 }), "rejected");
+  assertEquals(decideOpenAI({}), "approved");
+});
+
+Deno.test("moderation (provider choice, failures, secrecy)", async () => {
+  const img = new Uint8Array([1, 2, 3]);
+  const none = await moderate(img, () => undefined);
+  assertEquals(none, { status: "pending", labels: { provider: "none" } });
+
+  let url = "";
+  let auth = "";
+  let sent = "";
+  const ok =
+    (scores: Record<string, number>, categories: Record<string, boolean> = {}) =>
+    async (u: string | URL | Request, init?: RequestInit) => {
+      url = String(u);
+      auth = new Headers(init?.headers).get("Authorization") ?? "";
+      sent = String(init?.body);
+      return new Response(JSON.stringify({ results: [{ category_scores: scores, categories }] }), { status: 200 });
+    };
+  const env = (k: string) => ({ OPENAI_API_KEY: "sk-secret-key" } as Record<string, string>)[k];
+
+  const safe = await moderate(img, env, ok({ sexual: 0.01, violence: 0.0 }));
+  assertEquals(safe.status, "approved");
+  assertEquals(url, "https://api.openai.com/v1/moderations");
+  assertEquals(auth, "Bearer sk-secret-key");
+  assert(sent.includes("data:image/webp;base64,"));
+  assert(!JSON.stringify(safe).includes("sk-secret-key"), "key never in the verdict");
+  assertEquals(safe.labels.provider, "openai");
+
+  assertEquals((await moderate(img, env, ok({ sexual: 0.5 }))).status, "pending");
+  assertEquals((await moderate(img, env, ok({ sexual: 0.95 }))).status, "rejected");
+
+  // Provider errors, bad answers and network failures never approve and never throw.
+  assertEquals((await moderate(img, env, async () => new Response("", { status: 429 }))).status, "pending");
+  assertEquals((await moderate(img, env, async () => new Response("{}", { status: 200 }))).status, "pending");
+  assertEquals(
+    (await moderate(img, env, async () => {
+      throw new Error("offline");
+    })).status,
+    "pending",
+  );
+
+  // OpenAI wins when both keys exist; MODERATION_PROVIDER can force Google.
+  const both = (k: string) => ({ OPENAI_API_KEY: "a", GOOGLE_VISION_API_KEY: "b" } as Record<string, string>)[k];
+  await moderate(img, both, ok({}));
+  assert(url.includes("openai.com"));
+  const forced = (k: string) =>
+    ({ OPENAI_API_KEY: "a", GOOGLE_VISION_API_KEY: "b", MODERATION_PROVIDER: "google" } as Record<string, string>)[k];
+  const g = await moderate(img, forced, async (u) => {
+    url = String(u);
+    return new Response(
+      JSON.stringify({
+        responses: [{ safeSearchAnnotation: { adult: "VERY_UNLIKELY", racy: "UNLIKELY", violence: "VERY_UNLIKELY" } }],
+      }),
+      { status: 200 },
+    );
+  });
+  assert(url.includes("vision.googleapis.com"));
+  assertEquals(g.status, "approved");
 });
 
 // ---------------------------------------------------------------- client WebP intake
@@ -85,7 +166,10 @@ function riff(chunks: Uint8Array[]) {
   new DataView(out.buffer).setUint32(4, 4 + body, true);
   out.set(new TextEncoder().encode("WEBP"), 8);
   let o = 12;
-  for (const c of chunks) { out.set(c, o); o += c.length; }
+  for (const c of chunks) {
+    out.set(c, o);
+    o += c.length;
+  }
   return out;
 }
 
@@ -98,8 +182,12 @@ Deno.test("image: keeps a client WebP's pixels but strips EXIF/XMP chunks", asyn
   const x = new Uint8Array(10);
   x[0] = 0x08 | 0x04; // EXIF + XMP flags
   x.set([(399) & 0xff, (399 >> 8) & 0xff, 0, (299) & 0xff, (299 >> 8) & 0xff, 0], 4);
-  const tagged = riff([chunk("VP8X", x), vp8, chunk("EXIF", new TextEncoder().encode("SecretPhone 98765")),
-                       chunk("XMP ", new TextEncoder().encode("<gps>9.93,76.26</gps>"))]);
+  const tagged = riff([
+    chunk("VP8X", x),
+    vp8,
+    chunk("EXIF", new TextEncoder().encode("SecretPhone 98765")),
+    chunk("XMP ", new TextEncoder().encode("<gps>9.93,76.26</gps>")),
+  ]);
   assertEquals(webpInfo(tagged), { w: 400, h: 300, animated: false });
 
   const out = await sanitizeImage(tagged);
@@ -140,14 +228,25 @@ Deno.test("music: refresh tokens are sealed per user", async () => {
 
 Deno.test("music: artist mapping keeps id, name, medium image, genres", () => {
   const items = [
-    { id: "4YRxDV8wJFPHPTeXepOstw", name: "Sushin Shyam", genres: ["malayalam indie", "filmi"],
-      images: [{ url: "https://i.scdn.co/image/big", width: 640 }, { url: "https://i.scdn.co/image/mid", width: 320 },
-               { url: "https://i.scdn.co/image/small", width: 160 }] },
+    {
+      id: "4YRxDV8wJFPHPTeXepOstw",
+      name: "Sushin Shyam",
+      genres: ["malayalam indie", "filmi"],
+      images: [{ url: "https://i.scdn.co/image/big", width: 640 }, { url: "https://i.scdn.co/image/mid", width: 320 }, {
+        url: "https://i.scdn.co/image/small",
+        width: 160,
+      }],
+    },
     { id: "bad id", name: "x" },
     { id: "1mYsTxnqsietFxj1OgoGbG", name: "A. R. Rahman", images: [{ url: "http://evil.example/x.png", width: 320 }] },
   ];
   assertEquals(mapArtists(items), [
-    { id: "4YRxDV8wJFPHPTeXepOstw", name: "Sushin Shyam", image: "https://i.scdn.co/image/mid", genres: ["malayalam indie", "filmi"] },
+    {
+      id: "4YRxDV8wJFPHPTeXepOstw",
+      name: "Sushin Shyam",
+      image: "https://i.scdn.co/image/mid",
+      genres: ["malayalam indie", "filmi"],
+    },
     { id: "1mYsTxnqsietFxj1OgoGbG", name: "A. R. Rahman", image: null, genres: [] },
   ]);
   assertEquals(mapArtists(undefined), []);
@@ -191,23 +290,31 @@ Deno.test("music: OAuth requests stay server-side and handle edge cases", async 
 });
 
 Deno.test("music: top tracks and recently played, with old grants and empty history", async () => {
-  const album = { images: [{ url: "https://i.scdn.co/image/a640", width: 640 }, { url: "https://i.scdn.co/image/a300", width: 300 }] };
-  assertEquals(mapTrack({ id: "3n3Ppam7vgaVa1iaRUc9Lp", name: "Song", artists: [{ name: "A" }, { name: "B" }], album }),
-    { id: "3n3Ppam7vgaVa1iaRUc9Lp", name: "Song", artists: ["A", "B"], image: "https://i.scdn.co/image/a300" });
+  const album = {
+    images: [{ url: "https://i.scdn.co/image/a640", width: 640 }, { url: "https://i.scdn.co/image/a300", width: 300 }],
+  };
+  assertEquals(mapTrack({ id: "3n3Ppam7vgaVa1iaRUc9Lp", name: "Song", artists: [{ name: "A" }, { name: "B" }], album }), {
+    id: "3n3Ppam7vgaVa1iaRUc9Lp",
+    name: "Song",
+    artists: ["A", "B"],
+    image: "https://i.scdn.co/image/a300",
+  });
   assertEquals(mapTrack({ id: "x", name: "bad id" }), null);
   assertEquals(mapTrack({ id: "3n3Ppam7vgaVa1iaRUc9Lp", name: "No art", artists: [] })!.image, null);
 
-  const played = { items: [{ played_at: "2026-11-09T10:00:00.000Z", track: { id: "3n3Ppam7vgaVa1iaRUc9Lp", name: "Song", artists: [], album } }] };
-  const full = fakeFetch((u) =>
-    u.includes("/recently-played") ? Response.json(played) : Response.json({ items: [] })
-  );
+  const played = {
+    items: [{ played_at: "2026-11-09T10:00:00.000Z", track: { id: "3n3Ppam7vgaVa1iaRUc9Lp", name: "Song", artists: [], album } }],
+  };
+  const full = fakeFetch((u) => u.includes("/recently-played") ? Response.json(played) : Response.json({ items: [] }));
   const r = await recentlyPlayed("acc", full);
   assertEquals(r[0].played_at, "2026-11-09T10:00:00.000Z");
   const all = await importAll("acc", full);
   assertEquals([all.artists.length, all.tracks.length, all.recent!.length], [0, 0, 1]);
 
   // Granted before the recently-played scope existed: Spotify answers 403.
-  const oldGrant = fakeFetch((u) => u.includes("/recently-played") ? new Response("", { status: 403 }) : Response.json({ items: [] }));
+  const oldGrant = fakeFetch((u) =>
+    u.includes("/recently-played") ? new Response("", { status: 403 }) : Response.json({ items: [] })
+  );
   await assertRejects(() => recentlyPlayed("acc", oldGrant), ScopeMissing);
   assertEquals((await importAll("acc", oldGrant)).recent, null, "recently played is optional");
 

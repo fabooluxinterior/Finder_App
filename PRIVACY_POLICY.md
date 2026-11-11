@@ -1,6 +1,6 @@
 # Vouby Privacy Policy
 
-**Version 2026-11-18.** Draft: have this reviewed by a lawyer before publishing (India's Digital Personal Data Protection Act, 2023, and Google Play's User Data policy).
+**Version 2026-11-19.** Draft: have this reviewed by a lawyer before publishing (India's Digital Personal Data Protection Act, 2023, and Google Play's User Data policy).
 
 Vouby ("we", "us") is operated by **<FILL: Company name>**, **<FILL: Registered address>**. This policy explains what we collect, how we protect it, and what control you have.
 
@@ -40,7 +40,7 @@ Vouby ("we", "us") is operated by **<FILL: Company name>**, **<FILL: Registered 
 
 ## 2. How we store your photos
 
-- Photos go into a private quarantine area first. We check they're real images, remove hidden metadata, and screen them automatically for nudity and violence. Google Cloud Vision processes the image only to return a safety rating. Some photos are reviewed by a person before they appear.
+- Photos go into a private quarantine area first. We check they're real images, remove hidden metadata, and screen them automatically for nudity and violence. An image-safety service (OpenAI Moderation, or Google Cloud Vision) receives the photo only to return a safety rating; we send nothing else with it. Some photos are reviewed by a person before they appear.
 - Every stored photo is encrypted with its own key (AES-256-GCM). Those keys are themselves encrypted with a master key kept outside our database.
 - Photos are never available at a public link. Each view checks that the viewer is signed in and allowed to see it, so a copied link doesn't work for anyone else.
 - **Verification selfies** go through the same pipeline but are never shown on your profile. Only verification staff can view them, every view is logged, and they're deleted 30 days after the review.
@@ -101,7 +101,7 @@ Because chats are end-to-end encrypted, moderators can't see them unless **you c
 We don't sell your data or use it for advertising. We share only with:
 - **Service providers** that process data for us under contract:
   - Supabase: database, storage and authentication, hosted in region <FILL: Supabase region>.
-  - Google Cloud Vision: photo safety checks.
+  - OpenAI (Moderation) or Google Cloud Vision: photo safety checks.
   - Spotify: only if you connect it. We receive your top artists; Spotify learns that you authorised Vouby.
   - RevenueCat and Google Play: subscriptions.
   - SMS and email providers: sign-in codes.

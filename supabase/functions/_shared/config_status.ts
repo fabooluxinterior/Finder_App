@@ -15,39 +15,66 @@ export interface ServiceSpec {
 
 export const SERVICES: ServiceSpec[] = [
   {
-    service: "supabase", label: "Supabase (service access)", required: true,
+    service: "supabase",
+    label: "Supabase (service access)",
+    required: true,
     vars: ["SUPABASE_URL", "SUPABASE_ANON_KEY", "SUPABASE_SERVICE_ROLE_KEY"],
     setup: "Provided automatically to edge functions by Supabase.",
   },
   {
-    service: "media_keys", label: "Photo encryption keys", required: true,
+    service: "media_keys",
+    label: "Photo encryption keys",
+    required: true,
     vars: ["MEDIA_KEKS", "MEDIA_KEK_ACTIVE"],
-    setup: "supabase secrets set MEDIA_KEKS=... MEDIA_KEK_ACTIVE=... (see .env.example). Add a new key version; never replace or delete an existing one.",
+    setup:
+      "supabase secrets set MEDIA_KEKS=... MEDIA_KEK_ACTIVE=... (see .env.example). Add a new key version; never replace or delete an existing one.",
   },
   {
-    service: "spotify", label: "Spotify", required: false,
+    service: "spotify",
+    label: "Spotify",
+    required: false,
     vars: ["SPOTIFY_CLIENT_ID", "SPOTIFY_CLIENT_SECRET", "SPOTIFY_REDIRECT_URI"],
     optionalVars: ["MUSIC_RETURN_URL"],
-    setup: "Spotify dashboard → your app → Basic Information; then supabase secrets set SPOTIFY_CLIENT_ID=... SPOTIFY_CLIENT_SECRET=... SPOTIFY_REDIRECT_URI=https://<ref>.supabase.co/functions/v1/music-callback",
+    setup:
+      "Spotify dashboard → your app → Basic Information; then supabase secrets set SPOTIFY_CLIENT_ID=... SPOTIFY_CLIENT_SECRET=... SPOTIFY_REDIRECT_URI=https://<ref>.supabase.co/functions/v1/music-callback",
   },
   {
-    service: "revenuecat", label: "RevenueCat webhook (Fast-Track)", required: false,
+    service: "revenuecat",
+    label: "RevenueCat webhook (Fast-Track)",
+    required: false,
     vars: ["REVENUECAT_WEBHOOK_AUTH"],
-    setup: "Generate a long random string; set it in RevenueCat (webhook Authorization) and with supabase secrets set REVENUECAT_WEBHOOK_AUTH=...",
+    setup:
+      "Generate a long random string; set it in RevenueCat (webhook Authorization) and with supabase secrets set REVENUECAT_WEBHOOK_AUTH=...",
   },
   {
-    service: "moderation", label: "Image moderation (Google Vision)", required: false,
+    service: "moderation",
+    label: "Image moderation (OpenAI, recommended)",
+    required: false,
+    vars: ["OPENAI_API_KEY"],
+    setup:
+      "Create an OpenAI API key (platform.openai.com); set OPENAI_API_KEY in Supabase → Edge Functions → Secrets. Without any moderation key every photo waits for manual review.",
+  },
+  {
+    service: "moderation_google",
+    label: "Image moderation (Google Vision, alternative)",
+    required: false,
     vars: ["GOOGLE_VISION_API_KEY"],
-    setup: "Google Cloud → Vision API key restricted to the Vision API; supabase secrets set GOOGLE_VISION_API_KEY=...",
+    setup:
+      "Google Cloud → Vision API key restricted to the Vision API; set GOOGLE_VISION_API_KEY in Supabase secrets. Used only when no OpenAI key is set (or MODERATION_PROVIDER=google).",
   },
   {
-    service: "support_email", label: "Support ticket emails", required: false,
+    service: "support_email",
+    label: "Support ticket emails",
+    required: false,
     vars: ["RESEND_API_KEY", "SUPPORT_EMAIL_TO"],
     optionalVars: ["SUPPORT_EMAIL_FROM"],
-    setup: "Create a Resend API key (resend.com); supabase secrets set RESEND_API_KEY=... SUPPORT_EMAIL_TO=you@example.com. Tickets are stored and shown to staff even without it.",
+    setup:
+      "Create a Resend API key (resend.com); supabase secrets set RESEND_API_KEY=... SUPPORT_EMAIL_TO=you@example.com. Tickets are stored and shown to staff even without it.",
   },
   {
-    service: "cors", label: "Allowed web origins", required: false,
+    service: "cors",
+    label: "Allowed web origins",
+    required: false,
     vars: ["ALLOWED_ORIGINS"],
     setup: "supabase secrets set ALLOWED_ORIGINS=https://your-admin-host,https://your-web-app (comma-separated).",
   },
@@ -67,7 +94,14 @@ export interface Presence {
 export function presence(env: Env): Presence[] {
   return SERVICES.map((s) => {
     const missing = s.vars.filter((v) => !(env(v) ?? "").trim());
-    return { service: s.service, label: s.label, required: s.required, configured: missing.length === 0, missing, setup: s.setup };
+    return {
+      service: s.service,
+      label: s.label,
+      required: s.required,
+      configured: missing.length === 0,
+      missing,
+      setup: s.setup,
+    };
   });
 }
 
@@ -98,9 +132,12 @@ export async function validate(
         });
         await res.body?.cancel();
         if (res.ok) return { valid: true, message: "Spotify accepted the client ID and secret." };
-        return { valid: false, message: res.status === 400 || res.status === 401
-          ? "Spotify rejected the client ID or secret."
-          : `Spotify answered ${res.status}; try again later.` };
+        return {
+          valid: false,
+          message: res.status === 400 || res.status === 401
+            ? "Spotify rejected the client ID or secret."
+            : `Spotify answered ${res.status}; try again later.`,
+        };
       }
       case "media_keys": {
         const ok = deps.mediaRoundtrip ? await deps.mediaRoundtrip() : false;
@@ -115,7 +152,9 @@ export async function validate(
           : { valid: false, message: "Webhook secret is too short; use at least 24 random characters." };
       }
       case "cors": {
-        const bad = (env("ALLOWED_ORIGINS") ?? "").split(",").map((o) => o.trim()).filter((o) => o && !/^https:\/\/[^/]+$/.test(o));
+        const bad = (env("ALLOWED_ORIGINS") ?? "").split(",").map((o) => o.trim()).filter((o) =>
+          o && !/^https:\/\/[^/]+$/.test(o)
+        );
         return bad.length
           ? { valid: false, message: `${bad.length} origin(s) aren't https://host form.` }
           : { valid: true, message: "Origins look valid." };
