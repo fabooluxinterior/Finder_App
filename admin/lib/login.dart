@@ -3,7 +3,8 @@ import 'package:flutter/material.dart';
 import 'api.dart';
 import 'ui.dart';
 
-/// Staff sign-in with an email code (accounts must already exist; no sign-up).
+/// Staff sign-in with a mobile number and SMS code (accounts must already
+/// exist; no sign-up). Same number and code as in the Vouby app.
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key, required this.api});
   final AdminApi api;
@@ -13,7 +14,7 @@ class LoginPage extends StatefulWidget {
 }
 
 class _LoginPageState extends State<LoginPage> {
-  final _email = TextEditingController();
+  final _phone = TextEditingController();
   final _code = TextEditingController();
   bool _sent = false;
   bool _busy = false;
@@ -35,24 +36,30 @@ class _LoginPageState extends State<LoginPage> {
     }
   }
 
+  Future<void> _send() => _run(() async {
+    await widget.api.sendPhoneCode(_phone.text);
+    _sent = true;
+  });
+
+  Future<void> _verify() => _run(() => widget.api.verifyPhoneCode(_phone.text, _code.text));
+
   @override
   Widget build(BuildContext context) => _AuthCard(
     title: 'Vouby admin',
-    subtitle: _sent ? 'Enter the 6-digit code sent to ${_email.text.trim()}.' : 'Staff only. Sign in with your work email.',
+    subtitle: _sent
+        ? 'Enter the 6-digit code sent to +91 ${_phone.text.trim()}.'
+        : 'Staff only. Sign in with your mobile number.',
     demo: widget.api.isDemo,
     error: _error,
     children: [
       if (!_sent)
         TextField(
-          controller: _email,
+          controller: _phone,
           autofocus: true,
-          keyboardType: TextInputType.emailAddress,
-          autofillHints: const [AutofillHints.email],
-          decoration: const InputDecoration(labelText: 'Email'),
-          onSubmitted: (_) => _run(() async {
-            await widget.api.sendEmailCode(_email.text);
-            _sent = true;
-          }),
+          keyboardType: TextInputType.phone,
+          autofillHints: const [AutofillHints.telephoneNumberNational],
+          decoration: const InputDecoration(labelText: 'Mobile number', prefixText: '+91  '),
+          onSubmitted: (_) => _send(),
         )
       else
         TextField(
@@ -61,24 +68,12 @@ class _LoginPageState extends State<LoginPage> {
           keyboardType: TextInputType.number,
           autofillHints: const [AutofillHints.oneTimeCode],
           decoration: const InputDecoration(labelText: 'Code'),
-          onSubmitted: (_) => _run(() => widget.api.verifyEmailCode(_email.text, _code.text)),
+          onSubmitted: (_) => _verify(),
         ),
       const SizedBox(height: 16),
-      FilledButton(
-        onPressed: _busy
-            ? null
-            : () => _run(() async {
-                if (!_sent) {
-                  await widget.api.sendEmailCode(_email.text);
-                  _sent = true;
-                } else {
-                  await widget.api.verifyEmailCode(_email.text, _code.text);
-                }
-              }),
-        child: Text(_sent ? 'Sign in' : 'Send code'),
-      ),
+      FilledButton(onPressed: _busy ? null : (_sent ? _verify : _send), child: Text(_sent ? 'Sign in' : 'Send code')),
       if (_sent)
-        TextButton(onPressed: _busy ? null : () => setState(() => _sent = false), child: const Text('Use another email')),
+        TextButton(onPressed: _busy ? null : () => setState(() => _sent = false), child: const Text('Use another number')),
     ],
   );
 }
@@ -177,7 +172,10 @@ class _AuthCard extends StatelessWidget {
                   Text(subtitle, style: const TextStyle(color: muted)),
                   if (demo) ...[
                     const SizedBox(height: 10),
-                    const Text('Sample data preview: any email and any 6 digits work.', style: TextStyle(color: warnAmber)),
+                    const Text(
+                      'Sample data preview: any 10-digit number and any 6 digits work.',
+                      style: TextStyle(color: warnAmber),
+                    ),
                   ],
                   const SizedBox(height: 20),
                   ...children,

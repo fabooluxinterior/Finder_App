@@ -11,7 +11,7 @@ class DemoAdminApi extends AdminApi {
   bool get isDemo => true;
 
   final _auth = StreamController<void>.broadcast();
-  String? _email;
+  String? _phone;
   bool _mfa = false;
   DateTime? _reminder;
   final _resolved = <String>{};
@@ -21,21 +21,21 @@ class DemoAdminApi extends AdminApi {
   @override
   Stream<void> authChanges() => _auth.stream;
   @override
-  String? get email => _email;
+  String? get identity => formatIdentity(_phone, null);
 
   @override
   Future<StaffAccess> access() async =>
-      _email == null ? StaffAccess.signedOut : (_mfa ? StaffAccess.admin : StaffAccess.needsMfa);
+      _phone == null ? StaffAccess.signedOut : (_mfa ? StaffAccess.admin : StaffAccess.needsMfa);
 
   @override
-  Future<void> sendEmailCode(String email) async {
-    if (!email.contains('@')) throw const AdminException('Enter a valid email address.');
+  Future<void> sendPhoneCode(String phone) async {
+    normalizeIndianPhone(phone);
   }
 
   @override
-  Future<void> verifyEmailCode(String email, String code) async {
+  Future<void> verifyPhoneCode(String phone, String code) async {
     if (code.trim().length != 6) throw const AdminException('Enter the 6-digit code.');
-    _email = email.trim();
+    _phone = normalizeIndianPhone(phone);
     _auth.add(null);
   }
 
@@ -51,7 +51,7 @@ class DemoAdminApi extends AdminApi {
 
   @override
   Future<void> signOut() async {
-    _email = null;
+    _phone = null;
     _mfa = false;
     _auth.add(null);
   }

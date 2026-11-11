@@ -80,7 +80,7 @@ class _AdminShellState extends State<AdminShell> {
         ListTile(
           dense: true,
           leading: const Icon(Icons.logout, size: 20),
-          title: Text(widget.api.email ?? 'Sign out', overflow: TextOverflow.ellipsis),
+          title: Text(widget.api.identity ?? 'Sign out', overflow: TextOverflow.ellipsis),
           subtitle: const Text('Sign out'),
           onTap: widget.api.signOut,
         ),

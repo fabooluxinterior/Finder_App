@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:vouby_admin/api.dart';
 import 'package:vouby_admin/csv.dart';
 import 'package:vouby_admin/demo_api.dart';
 import 'package:vouby_admin/generated/migrations.g.dart';
@@ -13,6 +14,19 @@ Future<void> _settle(WidgetTester t) async {
 }
 
 void main() {
+  test('staff sign in with an Indian mobile number in any common format', () {
+    expect(normalizeIndianPhone('9188774739'), '+919188774739');
+    expect(normalizeIndianPhone('+91 91887-74739'), '+919188774739');
+    expect(normalizeIndianPhone('919188774739'), '+919188774739');
+    expect(normalizeIndianPhone('09188774739'), '+919188774739');
+    for (final bad in ['', '12345', '5188774739', '91887747390', 'abc']) {
+      expect(() => normalizeIndianPhone(bad), throwsA(isA<AdminException>()), reason: bad);
+    }
+    expect(formatIdentity('919188774739', null), '+91 91887 74739');
+    expect(formatIdentity(null, 'a@b.co'), 'a@b.co');
+    expect(formatIdentity('', null), isNull);
+  });
+
   test('CSV escapes quotes and neutralises formulas', () {
     expect(
       toCsv([
@@ -42,7 +56,7 @@ void main() {
     await _settle(t);
     expect(find.text('Vouby admin'), findsOneWidget);
 
-    await t.enterText(find.byType(TextField), 'staff@vouby.app');
+    await t.enterText(find.byType(TextField), '9188774739');
     await t.tap(find.text('Send code'));
     await _settle(t);
     await t.enterText(find.byType(TextField), '123456');

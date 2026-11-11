@@ -39,7 +39,7 @@ class AdminApp extends StatelessWidget {
   );
 }
 
-/// Signed out → email code → authenticator → staff check → admin shell.
+/// Signed out → mobile number + SMS code → authenticator → staff check → admin shell.
 class AccessGate extends StatefulWidget {
   const AccessGate({super.key, required this.api});
   final AdminApi api;

@@ -9,10 +9,15 @@ abstract class AdminApi {
 
   // Session
   Stream<void> authChanges();
-  String? get email;
+
+  /// Who is signed in, for display ("+91 98765 43210").
+  String? get identity;
   Future<StaffAccess> access();
-  Future<void> sendEmailCode(String email);
-  Future<void> verifyEmailCode(String email, String code);
+
+  /// Staff sign in with their mobile number (the same SMS code as the Vouby
+  /// app). Accounts must already exist; this never creates one.
+  Future<void> sendPhoneCode(String phone);
+  Future<void> verifyPhoneCode(String phone, String code);
 
   /// Two-step verification: true if the account has an authenticator set up.
   Future<bool> hasAuthenticator();
@@ -38,6 +43,26 @@ abstract class AdminApi {
   Future<List<VerificationQueueItem>> verificationQueue();
   Future<void> reviewVerification(String requestId, {required bool approve});
   Map<String, String> get mediaHeaders;
+}
+
+/// "98765 43210", "+91 98765-43210" or "919876543210" → "+919876543210".
+/// Throws when it isn't a valid Indian mobile number (10 digits, starts 6-9).
+String normalizeIndianPhone(String input) {
+  var d = input.replaceAll(RegExp(r'\D'), '');
+  if (d.length == 12 && d.startsWith('91')) d = d.substring(2);
+  if (d.length == 11 && d.startsWith('0')) d = d.substring(1);
+  if (!RegExp(r'^[6-9]\d{9}$').hasMatch(d)) {
+    throw const AdminException('Enter a valid 10-digit mobile number.');
+  }
+  return '+91$d';
+}
+
+/// What to show for the signed-in account.
+String? formatIdentity(String? phone, String? email) {
+  final d = (phone ?? '').replaceAll(RegExp(r'\D'), '');
+  if (d.length == 12 && d.startsWith('91')) return '+91 ${d.substring(2, 7)} ${d.substring(7)}';
+  if (d.isNotEmpty) return '+$d';
+  return (email ?? '').isEmpty ? null : email;
 }
 
 class AdminException implements Exception {
@@ -69,7 +94,7 @@ class SupabaseAdminApi extends AdminApi {
   Stream<void> authChanges() => _db.auth.onAuthStateChange.map((_) {});
 
   @override
-  String? get email => _db.auth.currentUser?.email;
+  String? get identity => formatIdentity(_db.auth.currentUser?.phone, _db.auth.currentUser?.email);
 
   @override
   Future<StaffAccess> access() async {
@@ -82,11 +107,12 @@ class SupabaseAdminApi extends AdminApi {
   }
 
   @override
-  Future<void> sendEmailCode(String email) => _guard(() => _db.auth.signInWithOtp(email: email.trim(), shouldCreateUser: false));
+  Future<void> sendPhoneCode(String phone) =>
+      _guard(() => _db.auth.signInWithOtp(phone: normalizeIndianPhone(phone), shouldCreateUser: false));
 
   @override
-  Future<void> verifyEmailCode(String email, String code) =>
-      _guard(() => _db.auth.verifyOTP(email: email.trim(), token: code.trim(), type: OtpType.email));
+  Future<void> verifyPhoneCode(String phone, String code) =>
+      _guard(() => _db.auth.verifyOTP(phone: normalizeIndianPhone(phone), token: code.trim(), type: OtpType.sms));
 
   @override
   Future<bool> hasAuthenticator() => _guard(() async {
