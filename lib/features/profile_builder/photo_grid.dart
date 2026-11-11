@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -28,6 +30,40 @@ class _PhotoGridState extends ConsumerState<PhotoGrid> {
   final _busy = <int, String>{};
   String? _lastResult;
 
+  /// While any photo is "in review", ask again every few seconds so it flips to
+  /// live by itself (no restart needed) and say so when it does.
+  Timer? _poll;
+  Set<String> _inReview = {};
+
+  void _syncPolling(List<PhotoSlot> slots) {
+    final pending = {
+      for (final s in slots)
+        if (s.pending) s.mediaId,
+    };
+    final approved = _inReview.where((id) => !pending.contains(id) && slots.any((s) => s.mediaId == id));
+    if (approved.isNotEmpty) {
+      ref.invalidate(myProfileProvider);
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) showSnack(context, 'Photo approved', icon: PhosphorIconsFill.checkCircle);
+      });
+    }
+    _inReview = pending;
+    if (pending.isEmpty) {
+      _poll?.cancel();
+      _poll = null;
+    } else {
+      _poll ??= Timer.periodic(const Duration(seconds: 6), (_) {
+        if (mounted) ref.invalidate(photoSlotsProvider);
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _poll?.cancel();
+    super.dispose();
+  }
+
   Future<void> _refresh() async {
     ref.invalidate(myProfileProvider);
     await ref.read(photoSlotsProvider.future);
@@ -49,7 +85,11 @@ class _PhotoGridState extends ConsumerState<PhotoGrid> {
           '${optimized.mime == 'image/webp' ? 'WebP' : 'JPEG'}, ${optimized.width}×${optimized.height}';
       await _refresh();
       if (mounted && status == ImageUploadStatus.pending) {
-        showSnack(context, 'Photo added. It’ll appear once it’s reviewed.', icon: PhosphorIconsFill.clock);
+        showSnack(
+          context,
+          'Photo added. It’s in review and will show up here by itself once it’s approved.',
+          icon: PhosphorIconsFill.clock,
+        );
       }
     } on ImageOptimizeException catch (e) {
       if (mounted) showSnack(context, e.message, icon: PhosphorIconsFill.warningCircle);
@@ -140,8 +180,13 @@ class _PhotoGridState extends ConsumerState<PhotoGrid> {
   @override
   Widget build(BuildContext context) {
     final c = context.fc;
+    ref.listen<AsyncValue<List<PhotoSlot>>>(photoSlotsProvider, (_, next) {
+      final v = next.value;
+      if (v != null) _syncPolling(v);
+    });
     final slots = ref.watch(photoSlotsProvider).value ?? const <PhotoSlot>[];
     final live = slots.where((s) => !s.pending).length;
+    final inReview = slots.length - live;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -178,6 +223,23 @@ class _PhotoGridState extends ConsumerState<PhotoGrid> {
             ),
           ],
         ),
+        if (inReview > 0) ...[
+          const SizedBox(height: 8),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(PhosphorIconsFill.clock, size: 16, color: c.accent),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  '$inReview in review. This updates by itself when ${inReview == 1 ? 'it’s' : 'they’re'} approved. '
+                  'You can continue once at least $photosMin photos are approved.',
+                  style: TextStyle(fontSize: 13.5, color: c.ink3),
+                ),
+              ),
+            ],
+          ),
+        ],
         if (_lastResult != null) ...[
           const SizedBox(height: 4),
           Text('Last photo optimised on your phone: $_lastResult', style: TextStyle(fontSize: 12, color: c.muted)),
