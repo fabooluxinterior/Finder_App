@@ -9,6 +9,7 @@ abstract final class PhosphorIconsRegular {
   static const IconData briefcase = IconData(0xe0ee, fontFamily: 'PhosphorRegular');
   static const IconData cake = IconData(0xe780, fontFamily: 'PhosphorRegular');
   static const IconData camera = IconData(0xe10e, fontFamily: 'PhosphorRegular');
+  static const IconData caretRight = IconData(0xe13a, fontFamily: 'PhosphorRegular');
   static const IconData chatCircle = IconData(0xe168, fontFamily: 'PhosphorRegular');
   static const IconData cigarette = IconData(0xed90, fontFamily: 'PhosphorRegular');
   static const IconData envelopeSimple = IconData(0xe218, fontFamily: 'PhosphorRegular');
@@ -39,6 +40,7 @@ abstract final class PhosphorIconsRegular {
   static const IconData warningCircle = IconData(0xe4e2, fontFamily: 'PhosphorRegular');
   static const IconData wifiSlash = IconData(0xe4f2, fontFamily: 'PhosphorRegular');
   static const IconData wine = IconData(0xe6b2, fontFamily: 'PhosphorRegular');
+  static const IconData x = IconData(0xe4f6, fontFamily: 'PhosphorRegular');
 }
 
 abstract final class PhosphorIconsBold {
@@ -67,6 +69,7 @@ abstract final class PhosphorIconsFill {
   static const IconData paperPlaneTilt = IconData(0xe398, fontFamily: 'PhosphorFill');
   static const IconData sealCheck = IconData(0xe606, fontFamily: 'PhosphorFill');
   static const IconData shieldCheck = IconData(0xe40c, fontFamily: 'PhosphorFill');
+  static const IconData sparkle = IconData(0xe6a2, fontFamily: 'PhosphorFill');
   static const IconData user = IconData(0xe4c2, fontFamily: 'PhosphorFill');
   static const IconData warningCircle = IconData(0xe4e2, fontFamily: 'PhosphorFill');
 }

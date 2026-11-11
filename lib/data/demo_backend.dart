@@ -12,6 +12,7 @@ import '../core/sanitizer.dart';
 import '../models/follow_request.dart';
 import '../models/message.dart';
 import '../models/profile.dart';
+import '../models/profile_update.dart';
 import '../models/profile_catalog.dart';
 import '../models/profile_completion.dart';
 import '../models/suggestion.dart';
@@ -131,6 +132,12 @@ class DemoBackend implements FinderBackend {
       _dob = m['dob'] == null ? null : DateTime.parse(m['dob'] as String);
       _standardsAck = (m['standards'] as bool?) ?? false;
       premium = (m['premium'] as bool?) ?? false;
+      for (final MapEntry(:key, :value) in ((m['updates'] as Map?) ?? const {}).cast<String, dynamic>().entries) {
+        final seen = DateTime.tryParse((value as Map)['seen'] as String? ?? '');
+        final dismissed = DateTime.tryParse(value['dismissed'] as String? ?? '');
+        if (seen != null) _updateSeen[key] = seen;
+        if (dismissed != null) _updateDismissed[key] = dismissed;
+      }
       _verification = VerificationStatus.values.firstWhere(
         (v) => v.name == m['verification'],
         orElse: () => VerificationStatus.none,
@@ -204,6 +211,10 @@ class DemoBackend implements FinderBackend {
       'dob': _dob?.toIso8601String(),
       'standards': _standardsAck,
       'premium': premium,
+      'updates': {
+        for (final k in {..._updateSeen.keys, ..._updateDismissed.keys})
+          k: {'seen': _updateSeen[k]?.toIso8601String(), 'dismissed': _updateDismissed[k]?.toIso8601String()},
+      },
       'verification': _verification.name,
       'photos': [
         for (final p in _photos)
@@ -564,6 +575,61 @@ class DemoBackend implements FinderBackend {
       remaining: (suggestionDailyLimit - shown).clamp(0, suggestionDailyLimit),
       resetsAt: DateTime(now.year, now.month, now.day + 1),
     );
+  }
+
+  // ----------------------------------------------------- profile updates ----
+
+  /// Same registry and rule as the server (profile_requirements +
+  /// requirement_missing): only details this user is missing are asked for.
+  static const profileUpdateRegistry = [
+    ProfileUpdate(key: 'occupation', label: 'Profession', description: 'Add what you do so people have more to talk about.'),
+  ];
+  static const profileUpdateSpacing = Duration(days: 7);
+
+  final _updateSeen = <String, DateTime>{};
+  final _updateDismissed = <String, DateTime>{};
+
+  bool _missing(String key) => switch (key) {
+    'occupation' => (_me?.occupation ?? '').trim().isEmpty,
+    _ => false,
+  };
+
+  @override
+  Future<List<ProfileUpdate>> profileUpdates() async {
+    if (_me == null) return const [];
+    final now = DateTime.now();
+    return [
+      for (final r in profileUpdateRegistry)
+        if (_missing(r.key))
+          ProfileUpdate(
+            key: r.key,
+            label: r.label,
+            description: r.description,
+            form: r.form,
+            level: r.level,
+            gatedFeature: r.gatedFeature,
+            showPrompt:
+                (!_updateDismissed.containsKey(r.key) || !r.optional) &&
+                (_updateSeen[r.key] == null || now.difference(_updateSeen[r.key]!) >= profileUpdateSpacing),
+          ),
+    ];
+  }
+
+  @override
+  Future<void> markProfileUpdateSeen(String key) async {
+    if (!profileUpdateRegistry.any((r) => r.key == key)) {
+      throw const AppException(AppErrorCode.invalidInput, 'Unknown profile update');
+    }
+    _updateSeen[key] = DateTime.now();
+    _persist();
+  }
+
+  @override
+  Future<void> dismissProfileUpdate(String key) async {
+    final r = profileUpdateRegistry.where((r) => r.key == key).firstOrNull;
+    if (r == null || !r.optional) throw const AppException(AppErrorCode.invalidInput, 'This detail can’t be skipped');
+    _updateSeen[key] = _updateDismissed[key] = DateTime.now();
+    _persist();
   }
 
   // -------------------------------------------------------------- music ----

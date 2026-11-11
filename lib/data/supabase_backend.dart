@@ -11,6 +11,7 @@ import '../core/media_auth.dart';
 import '../models/follow_request.dart';
 import '../models/message.dart';
 import '../models/profile.dart';
+import '../models/profile_update.dart';
 import '../models/security.dart';
 import '../models/suggestion.dart';
 import '../security/e2ee_engine.dart';
@@ -340,6 +341,22 @@ class SupabaseBackend implements FinderBackend {
       resetsAt: r['resets_at'] == null ? null : DateTime.parse(r['resets_at'] as String).toLocal(),
     );
   });
+
+  // ----------------------------------------------------- profile updates ----
+
+  @override
+  Future<List<ProfileUpdate>> profileUpdates() => _guard(() async {
+    final rows = await _db.rpc('my_profile_updates') as List;
+    return [for (final r in rows) ProfileUpdate.fromJson((r as Map).cast<String, dynamic>())];
+  });
+
+  @override
+  Future<void> markProfileUpdateSeen(String key) =>
+      _guard(() async => await _db.rpc('mark_profile_update_seen', params: {'p_key': key}));
+
+  @override
+  Future<void> dismissProfileUpdate(String key) =>
+      _guard(() async => await _db.rpc('dismiss_profile_update', params: {'p_key': key}));
 
   // ------------------------------------------------------------- music ----
 

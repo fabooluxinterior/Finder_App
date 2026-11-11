@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 
-
 import '../../core/brand.dart';
 import '../../core/spotify_logo.dart';
 

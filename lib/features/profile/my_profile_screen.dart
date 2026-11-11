@@ -14,6 +14,7 @@ import 'profile_editor_screen.dart';
 import '../suggestions/discovery_preferences_screen.dart';
 import '../../models/profile_catalog.dart' show genderLabel;
 import '../profile_builder/completion_meter.dart';
+import '../profile_builder/profile_update_banner.dart';
 import '../paywall/paywall_sheet.dart';
 import '../security/security_center_screen.dart';
 import '../legal/policy_screen.dart';
@@ -205,6 +206,7 @@ class _MyProfileScreenState extends ConsumerState<MyProfileScreen> {
               profile: me,
               onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ProfileEditorScreen())),
             ),
+            const Padding(padding: EdgeInsets.fromLTRB(4, 6, 4, 0), child: ProfileUpdateStatusRow()),
             if (me.bio.isNotEmpty) ...[
               const SizedBox(height: 14),
               Container(

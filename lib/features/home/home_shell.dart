@@ -14,6 +14,7 @@ import '../chats/chats_screen.dart';
 import '../deck/deck_screen.dart';
 import '../match/match_screen.dart';
 import '../profile/my_profile_screen.dart';
+import '../profile_builder/profile_update_banner.dart';
 import '../requests/requests_screen.dart';
 import '../suggestions/suggestions_screen.dart';
 
@@ -68,9 +69,22 @@ class _HomeShellState extends ConsumerState<HomeShell> {
       },
       child: Scaffold(
         extendBody: true,
-        body: IndexedStack(
-          index: _tab,
-          children: const [DeckScreen(), SuggestionsScreen(), RequestsScreen(), ChatsScreen(), MyProfileScreen()],
+        body: Stack(
+          children: [
+            IndexedStack(
+              index: _tab,
+              children: const [DeckScreen(), SuggestionsScreen(), RequestsScreen(), ChatsScreen(), MyProfileScreen()],
+            ),
+            // "Your profile needs a small update" (only when a detail is missing).
+            Builder(
+              builder: (context) => Positioned(
+                left: 12,
+                right: 12,
+                bottom: MediaQuery.paddingOf(context).bottom + 12,
+                child: const ProfileUpdateBanner(),
+              ),
+            ),
+          ],
         ),
         bottomNavigationBar: _TabBar(
           index: _tab,

@@ -22,7 +22,11 @@ import 'profile_detail_screen.dart';
 /// Modular profile configuration. Every row saves on its own; prompts save
 /// with an explicit button so half-written answers aren't published.
 class ProfileEditorScreen extends ConsumerStatefulWidget {
-  const ProfileEditorScreen({super.key});
+  const ProfileEditorScreen({super.key, this.openField});
+
+  /// Opens this field's editor right away (from a profile-update prompt),
+  /// e.g. 'occupation'. Only that field is saved.
+  final String? openField;
 
   @override
   ConsumerState<ProfileEditorScreen> createState() => _ProfileEditorScreenState();
@@ -31,6 +35,26 @@ class ProfileEditorScreen extends ConsumerStatefulWidget {
 class _ProfileEditorScreenState extends ConsumerState<ProfileEditorScreen> {
   List<ProfilePrompt>? _draftPrompts;
   bool _savingPrompts = false;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.openField != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) async {
+        final me = await ref.read(myProfileProvider.future);
+        if (!mounted || me == null) return;
+        switch (widget.openField) {
+          case 'occupation':
+            await _editOccupation(me);
+        }
+      });
+    }
+  }
+
+  Future<void> _editOccupation(PublicProfile me) async {
+    final v = await showTextSheet(context, title: 'What do you do?', hint: 'e.g. Product designer', initial: me.occupation);
+    if (v != null) await _save({ProfilePatch.occupation: v.isEmpty ? null : v});
+  }
 
   Future<void> _save(Map<String, Object?> fields) async {
     try {
@@ -142,17 +166,9 @@ class _ProfileEditorScreenState extends ConsumerState<ProfileEditorScreen> {
               ),
               AttributeRow(
                 icon: PhosphorIconsRegular.briefcase,
-                title: 'Work',
+                title: 'Profession',
                 value: me.occupation,
-                onTap: () async {
-                  final v = await showTextSheet(
-                    context,
-                    title: 'What do you do?',
-                    hint: 'e.g. Product designer',
-                    initial: me.occupation,
-                  );
-                  if (v != null) await _save({ProfilePatch.occupation: v.isEmpty ? null : v});
-                },
+                onTap: () => _editOccupation(me),
               ),
               AttributeRow(
                 icon: PhosphorIconsRegular.graduationCap,

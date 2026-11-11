@@ -3,6 +3,7 @@ import 'dart:typed_data';
 import '../models/follow_request.dart';
 import '../models/message.dart';
 import '../models/profile.dart';
+import '../models/profile_update.dart';
 import '../models/security.dart';
 import '../models/suggestion.dart';
 
@@ -97,6 +98,15 @@ abstract class FinderBackend {
   /// skips people already on screen when loading more.
   Future<List<Suggestion>> suggestions({String section = 'main', int limit = 10, List<String> exclude = const []});
   Future<SuggestionStatus> suggestionStatus();
+
+  // Profile updates (details introduced after launch; only missing ones)
+  Future<List<ProfileUpdate>> profileUpdates();
+
+  /// Records that the prompt was shown (the server spaces prompts 7 days apart).
+  Future<void> markProfileUpdateSeen(String key);
+
+  /// Stops asking for an optional detail.
+  Future<void> dismissProfileUpdate(String key);
 
   // Music connector (Spotify)
   Future<MusicState> musicState();

@@ -6,6 +6,7 @@ import 'data/purchases_service.dart';
 import 'models/follow_request.dart';
 import 'models/message.dart';
 import 'models/profile.dart';
+import 'models/profile_update.dart';
 
 /// Overridden in main() with the Supabase or demo implementation.
 final backendProvider = Provider<FinderBackend>((ref) => throw UnimplementedError());
@@ -117,4 +118,16 @@ final profileCardProvider = FutureProvider.family<PublicProfile, String>((ref, u
   final link = ref.keepAlive();
   Future<void>.delayed(const Duration(minutes: 10), link.close);
   return ref.watch(backendProvider).profileCard(userId);
+});
+
+/// Profile details introduced after launch that this user is missing. Refreshes
+/// whenever the profile changes (saving a detail removes it).
+final profileUpdatesProvider = FutureProvider<List<ProfileUpdate>>((ref) async {
+  final me = await ref.watch(myProfileProvider.future);
+  if (me == null || !me.isOnboarded) return const [];
+  try {
+    return await ref.watch(backendProvider).profileUpdates();
+  } catch (_) {
+    return const []; // never block the app on this
+  }
 });
