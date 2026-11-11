@@ -99,6 +99,7 @@ class _HelpCenterScreenState extends State<HelpCenterScreen> {
           SafeArea(
             top: false,
             child: Container(
+              width: double.infinity,
               decoration: BoxDecoration(
                 color: c.paper,
                 border: Border(top: BorderSide(color: c.hair)),

@@ -76,7 +76,8 @@ class _ContactSupportScreenState extends ConsumerState<ContactSupportScreen> {
           icon: Icon(PhosphorIconsFill.checkCircle, color: context.fc.ok, size: 36),
           title: const Text('Request received'),
           content: Text(
-            'Your ticket number is ${t.ticketNo}. We’ll reply to your registered email and you can follow the status in My tickets.',
+            'Your ticket number is ${t.ticketNo}. '
+            '${t.email == null ? 'We’ll reply here' : 'We’ll reply to ${t.email}'} and you can follow the status in My tickets.',
           ),
           actions: [TextButton(onPressed: () => Navigator.pop(c), child: const Text('OK'))],
         ),
@@ -135,10 +136,12 @@ class _ContactSupportScreenState extends ConsumerState<ContactSupportScreen> {
           const SizedBox(height: 12),
           Row(
             children: [
-              OutlinedButton.icon(
-                onPressed: _busy ? null : _pickShot,
-                icon: Icon(_shot == null ? PhosphorIconsRegular.image : PhosphorIconsFill.image, size: 18),
-                label: Text(_shot == null ? 'Attach a screenshot (optional)' : 'Screenshot attached'),
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: _busy ? null : _pickShot,
+                  icon: Icon(_shot == null ? PhosphorIconsRegular.image : PhosphorIconsFill.image, size: 18),
+                  label: Text(_shot == null ? 'Attach a screenshot (optional)' : 'Screenshot attached'),
+                ),
               ),
               if (_shot != null)
                 IconButton(

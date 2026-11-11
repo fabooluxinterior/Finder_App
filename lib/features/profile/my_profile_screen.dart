@@ -49,7 +49,11 @@ class _MyProfileScreenState extends ConsumerState<MyProfileScreen> {
     final me = loaded == null || loaded.isVerified || status != VerificationStatus.approved
         ? loaded
         : loaded.copyWith(isVerified: true);
-    final premium = isPremium(ref);
+    final access = ref.watch(accessStatusProvider).value;
+    final inTrial = access?.inTrial ?? false;
+    // Paid Fast-Track only (an active trial also unlocks chat, but nothing is
+    // billed, so it isn't shown as a subscription).
+    final premium = isPremium(ref) && !inTrial;
     final unread = (ref.watch(notificationsProvider).value ?? const []).where((n) => n.readAt == null).length;
     if (me == null) return const Scaffold(body: SizedBox.shrink());
     // extendBody: the shell already adds the tab bar to the bottom padding.
@@ -181,6 +185,8 @@ class _MyProfileScreenState extends ConsumerState<MyProfileScreen> {
                         Text(
                           premium
                               ? 'Manage or cancel in Google Play › Subscriptions.'
+                              : inTrial
+                              ? 'Included in your free trial. Keep it afterwards for ₹79/month; nothing is charged automatically.'
                               : 'See who requested you, accept, and chat. ₹79/month.',
                           style: const TextStyle(fontSize: 14, height: 20 / 14, color: Color(0xFFCDB68C)),
                         ),

@@ -30,6 +30,8 @@ class MyTicketsScreen extends ConsumerWidget {
     return Scaffold(
       appBar: AppBar(title: const Text('My tickets')),
       floatingActionButton: FloatingActionButton.extended(
+        backgroundColor: c.accent,
+        foregroundColor: Colors.white,
         onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ContactSupportScreen())),
         icon: const Icon(PhosphorIconsRegular.plus),
         label: const Text('New request'),

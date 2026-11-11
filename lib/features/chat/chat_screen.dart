@@ -337,7 +337,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                               color: picked ? c.accent.withValues(alpha: 0.16) : Colors.transparent,
                               borderRadius: BorderRadius.circular(16),
                             ),
-                            child: _Bubble(message: m, mine: mine, tail: tail),
+                            child: _Bubble(message: m, mine: mine, tail: tail, selecting: _selected.isNotEmpty),
                           ),
                         );
                         return Column(
@@ -526,10 +526,13 @@ class _Composer extends StatelessWidget {
 }
 
 class _Bubble extends StatelessWidget {
-  const _Bubble({required this.message, required this.mine, required this.tail});
+  const _Bubble({required this.message, required this.mine, required this.tail, this.selecting = false});
   final ChatMessage message;
   final bool mine;
   final bool tail;
+
+  /// While picking messages to report, a tap selects instead of opening.
+  final bool selecting;
 
   @override
   Widget build(BuildContext context) {
@@ -543,7 +546,7 @@ class _Bubble extends StatelessWidget {
         constraints: BoxConstraints(maxWidth: MediaQuery.sizeOf(context).width * 0.76),
         child: Container(
           margin: EdgeInsets.only(top: 3, bottom: tail ? 7 : 2),
-          padding: const EdgeInsets.fromLTRB(15, 11, 13, 8),
+          padding: message.isImage ? const EdgeInsets.fromLTRB(4, 4, 10, 6) : const EdgeInsets.fromLTRB(15, 11, 13, 8),
           decoration: BoxDecoration(
             color: mine ? c.accent : c.surface,
             border: mine ? null : Border.all(color: c.hair),
@@ -559,7 +562,7 @@ class _Bubble extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             children: [
               if (message.isImage)
-                _PhotoContent(message: message)
+                _PhotoContent(message: message, openable: !selecting)
               else if (message.isVoice)
                 VoiceBubble(message: message, color: fg)
               else
@@ -595,8 +598,9 @@ class _Bubble extends StatelessWidget {
 
 /// End-to-end encrypted photo: downloaded and decrypted on this device.
 class _PhotoContent extends ConsumerWidget {
-  const _PhotoContent({required this.message});
+  const _PhotoContent({required this.message, this.openable = true});
   final ChatMessage message;
+  final bool openable;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -629,15 +633,17 @@ class _PhotoContent extends ConsumerWidget {
                   );
                 }
                 return GestureDetector(
-                  onTap: () => Navigator.push(
-                    context,
-                    PageRouteBuilder<void>(
-                      opaque: false,
-                      barrierColor: Colors.black,
-                      pageBuilder: (_, _, _) => _PhotoViewer(bytes: s.data!),
-                      transitionsBuilder: (_, a, _, child) => FadeTransition(opacity: a, child: child),
-                    ),
-                  ),
+                  onTap: !openable
+                      ? null
+                      : () => Navigator.push(
+                          context,
+                          PageRouteBuilder<void>(
+                            opaque: false,
+                            barrierColor: Colors.black,
+                            pageBuilder: (_, _, _) => _PhotoViewer(bytes: s.data!),
+                            transitionsBuilder: (_, a, _, child) => FadeTransition(opacity: a, child: child),
+                          ),
+                        ),
                   child: Image.memory(s.data!, fit: BoxFit.cover, gaplessPlayback: true),
                 );
               },
@@ -689,6 +695,7 @@ class _SelectionBar extends StatelessWidget {
             ),
           ),
           FilledButton.icon(
+            style: FilledButton.styleFrom(minimumSize: const Size(0, 44)),
             onPressed: onReport,
             icon: const Icon(PhosphorIconsRegular.flag, size: 18),
             label: const Text('Report'),

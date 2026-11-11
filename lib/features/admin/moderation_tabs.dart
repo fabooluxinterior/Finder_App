@@ -48,6 +48,10 @@ class _ModerationReportsTabState extends ConsumerState<ModerationReportsTab> {
               ButtonSegment(value: 'dismissed', label: Text('Dismissed')),
             ],
             selected: {_status},
+            style: SegmentedButton.styleFrom(
+              selectedBackgroundColor: context.fc.accentSoft,
+              selectedForegroundColor: context.fc.accent,
+            ),
             onSelectionChanged: (v) => setState(() => _status = v.first),
           ),
         ),
@@ -388,6 +392,10 @@ class _SupportTicketsTabState extends ConsumerState<SupportTicketsTab> {
               ButtonSegment(value: 'all', label: Text('All')),
             ],
             selected: {_status},
+            style: SegmentedButton.styleFrom(
+              selectedBackgroundColor: context.fc.accentSoft,
+              selectedForegroundColor: context.fc.accent,
+            ),
             onSelectionChanged: (v) => setState(() => _status = v.first),
           ),
         ),
