@@ -64,6 +64,7 @@ abstract final class PhosphorIconsFill {
   static const IconData chatsCircle = IconData(0xe17e, fontFamily: 'PhosphorFill');
   static const IconData checkCircle = IconData(0xe184, fontFamily: 'PhosphorFill');
   static const IconData clock = IconData(0xe19a, fontFamily: 'PhosphorFill');
+  static const IconData downloadSimple = IconData(0xe20c, fontFamily: 'PhosphorFill');
   static const IconData eye = IconData(0xe220, fontFamily: 'PhosphorFill');
   static const IconData handshake = IconData(0xe582, fontFamily: 'PhosphorFill');
   static const IconData heart = IconData(0xe2a8, fontFamily: 'PhosphorFill');

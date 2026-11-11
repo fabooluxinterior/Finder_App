@@ -9,6 +9,14 @@ class AppConfig {
   static const revenueCatAndroidKey = String.fromEnvironment('REVENUECAT_ANDROID_KEY');
 
   static const isDemo = bool.fromEnvironment('DEMO');
+
+  /// The CI run number the app was built from (--dart-define=BUILD_NUMBER). It
+  /// is also the Android version code, so newer builds install over older ones.
+  /// 0 for local builds: the "update available" check is off then.
+  static const buildNumber = int.fromEnvironment('BUILD_NUMBER');
+
+  /// Where new builds are published (GitHub Releases, public download).
+  static const updateRepo = 'fabooluxinterior/Finder_App';
   static bool get isConfigured => supabaseUrl.isNotEmpty && supabaseAnonKey.isNotEmpty;
 
   /// Bump when the Terms, Privacy Policy or Community Guidelines change

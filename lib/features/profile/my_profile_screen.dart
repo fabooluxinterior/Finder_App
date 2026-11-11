@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/phosphor.dart';
 import '../auth/add_email_screen.dart';
+import '../update/app_update.dart';
 
 import '../../core/brand.dart';
 import '../../core/config.dart';
@@ -327,6 +329,30 @@ class _MyProfileScreenState extends ConsumerState<MyProfileScreen> {
                   subtitle: 'Your support requests and their status',
                   onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const MyTicketsScreen())),
                 ),
+                if (ref.watch(updateSupportedProvider))
+                  _Row(
+                    icon: PhosphorIconsFill.downloadSimple,
+                    title: 'App version',
+                    subtitle: ref.watch(availableUpdateProvider).value != null
+                        ? 'Build ${ref.watch(currentBuildProvider)} · update available, tap to download'
+                        : 'Build ${ref.watch(currentBuildProvider)} · tap to check for updates',
+                    onTap: () async {
+                      final update = ref.read(availableUpdateProvider).value;
+                      if (update != null) {
+                        await launchUrl(update.url, mode: LaunchMode.externalApplication);
+                        return;
+                      }
+                      ref.invalidate(availableUpdateProvider);
+                      final fresh = await ref.read(availableUpdateProvider.future);
+                      if (context.mounted) {
+                        showSnack(
+                          context,
+                          fresh != null ? 'A new version is available.' : 'You have the latest version.',
+                          icon: PhosphorIconsFill.checkCircle,
+                        );
+                      }
+                    },
+                  ),
               ],
             ),
             const SectionLabel('Legal', padding: EdgeInsets.fromLTRB(4, 24, 4, 8)),
