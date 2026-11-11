@@ -86,9 +86,14 @@ android/app/src/main/kotlin/com/finderapp/finder/MainActivity.kt   FLAG_SECURE
 
 ### 1. Supabase
 
+> **Existing users' data is production data.** Database changes are additive
+> migrations only. Follow [`docs/MIGRATIONS.md`](docs/MIGRATIONS.md) (backup
+> check → `supabase db push` → `tool/verify_migration.sh`). **Never run
+> `supabase db reset` against the linked project.** Project rules: `CLAUDE.md`.
+
 ```bash
 supabase link --project-ref <ref>
-supabase db push                                    # applies both migrations
+supabase db push                                    # applies only migrations not yet applied, in order
 supabase secrets set --env-file supabase/functions/.env   # values per .env.example
 supabase functions deploy process-image
 supabase functions deploy media

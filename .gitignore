@@ -56,3 +56,4 @@ rust/target/
 !.env.example
 supabase/.env
 supabase/functions/.env
+.migration-snapshot/
