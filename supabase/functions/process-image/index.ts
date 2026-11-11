@@ -45,7 +45,15 @@ Deno.serve((req) =>
       throw e;
     }
 
-    const verdict = await moderate(clean.webp);
+    let verdict = await moderate(clean.webp);
+    // Staff accounts are trusted with their own profile photos while no
+    // moderation provider is configured (they can approve photos anyway). It
+    // never overrides a provider's answer or an error, and verification
+    // selfies always go to review.
+    if (verdict.status === "pending" && verdict.labels.provider === "none" && kind !== "selfie") {
+      const { data: staff } = await admin.from("staff_roles").select("role").eq("user_id", user.id).maybeSingle();
+      if (staff) verdict = { status: "approved", labels: { provider: "staff_trusted" } };
+    }
     if (verdict.status === "rejected") {
       await securityEvent(user.id, "upload_blocked_by_moderation", "warning", {});
       throw new HttpError(422, "rejected", "This photo isn't allowed on Vouby.");
