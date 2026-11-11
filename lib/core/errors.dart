@@ -23,6 +23,7 @@ enum AppErrorCode {
   onboardingIncomplete,
   invalidInput,
   photoSlotsFull,
+  accountRestricted,
   encryption,
   network,
   unknown,

@@ -15,7 +15,7 @@ Uint8List _bytes(int n) => Uint8List.fromList(List.filled(n, 7));
 
 /// A live (onboarded) demo user without a profession: an existing account
 /// from before the Profession detail was introduced.
-Future<DemoBackend> _existingUser({String? occupation}) async {
+Future<DemoBackend> _existingUser({String? occupation, bool prefs = true}) async {
   final b = DemoBackend();
   await b.verifyOtp(OtpChannel.phone, '+919876543210', '123456');
   await b.setDob(DateTime(1998, 3, 3));
@@ -27,6 +27,7 @@ Future<DemoBackend> _existingUser({String? occupation}) async {
       ProfilePatch.gender: 'woman',
       ProfilePatch.bio: 'Filter coffee and long walks by the sea.',
       ProfilePatch.occupation: ?occupation,
+      if (prefs) ProfilePatch.prefGenders: const ['man'],
       ProfilePatch.interestTags: const ['Hiking', 'Chess', 'Poetry', 'Baking', 'Cycling'],
       ProfilePatch.prompts: const [
         {'prompt_id': 'p1', 'answer': 'Evening chai at Fort Kochi'},
@@ -74,6 +75,13 @@ void main() {
         (before.fullName, before.bio, before.city, before.gender, before.interestTags, before.isOnboarded),
       );
       expect((await b.photoSlots()).map((p) => p.mediaId), photos.map((p) => p.mediaId));
+    });
+
+    test('discovery preferences: asked only until chosen once', () async {
+      final b = await _existingUser(occupation: 'Architect', prefs: false);
+      expect((await b.profileUpdates()).map((u) => u.key), ['discovery_prefs']);
+      await b.updateProfile(const ProfilePatch({ProfilePatch.prefAgeMin: 18}));
+      expect(await b.profileUpdates(), isEmpty, reason: 'saving (even the defaults) counts as choosing');
     });
 
     test('summary for the You tab', () {

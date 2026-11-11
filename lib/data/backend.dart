@@ -1,11 +1,14 @@
 import 'dart:typed_data';
 
+import '../models/access.dart';
 import '../models/follow_request.dart';
 import '../models/message.dart';
+import '../models/moderation.dart';
 import '../models/profile.dart';
 import '../models/profile_update.dart';
 import '../models/security.dart';
 import '../models/suggestion.dart';
+import '../models/support.dart';
 
 enum OtpChannel { email, phone }
 
@@ -143,6 +146,13 @@ abstract class FinderBackend {
   Future<void> markThreadRead(String peerId);
   Future<VoicePlayback> voicePlayback(ChatMessage message);
 
+  /// Sends a photo, end-to-end encrypted on this device (already compressed
+  /// to WebP by the image optimizer). Needs chat access (Fast-Track or trial).
+  Future<void> sendImage(String peerId, Uint8List webp, {required int width, required int height});
+
+  /// Downloads and decrypts a photo message.
+  Future<Uint8List> imageBytes(ChatMessage message);
+
   /// 60-digit number to compare in person; null when not available.
   Future<String?> safetyNumber(String peerId);
 
@@ -152,6 +162,37 @@ abstract class FinderBackend {
 
   /// [evidence] is decrypted on this device and shared only with explicit consent.
   Future<void> report(String peerId, ReportReason reason, {String? details, List<ChatMessage> evidence, bool block});
+
+  /// Report with a content reference and only the evidence the user selected
+  /// and confirmed. Returns the report number (e.g. R-7K3Q9P).
+  Future<String> reportWithEvidence(
+    String peerId,
+    ReportReason reason, {
+    String? details,
+    String? contentRef,
+    ReportEvidence evidence,
+    bool block,
+  });
+
+  /// The user's own current restriction, if any.
+  Future<AccountRestriction?> myRestriction();
+
+  // Access: trial and subscription (decided on the server)
+  Future<AccessStatus> accessStatus();
+  Future<void> markAccessNoticeSeen(String kind);
+  Future<List<AppNotification>> notifications();
+  Future<void> markNotificationsRead();
+
+  // Help & support
+  /// Email registered on the account (shown prefilled; the server uses its own copy).
+  Future<String?> supportEmail();
+  Future<SupportTicket> submitSupportTicket({
+    required SupportCategory category,
+    required String subject,
+    required String description,
+    Uint8List? screenshotWebp,
+  });
+  Future<List<SupportTicket>> myTickets();
 
   // Account security
   Future<List<SessionInfo>> sessions();
@@ -175,10 +216,20 @@ abstract class FinderBackend {
   Future<void> reviewMedia(String mediaId, {required bool approve});
   Future<List<VerificationItem>> verificationQueue();
   Future<void> reviewVerification(String requestId, {required bool approve});
+  Future<List<StaffReport>> staffReports({String status = 'open'});
+  Future<void> decideReport(String reportId, ModDecision decision, {required String note, int? days});
+  Future<Map<String, dynamic>> userModerationHistory(String userId);
+  Future<List<EvidenceItem>> reportEvidenceFiles(String reportId);
+
+  /// Short-lived signed URL for one evidence file or ticket screenshot (logged).
+  Future<String> staffFileUrl({required String kind, required String id, String reason});
+  Future<List<SupportTicket>> staffTickets({String status = 'open'});
+  Future<void> setTicketStatus(String ticketId, TicketStatus status, {String? note});
 
   /// Fires when requests/connections change (realtime).
   Stream<void> socialChanges();
 
-  /// Server-side premium flag (set by the RevenueCat webhook).
+  /// Chat access from the server: paid Fast-Track (RevenueCat webhook) or
+  /// an active trial.
   Future<bool> serverPremium();
 }

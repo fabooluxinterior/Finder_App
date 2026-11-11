@@ -8,12 +8,15 @@ import 'package:uuid/uuid.dart';
 import '../core/config.dart';
 import '../core/errors.dart';
 import '../core/media_auth.dart';
+import '../models/access.dart';
 import '../models/follow_request.dart';
 import '../models/message.dart';
+import '../models/moderation.dart';
 import '../models/profile.dart';
 import '../models/profile_update.dart';
 import '../models/security.dart';
 import '../models/suggestion.dart';
+import '../models/support.dart';
 import '../security/e2ee_engine.dart';
 import '../security/message_vault.dart';
 import '../security/secure_kv.dart';
@@ -190,6 +193,7 @@ class SupabaseBackend implements FinderBackend {
               receiverId: m['receiver_id'] as String,
               content: p.text,
               voice: p.voice,
+              image: p.image,
               isRead: m['is_read'] as bool? ?? false,
               createdAt: createdAt,
             );
@@ -622,11 +626,78 @@ class SupabaseBackend implements FinderBackend {
   }
 
   @override
-  Future<bool> serverPremium() => _guard(() async {
-    final row = await _db.from('profiles').select('is_premium, premium_expires_at').eq('id', _me).maybeSingle();
-    if (row == null || row['is_premium'] != true) return false;
-    final exp = row['premium_expires_at'] as String?;
-    return exp == null || DateTime.parse(exp).isAfter(DateTime.now());
+  Future<bool> serverPremium() async => (await accessStatus()).hasChatAccess;
+
+  // -------------------------------------------------------------- access ----
+
+  @override
+  Future<AccessStatus> accessStatus() => _guard(() async {
+    final rows = await _db.rpc('my_access_status') as List;
+    if (rows.isEmpty) return const AccessStatus();
+    return AccessStatus.fromJson((rows.first as Map).cast<String, dynamic>());
+  });
+
+  @override
+  Future<void> markAccessNoticeSeen(String kind) =>
+      _guard(() async => await _db.rpc('mark_access_notice_seen', params: {'p_kind': kind}));
+
+  @override
+  Future<List<AppNotification>> notifications() => _guard(() async {
+    final rows = await _db.from('user_notifications').select().order('created_at', ascending: false).limit(50);
+    return [for (final r in rows) AppNotification.fromJson(r)];
+  });
+
+  @override
+  Future<void> markNotificationsRead() => _guard(() async => await _db.rpc('mark_notifications_read'));
+
+  @override
+  Future<AccountRestriction?> myRestriction() => _guard(() async {
+    final rows = await _db.rpc('my_restriction') as List;
+    if (rows.isEmpty) return null;
+    final r = (rows.first as Map).cast<String, dynamic>();
+    return AccountRestriction(
+      kind: r['kind'] as String,
+      reason: r['reason'] as String,
+      until: DateTime.tryParse(r['until'] as String? ?? '')?.toLocal(),
+    );
+  });
+
+  // ------------------------------------------------------------- support ----
+
+  @override
+  Future<String?> supportEmail() => _guard(() async => await _db.rpc('my_support_email') as String?);
+
+  @override
+  Future<SupportTicket> submitSupportTicket({
+    required SupportCategory category,
+    required String subject,
+    required String description,
+    Uint8List? screenshotWebp,
+  }) => _guard(() async {
+    final problem = validateTicket(subject: subject, description: description);
+    if (problem != null) throw AppException(AppErrorCode.invalidInput, problem);
+    String? path;
+    if (screenshotWebp != null) {
+      path = '$_me/${_uuid.v4()}.webp';
+      await _db.storage
+          .from('support_attachments')
+          .uploadBinary(path, screenshotWebp, fileOptions: const FileOptions(contentType: 'image/webp'));
+    }
+    final rows = await _db.rpc(
+      'submit_support_ticket',
+      params: {'p_category': category.wire, 'p_subject': subject, 'p_description': description, 'p_attachment_path': path},
+    ) as List;
+    final id = (rows.first as Map)['id'] as String;
+    // Staff email (if configured). The ticket is stored either way.
+    unawaited(_db.functions.invoke('support-notify', body: {'ticket_id': id}).then((_) {}, onError: (_) {}));
+    final row = await _db.from('support_tickets').select().eq('id', id).single();
+    return SupportTicket.fromJson(row);
+  });
+
+  @override
+  Future<List<SupportTicket>> myTickets() => _guard(() async {
+    final rows = await _db.from('support_tickets').select().order('created_at', ascending: false);
+    return [for (final r in rows) SupportTicket.fromJson(r)];
   });
 
   // ---------------------------------------------------------------- chat ----
@@ -672,6 +743,7 @@ class SupabaseBackend implements FinderBackend {
         receiverId: peerId,
         content: payload.text,
         voice: payload.voice,
+        image: payload.image,
         isRead: false,
         createdAt: payload.sentAt,
       ),
@@ -722,6 +794,44 @@ class SupabaseBackend implements FinderBackend {
       aad: 'voice:${v.path}',
     );
     return VoicePlayback.bytes(bytes);
+  });
+
+  @override
+  Future<void> sendImage(String peerId, Uint8List webp, {required int width, required int height}) => _guard(() async {
+    final me = _me;
+    final clientId = _uuid.v4();
+    final path = '${_pairKey(me, peerId)}/$clientId.bin';
+    final sealed = await E2eeEngine.sealAttachment(webp, 'image:$path');
+    await _db.storage
+        .from('chat_images')
+        .uploadBinary(path, sealed.ciphertext, fileOptions: const FileOptions(contentType: 'application/octet-stream'));
+    await _sendPayload(
+      peerId,
+      SecurePayload(
+        clientId: clientId,
+        sentAt: DateTime.now(),
+        image: ImageRef(path: path, key: sealed.key, nonce: sealed.nonce, sha256: sealed.sha256, width: width, height: height),
+      ),
+    );
+  });
+
+  final _imageCache = <String, Uint8List>{};
+
+  @override
+  Future<Uint8List> imageBytes(ChatMessage message) => _guard(() async {
+    final img = message.image!;
+    final cached = _imageCache[img.path];
+    if (cached != null) return cached;
+    final ciphertext = await _db.storage.from('chat_images').download(img.path);
+    final bytes = await E2eeEngine.openAttachment(
+      key: img.key,
+      nonce: img.nonce,
+      ciphertext: ciphertext,
+      sha256: img.sha256,
+      aad: 'image:${img.path}',
+    );
+    if (_imageCache.length > 40) _imageCache.remove(_imageCache.keys.first);
+    return _imageCache[img.path] = bytes;
   });
 
   @override
@@ -785,6 +895,44 @@ class SupabaseBackend implements FinderBackend {
     );
     if (block) await _vault.deleteThread(_me, peerId);
     _social.add(null);
+  });
+
+  @override
+  Future<String> reportWithEvidence(
+    String peerId,
+    ReportReason reason, {
+    String? details,
+    String? contentRef,
+    ReportEvidence evidence = const ReportEvidence(),
+    bool block = true,
+  }) => _guard(() async {
+    final rows = await _db.rpc(
+      'submit_report_v2',
+      params: {
+        'p_reported': peerId,
+        'p_reason': reason.wire,
+        'p_details': details,
+        'p_content_ref': contentRef,
+        'p_evidence': evidence.texts.isEmpty ? null : evidence.texts.take(20).toList(),
+        'p_block': block,
+      },
+    ) as List;
+    final r = (rows.first as Map).cast<String, dynamic>();
+    final reportId = r['id'] as String;
+    // Photos the reporter selected, decrypted on this device, sent with consent.
+    for (final (i, (messageId, bytes)) in evidence.images.take(10).indexed) {
+      final path = '$reportId/$i.webp';
+      await _db.storage
+          .from('report_evidence')
+          .uploadBinary(path, Uint8List.fromList(bytes), fileOptions: const FileOptions(contentType: 'image/webp'));
+      await _db.rpc(
+        'add_report_evidence',
+        params: {'p_report': reportId, 'p_kind': 'image', 'p_message_ref': messageId, 'p_path': path},
+      );
+    }
+    if (block) await _vault.deleteThread(_me, peerId);
+    _social.add(null);
+    return r['report_no'] as String;
   });
 
   // ---------------------------------------------------- account security ----
@@ -973,6 +1121,61 @@ class SupabaseBackend implements FinderBackend {
   Future<void> reviewVerification(String requestId, {required bool approve}) =>
       _guard(() => _db.rpc('mod_review_verification', params: {'p_request': requestId, 'p_approve': approve}));
 
+  @override
+  Future<List<StaffReport>> staffReports({String status = 'open'}) => _guard(() async {
+    final rows = await _db.rpc('mod_list_reports_v2', params: {'p_status': status}) as List;
+    return [for (final r in rows) StaffReport.fromJson((r as Map).cast<String, dynamic>())];
+  });
+
+  @override
+  Future<void> decideReport(String reportId, ModDecision decision, {required String note, int? days}) => _guard(
+    () async => await _db.rpc(
+      'mod_decide_report',
+      params: {
+        'p_report': reportId,
+        'p_decision': decision.wire,
+        'p_note': note,
+        'p_restriction': decision.restriction,
+        'p_days': days,
+      },
+    ),
+  );
+
+  @override
+  Future<Map<String, dynamic>> userModerationHistory(String userId) =>
+      _guard(() async => ((await _db.rpc('mod_user_history', params: {'p_user': userId})) as Map).cast<String, dynamic>());
+
+  @override
+  Future<List<EvidenceItem>> reportEvidenceFiles(String reportId) => _guard(() async {
+    final rows = await _db.rpc('mod_list_evidence', params: {'p_report': reportId}) as List;
+    return [
+      for (final r in rows.cast<Map>())
+        EvidenceItem(
+          id: r['id'] as String,
+          kind: r['kind'] as String,
+          messageRef: r['message_ref'] as String?,
+          createdAt: DateTime.parse(r['created_at'] as String).toLocal(),
+        ),
+    ];
+  });
+
+  @override
+  Future<String> staffFileUrl({required String kind, required String id, String reason = 'review'}) => _guard(() async {
+    final res = await _db.functions.invoke('evidence-url', body: {'kind': kind, 'id': id, 'reason': reason});
+    return (res.data as Map)['url'] as String;
+  });
+
+  @override
+  Future<List<SupportTicket>> staffTickets({String status = 'open'}) => _guard(() async {
+    final rows = await _db.rpc('mod_list_tickets', params: {'p_status': status}) as List;
+    return [for (final r in rows) SupportTicket.fromJson((r as Map).cast<String, dynamic>())];
+  });
+
+  @override
+  Future<void> setTicketStatus(String ticketId, TicketStatus status, {String? note}) => _guard(
+    () async => await _db.rpc('mod_set_ticket_status', params: {'p_ticket': ticketId, 'p_status': status.wire, 'p_note': note}),
+  );
+
   // ------------------------------------------------------------- helpers ----
 
   static String _pairKey(String a, String b) => (a.compareTo(b) < 0) ? '${a}_$b' : '${b}_$a';
@@ -1006,6 +1209,7 @@ class SupabaseBackend implements FinderBackend {
         'CONTACT_INFO' => const AppException(AppErrorCode.contactInfo, 'Phone numbers, @handles and links are not allowed.'),
         'ONBOARDING_INCOMPLETE' => AppException(AppErrorCode.onboardingIncomplete, e.message),
         'PHOTO_SLOTS_FULL' => const AppException(AppErrorCode.photoSlotsFull, 'All 6 photo slots are full.'),
+        'ACCOUNT_RESTRICTED' => AppException(AppErrorCode.accountRestricted, e.message),
         _ when e.code == '22023' => AppException(AppErrorCode.invalidInput, e.message),
         _ =>
           e.code == '23514' && e.message.contains('clean')

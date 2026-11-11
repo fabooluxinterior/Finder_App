@@ -28,6 +28,46 @@ class VoiceRef {
   );
 }
 
+/// Reference to an end-to-end encrypted photo (same scheme as voice notes:
+/// storage only holds ciphertext; the key travels inside the E2EE payload).
+class ImageRef {
+  const ImageRef({
+    required this.path,
+    required this.key,
+    required this.nonce,
+    required this.sha256,
+    required this.width,
+    required this.height,
+  });
+  final String path;
+  final Uint8List key;
+  final Uint8List nonce;
+  final Uint8List sha256;
+  final int width;
+  final int height;
+
+  Map<String, Object> toJson() => {
+    'path': path,
+    'key': base64Encode(key),
+    'nonce': base64Encode(nonce),
+    'sha256': base64Encode(sha256),
+    'w': width,
+    'h': height,
+  };
+
+  factory ImageRef.fromJson(Map<String, dynamic> j) => ImageRef(
+    path: j['path'] as String,
+    key: base64Decode(j['key'] as String),
+    nonce: base64Decode(j['nonce'] as String),
+    sha256: base64Decode(j['sha256'] as String),
+    width: (j['w'] as num?)?.toInt() ?? 0,
+    height: (j['h'] as num?)?.toInt() ?? 0,
+  );
+}
+
+/// Shown by app versions from before photo messages.
+const photoFallbackText = '📷 Photo — update Vouby to view it';
+
 class ChatMessage {
   const ChatMessage({
     required this.id,
@@ -38,6 +78,8 @@ class ChatMessage {
     required this.createdAt,
     this.voice,
     this.localAudioPath,
+    this.image,
+    this.localImageUrl,
   });
 
   /// Server message id (or a client id until confirmed).
@@ -49,6 +91,11 @@ class ChatMessage {
 
   /// Demo mode only: playable local recording.
   final String? localAudioPath;
+  final ImageRef? image;
+
+  /// Demo mode only: an in-memory image URL.
+  final String? localImageUrl;
+  bool get isImage => image != null || localImageUrl != null;
   final bool isRead;
   final DateTime createdAt;
 
@@ -61,6 +108,8 @@ class ChatMessage {
     content: content,
     voice: voice,
     localAudioPath: localAudioPath,
+    image: image,
+    localImageUrl: localImageUrl,
     isRead: isRead ?? this.isRead,
     createdAt: createdAt,
   );
@@ -71,6 +120,7 @@ class ChatMessage {
     'r': receiverId,
     'c': content,
     'v': voice?.toJson(),
+    if (image != null) 'img': image!.toJson(),
     'read': isRead,
     'at': createdAt.toUtc().toIso8601String(),
   };
@@ -81,6 +131,7 @@ class ChatMessage {
     receiverId: j['r'] as String,
     content: j['c'] as String?,
     voice: j['v'] == null ? null : VoiceRef.fromJson((j['v'] as Map).cast<String, dynamic>()),
+    image: j['img'] == null ? null : ImageRef.fromJson((j['img'] as Map).cast<String, dynamic>()),
     isRead: j['read'] as bool? ?? false,
     createdAt: DateTime.parse(j['at'] as String).toLocal(),
   );
@@ -90,11 +141,12 @@ class ChatMessage {
 /// message id, bound into the encrypted payload so a relayed or duplicated
 /// envelope can be recognised and ignored.
 class SecurePayload {
-  const SecurePayload({required this.clientId, required this.sentAt, this.text, this.voice});
+  const SecurePayload({required this.clientId, required this.sentAt, this.text, this.voice, this.image});
   final String clientId;
   final DateTime sentAt;
   final String? text;
   final VoiceRef? voice;
+  final ImageRef? image;
 
   Uint8List encode() => Uint8List.fromList(
     utf8.encode(
@@ -102,8 +154,10 @@ class SecurePayload {
         'v': 1,
         'id': clientId,
         'ts': sentAt.toUtc().toIso8601String(),
-        if (text != null) 'text': text,
+        // Older app versions only understand text/voice: give them a hint.
+        if (text != null) 'text': text else if (image != null) 'text': photoFallbackText,
         if (voice != null) 'voice': voice!.toJson(),
+        if (image != null) 'image': image!.toJson(),
       }),
     ),
   );
@@ -114,8 +168,9 @@ class SecurePayload {
     return SecurePayload(
       clientId: j['id'] as String,
       sentAt: DateTime.parse(j['ts'] as String),
-      text: j['text'] as String?,
+      text: j['image'] != null && j['text'] == photoFallbackText ? null : j['text'] as String?,
       voice: j['voice'] == null ? null : VoiceRef.fromJson((j['voice'] as Map).cast<String, dynamic>()),
+      image: j['image'] == null ? null : ImageRef.fromJson((j['image'] as Map).cast<String, dynamic>()),
     );
   }
 }

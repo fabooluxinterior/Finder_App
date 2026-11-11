@@ -9,13 +9,16 @@ import 'package:uuid/uuid.dart';
 import '../core/config.dart';
 import '../core/errors.dart';
 import '../core/sanitizer.dart';
+import '../models/access.dart';
 import '../models/follow_request.dart';
 import '../models/message.dart';
+import '../models/moderation.dart';
 import '../models/profile.dart';
 import '../models/profile_update.dart';
 import '../models/profile_catalog.dart';
 import '../models/profile_completion.dart';
 import '../models/suggestion.dart';
+import '../models/support.dart';
 import '../models/suggestion_scoring.dart';
 import '../models/security.dart';
 import 'backend.dart';
@@ -93,6 +96,7 @@ class DemoBackend implements FinderBackend {
       throw const AppException(AppErrorCode.unknown, 'Enter the 6-digit code (any digits work in demo).');
     }
     _uid = meId;
+    if (channel == OtpChannel.email) _email = target.trim();
     _auth.add(_uid);
     _persist();
   }
@@ -129,6 +133,13 @@ class DemoBackend implements FinderBackend {
       if (raw == null) return;
       final m = jsonDecode(raw) as Map<String, dynamic>;
       _consentVersion = m['consent'] as String?;
+      _trialStart = DateTime.tryParse(m['trialStart'] as String? ?? '');
+      _prefsSet = (m['prefsSet'] as bool?) ?? false;
+      _noticesSeen.addAll(((m['noticesSeen'] as List?) ?? const []).cast<String>());
+      _email = m['email'] as String?;
+      _tickets.addAll([
+        for (final t in ((m['tickets'] as List?) ?? const []).cast<Map<String, dynamic>>()) SupportTicket.fromJson(t),
+      ]);
       _dob = m['dob'] == null ? null : DateTime.parse(m['dob'] as String);
       _standardsAck = (m['standards'] as bool?) ?? false;
       premium = (m['premium'] as bool?) ?? false;
@@ -208,6 +219,26 @@ class DemoBackend implements FinderBackend {
     return {
       'uid': _uid,
       'consent': _consentVersion,
+      'trialStart': _trialStart?.toIso8601String(),
+      'prefsSet': _prefsSet,
+      'noticesSeen': _noticesSeen.toList(),
+      'email': _email,
+      'tickets': [
+        for (final t in _tickets)
+          {
+            'id': t.id,
+            'ticket_no': t.ticketNo,
+            'category': t.category.wire,
+            'subject': t.subject,
+            'description': t.description,
+            'status': t.status.wire,
+            'created_at': t.createdAt.toUtc().toIso8601String(),
+            'updated_at': t.updatedAt.toUtc().toIso8601String(),
+            'email': t.email,
+            'attachment_path': t.hasAttachment ? 'demo' : null,
+            'user_id': t.userId,
+          },
+      ],
       'dob': _dob?.toIso8601String(),
       'standards': _standardsAck,
       'premium': premium,
@@ -375,6 +406,11 @@ class DemoBackend implements FinderBackend {
     final me = _me;
     if (me == null) throw const AppException(AppErrorCode.unknown, 'Create your profile first.');
     _validate(patch);
+    if (patch.fields.keys.any(
+      (k) => k == ProfilePatch.prefGenders || k == ProfilePatch.prefAgeMin || k == ProfilePatch.prefAgeMax,
+    )) {
+      _prefsSet = true;
+    }
     _setMe(_apply(me, patch));
   }
 
@@ -395,6 +431,8 @@ class DemoBackend implements FinderBackend {
       throw AppException(AppErrorCode.onboardingIncomplete, 'Profile incomplete: ${missing.join(', ')}');
     }
     _setMe(me.copyWith(isOnboarded: true, onboardingStage: 8));
+    _startTrialIfEligible();
+    _persist();
   }
 
   void _syncPhotos() {
@@ -583,7 +621,16 @@ class DemoBackend implements FinderBackend {
   /// requirement_missing): only details this user is missing are asked for.
   static const profileUpdateRegistry = [
     ProfileUpdate(key: 'occupation', label: 'Profession', description: 'Add what you do so people have more to talk about.'),
+    ProfileUpdate(
+      key: 'discovery_prefs',
+      label: 'Who you’d like to meet',
+      description: 'Choose who you’re interested in and an age range.',
+      form: 'discovery',
+    ),
   ];
+
+  /// Same as profiles.prefs_set_at (stamped when preferences are saved).
+  bool _prefsSet = false;
   static const profileUpdateSpacing = Duration(days: 7);
 
   final _updateSeen = <String, DateTime>{};
@@ -591,6 +638,8 @@ class DemoBackend implements FinderBackend {
 
   bool _missing(String key) => switch (key) {
     'occupation' => (_me?.occupation ?? '').trim().isEmpty,
+    'discovery_prefs' =>
+      !_prefsSet && (_me?.prefGenders.isEmpty ?? true) && (_me?.prefAgeMin ?? 18) == 18 && (_me?.prefAgeMax ?? 60) == 60,
     _ => false,
   };
 
@@ -896,7 +945,7 @@ class DemoBackend implements FinderBackend {
     return IncomingRequests(
       count: pending.length,
       // Same rule as the RLS policy: identities only for Fast-Track members.
-      requests: premium
+      requests: _hasAccess
           ? [
               for (final s in pending)
                 FollowRequest(
@@ -913,7 +962,7 @@ class DemoBackend implements FinderBackend {
 
   @override
   Future<void> respondToRequest(String requestId, {required bool accept}) async {
-    if (!premium) throw const AppException(AppErrorCode.subscriptionRequired, 'Seeing requests is part of Fast-Track');
+    if (!_hasAccess) throw const AppException(AppErrorCode.subscriptionRequired, 'Seeing requests is part of Fast-Track');
     final row = _swipes.values.firstWhere(
       (s) => s.id == requestId && s.receiver == meId && s.action == 'follow_requested',
       orElse: () => throw const AppException(AppErrorCode.unknown, 'Request not found'),
@@ -951,7 +1000,164 @@ class DemoBackend implements FinderBackend {
   Stream<void> socialChanges() => _social.stream;
 
   @override
-  Future<bool> serverPremium() async => premium;
+  Future<bool> serverPremium() async => _hasAccess;
+
+  // -------------------------------------------------------------- access ----
+
+  /// Demo trial: starts when setup finishes (a demo account is always new),
+  /// lasts exactly 168 hours, once per demo install.
+  DateTime? _trialStart;
+  final _noticesSeen = <String>{};
+  final _notes = <AppNotification>[];
+  int _noteId = 0;
+
+  DateTime? get _trialEnd => _trialStart?.add(trialLength);
+  bool get _trialActive => _trialEnd != null && DateTime.now().isBefore(_trialEnd!);
+  bool get _hasAccess => premium || _trialActive;
+
+  void _notify(String kind, String title, String body) {
+    _notes.insert(0, AppNotification(id: ++_noteId, kind: kind, title: title, body: body, createdAt: DateTime.now()));
+  }
+
+  void _startTrialIfEligible() {
+    if (_trialStart != null || premium) return;
+    _trialStart = DateTime.now();
+    _notify(
+      'trial_started',
+      'Your 7-day free trial has started',
+      'See who sent you requests and chat with your connections. Nothing is charged automatically.',
+    );
+  }
+
+  /// Demo only: move the trial clock (to show reminders and expiry).
+  void debugShiftTrial(Duration ago) {
+    _trialStart = DateTime.now().subtract(ago);
+    _persist();
+    _social.add(null);
+  }
+
+  @override
+  Future<AccessStatus> accessStatus() async {
+    final end = _trialEnd;
+    final now = DateTime.now();
+    String? notice;
+    if (!premium && end != null) {
+      if (_trialActive && end.difference(now) <= const Duration(hours: 24) && !_noticesSeen.contains('trial_24h')) {
+        notice = 'trial_24h';
+      } else if (!_trialActive && !_noticesSeen.contains('trial_ended')) {
+        notice = 'trial_ended';
+      }
+    }
+    return AccessStatus(
+      plan: premium ? AccessPlan.fastTrack : (_trialActive ? AccessPlan.trial : AccessPlan.free),
+      trialStartedAt: _trialStart,
+      trialEndsAt: end,
+      trialUsed: _trialStart != null,
+      notice: notice,
+    );
+  }
+
+  @override
+  Future<void> markAccessNoticeSeen(String kind) async {
+    if (kind != 'trial_24h' && kind != 'trial_ended') throw const AppException(AppErrorCode.invalidInput, 'Unknown notice');
+    _noticesSeen.add(kind);
+    _persist();
+  }
+
+  @override
+  Future<List<AppNotification>> notifications() async => List.unmodifiable(_notes);
+
+  @override
+  Future<void> markNotificationsRead() async {
+    for (var i = 0; i < _notes.length; i++) {
+      final n = _notes[i];
+      if (n.readAt == null) {
+        _notes[i] = AppNotification(
+          id: n.id,
+          kind: n.kind,
+          title: n.title,
+          body: n.body,
+          createdAt: n.createdAt,
+          readAt: DateTime.now(),
+        );
+      }
+    }
+  }
+
+  @override
+  Future<AccountRestriction?> myRestriction() async => null;
+
+  // ------------------------------------------------------------- support ----
+
+  String? _email;
+  final _tickets = <SupportTicket>[];
+  final _ticketsPerDay = <DateTime>[];
+
+  static String newRef(String prefix, Random rand) {
+    const alphabet = '23456789ABCDEFGHJKMNPQRSTUVWXYZ';
+    return '$prefix-${List.generate(6, (_) => alphabet[rand.nextInt(alphabet.length)]).join()}';
+  }
+
+  @override
+  Future<String?> supportEmail() async => _email ?? 'you@example.com';
+
+  @override
+  Future<SupportTicket> submitSupportTicket({
+    required SupportCategory category,
+    required String subject,
+    required String description,
+    Uint8List? screenshotWebp,
+  }) async {
+    await _latency();
+    final problem = validateTicket(subject: subject, description: description);
+    if (problem != null) throw AppException(AppErrorCode.invalidInput, problem);
+    final now = DateTime.now();
+    _ticketsPerDay.removeWhere((t) => now.difference(t) > const Duration(days: 1));
+    if (_ticketsPerDay.length >= 5) {
+      throw const AppException(AppErrorCode.rateLimited, 'You’ve sent 5 requests today. Try again tomorrow.');
+    }
+    _ticketsPerDay.add(now);
+    var no = newRef('VB', Random());
+    while (_tickets.any((t) => t.ticketNo == no)) {
+      no = newRef('VB', Random());
+    }
+    final t = SupportTicket(
+      id: _uuid.v4(),
+      ticketNo: no,
+      category: category,
+      subject: subject.trim(),
+      description: description.trim(),
+      status: TicketStatus.newTicket,
+      createdAt: now,
+      updatedAt: now,
+      email: await supportEmail(),
+      hasAttachment: screenshotWebp != null,
+      userId: meId,
+    );
+    _tickets.insert(0, t);
+    _persist();
+    return t;
+  }
+
+  @override
+  Future<List<SupportTicket>> myTickets() async => List.unmodifiable(_tickets);
+
+  @override
+  Future<List<SupportTicket>> staffTickets({String status = 'open'}) async =>
+      _tickets.where((t) => status == 'all' || (status == 'open' ? t.status.open : t.status.wire == status)).toList();
+
+  @override
+  Future<void> setTicketStatus(String ticketId, TicketStatus status, {String? note}) async {
+    final i = _tickets.indexWhere((t) => t.id == ticketId);
+    if (i < 0) throw const AppException(AppErrorCode.unknown, 'Ticket not found');
+    _tickets[i] = _tickets[i].copyWith(status: status, updatedAt: DateTime.now());
+    _notify(
+      'ticket_${status.wire}',
+      'Ticket ${_tickets[i].ticketNo}: ${status.label}',
+      note ?? 'Your support request was updated.',
+    );
+    _persist();
+  }
 
   void setPremium(bool value) {
     premium = value;
@@ -979,7 +1185,7 @@ class DemoBackend implements FinderBackend {
 
   @override
   Future<void> sendText(String peerId, String text) async {
-    if (!premium) throw const AppException(AppErrorCode.subscriptionRequired, 'Messaging is part of Fast-Track');
+    if (!_hasAccess) throw const AppException(AppErrorCode.subscriptionRequired, 'Messaging is part of Fast-Track');
     if (!_connected(meId, peerId)) {
       throw const AppException(AppErrorCode.notConnected, 'Chat unlocks once the follow request is accepted.');
     }
@@ -989,12 +1195,42 @@ class DemoBackend implements FinderBackend {
 
   @override
   Future<void> sendVoice(String peerId, Uint8List aacBytes, {String? localPath, Duration duration = Duration.zero}) async {
-    if (!premium) throw const AppException(AppErrorCode.subscriptionRequired, 'Messaging is part of Fast-Track');
+    if (!_hasAccess) throw const AppException(AppErrorCode.subscriptionRequired, 'Messaging is part of Fast-Track');
     if (!_connected(meId, peerId)) {
       throw const AppException(AppErrorCode.notConnected, 'Chat unlocks once the follow request is accepted.');
     }
     _push(peerId, _msg(meId, peerId, audio: localPath ?? ''));
     _scheduleReply(peerId, voiceReaction: true);
+  }
+
+  @override
+  Future<void> sendImage(String peerId, Uint8List webp, {required int width, required int height}) async {
+    if (!_hasAccess) throw const AppException(AppErrorCode.subscriptionRequired, 'Messaging is part of Fast-Track');
+    if (!_connected(meId, peerId)) {
+      throw const AppException(AppErrorCode.notConnected, 'Chat unlocks once the follow request is accepted.');
+    }
+    if (webp.length > 400 * 1024) throw const AppException(AppErrorCode.invalidInput, 'That photo is too large.');
+    _push(
+      peerId,
+      ChatMessage(
+        id: _uuid.v4(),
+        senderId: meId,
+        receiverId: peerId,
+        content: null,
+        localImageUrl: MemoryImages.put(webp),
+        isRead: false,
+        createdAt: DateTime.now(),
+      ),
+    );
+    _scheduleReply(peerId);
+  }
+
+  @override
+  Future<Uint8List> imageBytes(ChatMessage message) async {
+    final url = message.localImageUrl;
+    final bytes = url == null ? null : MemoryImages.get(url);
+    if (bytes == null) throw const AppException(AppErrorCode.unknown, 'Photo not available');
+    return bytes;
   }
 
   @override
@@ -1068,6 +1304,39 @@ class DemoBackend implements FinderBackend {
   }
 
   final _hiddenPendingReview = <String>{};
+
+  final _reports = <StaffReport>[];
+
+  @override
+  Future<String> reportWithEvidence(
+    String peerId,
+    ReportReason reason, {
+    String? details,
+    String? contentRef,
+    ReportEvidence evidence = const ReportEvidence(),
+    bool block = true,
+  }) async {
+    await _latency();
+    final no = newRef('R', Random());
+    _reports.add(
+      StaffReport(
+        id: _uuid.v4(),
+        reportNo: no,
+        reporterId: meId,
+        reportedId: peerId,
+        reason: reason,
+        details: details,
+        contentRef: contentRef,
+        hasEvidence: evidence.texts.isNotEmpty,
+        evidenceFiles: evidence.images.length,
+        createdAt: DateTime.now(),
+        status: 'open',
+      ),
+    );
+    if (reason == ReportReason.underage) _hiddenPendingReview.add(peerId);
+    if (block) await blockUser(peerId);
+    return no;
+  }
 
   // ------------------------------------------------------ consent & age ----
 
@@ -1225,8 +1494,12 @@ class DemoBackend implements FinderBackend {
     await signOut();
   }
 
+  /// Demo builds made with --dart-define=DEMO_STAFF=true show the staff
+  /// dashboard with the demo's own reports and tickets.
+  static const staffPreview = bool.fromEnvironment('DEMO_STAFF');
+
   @override
-  Future<String?> staffRole() async => null;
+  Future<String?> staffRole() async => staffPreview ? 'admin' : null;
 
   @override
   Future<Map<String, dynamic>> securityOverview() async =>
@@ -1246,6 +1519,56 @@ class DemoBackend implements FinderBackend {
 
   @override
   Future<void> reviewMedia(String mediaId, {required bool approve}) async {}
+
+  @override
+  Future<List<StaffReport>> staffReports({String status = 'open'}) async =>
+      _reports.where((r) => status == 'all' || r.status == status || (status == 'open' && r.status == 'reviewing')).toList();
+
+  @override
+  Future<void> decideReport(String reportId, ModDecision decision, {required String note, int? days}) async {
+    if (note.trim().isEmpty && decision != ModDecision.review) {
+      throw const AppException(AppErrorCode.invalidInput, 'Add a note explaining the decision');
+    }
+    final i = _reports.indexWhere((r) => r.id == reportId);
+    if (i < 0) throw const AppException(AppErrorCode.unknown, 'Report not found');
+    final r = _reports[i];
+    _reports[i] = StaffReport(
+      id: r.id,
+      reportNo: r.reportNo,
+      reporterId: r.reporterId,
+      reportedId: r.reportedId,
+      reason: r.reason,
+      details: r.details,
+      contentRef: r.contentRef,
+      hasEvidence: r.hasEvidence,
+      evidenceFiles: r.evidenceFiles,
+      reportCount: r.reportCount,
+      reporterFalseReports: r.reporterFalseReports,
+      createdAt: r.createdAt,
+      status: switch (decision) {
+        ModDecision.review => 'reviewing',
+        ModDecision.falseReport || ModDecision.dismissed => 'dismissed',
+        _ => 'actioned',
+      },
+      decision: decision,
+    );
+  }
+
+  @override
+  Future<Map<String, dynamic>> userModerationHistory(String userId) async => {
+    'reports_against': _reports.where((r) => r.reportedId == userId).length,
+    'reports_upheld': _reports.where((r) => r.reportedId == userId && r.status == 'actioned').length,
+    'false_reports_made': _reports.where((r) => r.reporterId == userId && r.decision == ModDecision.falseReport).length,
+    'restrictions': const [],
+    'actions': const [],
+  };
+
+  @override
+  Future<List<EvidenceItem>> reportEvidenceFiles(String reportId) async => const [];
+
+  @override
+  Future<String> staffFileUrl({required String kind, required String id, String reason = 'review'}) async =>
+      throw const AppException(AppErrorCode.unknown, 'Evidence files aren’t stored in the demo');
 
   // ------------------------------------------------------------- helpers ----
 

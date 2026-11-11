@@ -51,7 +51,22 @@ class TotpEnrollment {
   final String uri;
 }
 
-enum ReportReason { sexualContent, harassment, spamOrScam, fakeProfile, underage, maliciousLink, other }
+enum ReportReason {
+  fakeProfile,
+  harassment,
+  abusiveMessages,
+  inappropriateImages,
+  spam,
+  scam,
+  impersonation,
+  suspiciousBehaviour,
+  underage,
+  sexualContent,
+  other,
+  // Earlier categories, still accepted by the server.
+  spamOrScam,
+  maliciousLink,
+}
 
 extension ReportReasonX on ReportReason {
   String get wire => switch (this) {
@@ -62,6 +77,12 @@ extension ReportReasonX on ReportReason {
     ReportReason.underage => 'underage',
     ReportReason.maliciousLink => 'malicious_link',
     ReportReason.other => 'other',
+    ReportReason.abusiveMessages => 'abusive_messages',
+    ReportReason.inappropriateImages => 'inappropriate_images',
+    ReportReason.spam => 'spam',
+    ReportReason.scam => 'scam',
+    ReportReason.impersonation => 'impersonation',
+    ReportReason.suspiciousBehaviour => 'suspicious_behaviour',
   };
   String get label => switch (this) {
     ReportReason.sexualContent => 'Sexual or explicit content',
@@ -70,8 +91,19 @@ extension ReportReasonX on ReportReason {
     ReportReason.fakeProfile => 'Fake profile',
     ReportReason.underage => 'Appears under 18',
     ReportReason.maliciousLink => 'Malicious link',
-    ReportReason.other => 'Something else',
+    ReportReason.other => 'Other safety concern',
+    ReportReason.abusiveMessages => 'Abusive messages',
+    ReportReason.inappropriateImages => 'Inappropriate images',
+    ReportReason.spam => 'Spam',
+    ReportReason.scam => 'Scam or asking for money',
+    ReportReason.impersonation => 'Pretending to be someone else',
+    ReportReason.suspiciousBehaviour => 'Suspicious behaviour',
   };
+
+  /// Shown in the report form (the two older combined ones are hidden).
+  bool get selectable => this != ReportReason.spamOrScam && this != ReportReason.maliciousLink;
+
+  static ReportReason fromWire(String w) => ReportReason.values.firstWhere((r) => r.wire == w, orElse: () => ReportReason.other);
 }
 
 class ReportSummary {
