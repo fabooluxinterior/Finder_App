@@ -1,0 +1,78 @@
+# Publishes the admin dashboard (admin/) as a website on GitHub Pages:
+#   https://fabooluxinterior.github.io/Finder_App/
+# Adds a website only — the app, its builds and the repository are unchanged.
+# One-time setup (repo settings): Pages → Source: GitHub Actions; and allow
+# this branch under Environments → github-pages → Deployment branches.
+# Live mode needs the public SUPABASE_URL / SUPABASE_ANON_KEY secrets;
+# without them the site is a clearly labelled sample-data preview.
+name: Admin web (GitHub Pages)
+
+on:
+  push:
+    branches: ['**']
+    paths:
+      - 'admin/**'
+      - 'supabase/migrations/**'
+      - 'tool/gen_admin_manifest.py'
+      - '.github/workflows/admin-pages.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: admin-pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Migration list is up to date
+        run: |
+          python3 tool/gen_admin_manifest.py
+          git diff --exit-code admin/lib/generated || { echo "Run tool/gen_admin_manifest.py and commit."; exit 1; }
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: 3.47.9
+          cache: true
+      - name: Analyze and test
+        working-directory: admin
+        run: |
+          flutter pub get
+          flutter analyze
+          flutter test
+      - name: Build website
+        working-directory: admin
+        run: |
+          if [ -n "$SUPABASE_URL" ] && [ -n "$SUPABASE_ANON_KEY" ]; then
+            echo "Building the LIVE admin (public URL + anon key only)."
+            flutter build web --release --no-web-resources-cdn --pwa-strategy=none --base-href /Finder_App/ \
+              --dart-define=SUPABASE_URL="$SUPABASE_URL" --dart-define=SUPABASE_ANON_KEY="$SUPABASE_ANON_KEY"
+          else
+            echo "No Supabase secrets: building the sample-data preview."
+            flutter build web --release --no-web-resources-cdn --pwa-strategy=none --base-href /Finder_App/ \
+              --dart-define=ADMIN_DEMO=true
+          fi
+          cp build/web/index.html build/web/404.html
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: admin/build/web
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
