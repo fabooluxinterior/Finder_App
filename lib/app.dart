@@ -63,12 +63,13 @@ class _AuthGate extends ConsumerWidget {
             // First run (or an unfinished setup): the 7-stage wizard, resumed
             // at the saved stage. The server decides when it's complete.
             if (p == null || !p.isOnboarded) {
-              // Sign-up is by mobile number; the email is added and confirmed
-              // right after, before setup. Existing accounts are never blocked
-              // for it (they get the optional "small update" prompt instead).
-              final email = ref.watch(emailConfirmedProvider);
+              // Sign-up is by mobile number; the email (for notifications only,
+              // not verified) is collected right after, before setup. Existing
+              // accounts are never blocked for it (they get the optional "small
+              // update" prompt instead).
+              final email = ref.watch(contactEmailProvider);
               if (email.isLoading && !email.hasValue) return const _Splash();
-              if (email.value != true) return const AddEmailScreen(inSetup: true);
+              if ((email.value ?? '').isEmpty) return const AddEmailScreen(inSetup: true);
               return OnboardingFlow(key: ValueKey(p?.id), profile: p);
             }
             // Accounts created before DOBs were required must add one once.

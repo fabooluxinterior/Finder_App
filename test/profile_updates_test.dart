@@ -19,8 +19,7 @@ Future<DemoBackend> _existingUser({String? occupation, bool prefs = true, bool e
   final b = DemoBackend();
   await b.verifyOtp(OtpChannel.phone, '+919876543210', '123456');
   if (email) {
-    await b.sendEmailCode('asha@example.com');
-    await b.verifyEmailCode('asha@example.com', '123456');
+    await b.setContactEmail('asha@example.com');
   }
   await b.setDob(DateTime(1998, 3, 3));
   await b.acknowledgeStandards('2026-11-11');
@@ -88,15 +87,14 @@ void main() {
       expect(await b.profileUpdates(), isEmpty, reason: 'saving (even the defaults) counts as choosing');
     });
 
-    test('email: phone-only accounts are asked (optional) until they confirm one', () async {
+    test('email: phone-only accounts are asked (optional) until one is saved; no verification', () async {
       final b = await _existingUser(occupation: 'Architect', email: false);
-      expect(await b.hasConfirmedEmail(), isFalse);
+      expect(await b.contactEmail(), isNull);
       final u = (await b.profileUpdates()).single;
       expect((u.key, u.form, u.optional), ('email', 'email', true));
-      await expectLater(b.verifyEmailCode('a@b.co', '123456'), throwsA(isA<AppException>()), reason: 'no code sent yet');
-      await b.sendEmailCode('Asha@Example.com');
-      await b.verifyEmailCode('asha@example.com', '654321');
-      expect(await b.hasConfirmedEmail(), isTrue);
+      await expectLater(b.setContactEmail('not-an-email'), throwsA(isA<AppException>()));
+      await b.setContactEmail('  Asha@Example.com ');
+      expect(await b.contactEmail(), 'asha@example.com');
       expect(await b.profileUpdates(), isEmpty);
       expect(await b.supportEmail(), 'asha@example.com');
     });

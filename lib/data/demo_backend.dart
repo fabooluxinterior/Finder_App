@@ -101,31 +101,17 @@ class DemoBackend implements FinderBackend {
     _persist();
   }
 
-  String? _pendingEmail;
+  @override
+  Future<String?> contactEmail() async => (_email ?? '').isEmpty ? null : _email;
 
   @override
-  Future<bool> hasConfirmedEmail() async => (_email ?? '').isNotEmpty;
-
-  @override
-  Future<void> sendEmailCode(String email) async {
+  Future<void> setContactEmail(String email) async {
     await _latency();
-    if (!RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(email.trim())) {
+    final v = email.trim().toLowerCase();
+    if (v.length > 254 || !RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(v)) {
       throw const AppException(AppErrorCode.unknown, 'Enter a valid email address.');
     }
-    _pendingEmail = email.trim().toLowerCase();
-  }
-
-  @override
-  Future<void> verifyEmailCode(String email, String code) async {
-    await _latency();
-    if (_pendingEmail == null || _pendingEmail != email.trim().toLowerCase()) {
-      throw const AppException(AppErrorCode.unknown, 'Send a code to this email first.');
-    }
-    if (!RegExp(r'^\d{6}$').hasMatch(code)) {
-      throw const AppException(AppErrorCode.unknown, 'Enter the 6-digit code (any digits work in demo).');
-    }
-    _email = _pendingEmail;
-    _pendingEmail = null;
+    _email = v;
     _persist();
   }
 

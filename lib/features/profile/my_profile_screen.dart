@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/phosphor.dart';
+import '../auth/add_email_screen.dart';
 
 import '../../core/brand.dart';
 import '../../core/config.dart';
@@ -288,6 +289,17 @@ class _MyProfileScreenState extends ConsumerState<MyProfileScreen> {
                   title: 'Privacy & security',
                   subtitle: 'Two-step verification, devices, sessions',
                   onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SecurityCenterScreen())),
+                ),
+                _Row(
+                  icon: PhosphorIconsRegular.envelopeSimple,
+                  title: 'Email for notifications',
+                  subtitle: (ref.watch(contactEmailProvider).value ?? '').isEmpty
+                      ? 'Add an email'
+                      : ref.watch(contactEmailProvider).value!,
+                  onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const AddEmailScreen()),
+                  ).then((_) => ref.invalidate(contactEmailProvider)),
                 ),
                 _Row(
                   icon: PhosphorIconsRegular.bell,

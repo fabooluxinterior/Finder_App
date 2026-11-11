@@ -49,14 +49,10 @@ abstract class FinderBackend {
   Future<void> sendOtp(OtpChannel channel, String target);
   Future<void> verifyOtp(OtpChannel channel, String target, String code);
 
-  /// True when the signed-in account has a confirmed email address.
-  Future<bool> hasConfirmedEmail();
-
-  /// Sends a 6-digit code to [email] to add it to the signed-in account.
-  Future<void> sendEmailCode(String email);
-
-  /// Confirms the code; the email is then attached to the account.
-  Future<void> verifyEmailCode(String email, String code);
+  /// The account's contact email (for notifications only; not verified, not
+  /// a sign-in method). Null until one is added.
+  Future<String?> contactEmail();
+  Future<void> setContactEmail(String email);
   Future<void> signOut();
 
   // Consent & age

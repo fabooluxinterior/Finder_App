@@ -89,28 +89,15 @@ class SupabaseBackend implements FinderBackend {
   });
 
   @override
-  Future<bool> hasConfirmedEmail() async {
-    // Ask the server (the confirmation may have just happened in the email's
-    // link, which this session hasn't seen yet).
-    var u = _db.auth.currentUser;
-    try {
-      u = (await _db.auth.getUser()).user ?? u;
-    } catch (_) {}
-    return (u?.email ?? '').isNotEmpty && u?.emailConfirmedAt != null;
-  }
-
-  /// Supabase Auth sends the code to the new address ("Change email address"
-  /// template, which must show {{ .Token }}). The address only becomes the
-  /// account's email once the code is confirmed.
-  @override
-  Future<void> sendEmailCode(String email) => _guard(() async {
-    await _db.auth.updateUser(UserAttributes(email: email));
+  Future<String?> contactEmail() => _guard(() async {
+    final v = await _db.rpc('my_contact_email');
+    final t = (v as String?)?.trim();
+    return (t == null || t.isEmpty) ? null : t;
   });
 
   @override
-  Future<void> verifyEmailCode(String email, String code) => _guard(() async {
-    await _db.auth.verifyOTP(email: email, token: code, type: OtpType.emailChange);
-    await _db.auth.refreshSession();
+  Future<void> setContactEmail(String email) => _guard(() async {
+    await _db.rpc('set_contact_email', params: {'p_email': email});
   });
 
   /// Secure logout: revoke this device's encryption identity, end the
