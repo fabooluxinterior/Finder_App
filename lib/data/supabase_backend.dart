@@ -1251,6 +1251,12 @@ class SupabaseBackend implements FinderBackend {
         ),
         'email_exists' => const AppException(AppErrorCode.unknown, 'This email is already used by another account.'),
         'otp_expired' => const AppException(AppErrorCode.unknown, 'That code is wrong or has expired. Try again.'),
+        'sms_send_failed' ||
+        'phone_provider_disabled' => const AppException(AppErrorCode.unknown, 'Couldn’t send the code. Try again in a minute.'),
+        'over_sms_send_rate_limit' || 'over_request_rate_limit' => const AppException(
+          AppErrorCode.rateLimited,
+          'Too many codes requested. Wait a minute and try again.',
+        ),
         _ => AppException(AppErrorCode.unknown, e.message),
       };
     }

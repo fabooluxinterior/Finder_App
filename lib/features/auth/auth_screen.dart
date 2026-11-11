@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -29,6 +30,32 @@ class _AuthScreenState extends ConsumerState<AuthScreen> with SingleTickerProvid
   bool _codeSent = false;
   bool _busy = false;
   bool _agreed = SignupConsent.accepted;
+
+  /// Seconds until "Resend code" works again (the sign-in service also limits
+  /// how often a number can be texted).
+  int _resendIn = 0;
+  Timer? _tick;
+
+  void _startCountdown() {
+    _tick?.cancel();
+    setState(() => _resendIn = 60);
+    _tick = Timer.periodic(const Duration(seconds: 1), (t) {
+      if (!mounted) return t.cancel();
+      setState(() => _resendIn = (_resendIn - 1).clamp(0, 60));
+      if (_resendIn == 0) t.cancel();
+    });
+  }
+
+  void _resend() {
+    if (_busy || _resendIn > 0) return;
+    _run(() async {
+      await ref.read(backendProvider).sendOtp(_channel, _normalizedTarget);
+      _code.clear();
+      _startCountdown();
+      if (mounted) showSnack(context, 'New code sent.', icon: PhosphorIconsFill.checkCircle);
+    });
+  }
+
   late final _intro = AnimationController(vsync: this, duration: const Duration(milliseconds: 1100))..forward();
 
   String get _normalizedTarget {
@@ -67,6 +94,7 @@ class _AuthScreenState extends ConsumerState<AuthScreen> with SingleTickerProvid
     _run(() async {
       await ref.read(backendProvider).sendOtp(_channel, _normalizedTarget);
       setState(() => _codeSent = true);
+      _startCountdown();
     });
   }
 
@@ -77,6 +105,7 @@ class _AuthScreenState extends ConsumerState<AuthScreen> with SingleTickerProvid
 
   @override
   void dispose() {
+    _tick?.cancel();
     _target.dispose();
     _code.dispose();
     _intro.dispose();
@@ -219,11 +248,20 @@ class _AuthScreenState extends ConsumerState<AuthScreen> with SingleTickerProvid
                         const SizedBox(height: 10),
                         PillButton(label: 'Verify', height: 58, busy: _busy, onTap: _code.text.length == 6 ? _verify : null),
                         TextButton(
+                          onPressed: _busy || _resendIn > 0 ? null : _resend,
+                          child: Text(
+                            _resendIn > 0 ? 'Resend code in ${_resendIn}s' : 'Resend code',
+                            style: t.labelMedium?.copyWith(color: _resendIn > 0 ? c.muted : c.ink),
+                          ),
+                        ),
+                        TextButton(
                           onPressed: _busy
                               ? null
                               : () => setState(() {
                                   _codeSent = false;
                                   _code.clear();
+                                  _tick?.cancel();
+                                  _resendIn = 0;
                                 }),
                           child: Text('Change number', style: t.labelMedium?.copyWith(color: c.ink2)),
                         ),

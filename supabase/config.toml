@@ -80,3 +80,9 @@ verify_jwt = false
 
 [functions.music-sync]
 verify_jwt = true
+
+# Called by Supabase Auth (Send SMS hook) with a Standard Webhooks signature,
+# not a user JWT: the signature is the authentication.
+[functions.send-sms]
+verify_jwt = false
+

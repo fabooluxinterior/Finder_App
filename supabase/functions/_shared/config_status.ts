@@ -63,6 +63,14 @@ export const SERVICES: ServiceSpec[] = [
       "Google Cloud → Vision API key restricted to the Vision API; set GOOGLE_VISION_API_KEY in Supabase secrets. Used only when no OpenAI key is set (or MODERATION_PROVIDER=google).",
   },
   {
+    service: "sms",
+    label: "SMS sign-in codes (MSG91)",
+    required: false,
+    vars: ["MSG91_AUTHKEY", "MSG91_TEMPLATE_ID", "SEND_SMS_HOOK_SECRET"],
+    setup:
+      "MSG91 → Authkey and a DLT-approved OTP template ID; set MSG91_AUTHKEY and MSG91_TEMPLATE_ID in Supabase → Edge Functions → Secrets. SEND_SMS_HOOK_SECRET is created together with the Send SMS hook (Authentication → Hooks).",
+  },
+  {
     service: "support_email",
     label: "Support ticket emails",
     required: false,
