@@ -209,6 +209,17 @@ jobs:
         run: |
           # An older, delayed run must never take over the "latest" link from a newer build.
           latest_tag="$(gh release view --json tagName --jq .tagName 2>/dev/null || true)"
+          # Users are only told about an update when the app itself changed. A push that touched only the
+          # server, the admin site, docs or tests does not create a release (a hand-started run always does).
+          if [ "$GITHUB_EVENT_NAME" = "push" ] && [ -n "$latest_tag" ]; then
+            prev_sha="$(gh release view "$latest_tag" --json targetCommitish --jq .targetCommitish 2>/dev/null || true)"
+            if [ -n "$prev_sha" ] && git fetch --quiet --depth=300 origin "$prev_sha" 2>/dev/null; then
+              if [ -z "$(git diff --name-only "$prev_sha" "$GITHUB_SHA" -- lib android pubspec.yaml pubspec.lock rust_builder rust assets web 2>/dev/null)" ]; then
+                echo "No app changes since $latest_tag: not publishing a new release."
+                exit 0
+              fi
+            fi
+          fi
           latest_num="${latest_tag#build-}"
           flag="--latest"
           if [[ "$latest_num" =~ ^[0-9]+$ ]] && [ "$latest_num" -gt "$GITHUB_RUN_NUMBER" ]; then flag="--latest=false"; fi

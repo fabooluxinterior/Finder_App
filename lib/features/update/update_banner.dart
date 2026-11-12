@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/phosphor.dart';
@@ -19,12 +20,30 @@ class UpdateBanner extends ConsumerStatefulWidget {
 
 class _UpdateBannerState extends ConsumerState<UpdateBanner> with WidgetsBindingObserver {
   bool _closed = false;
+  int _dismissedBuild = 0; // "Not now" is remembered for that build, so it never nags again
   DateTime _checkedAt = DateTime.now();
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    SharedPreferences.getInstance()
+        .then((p) {
+          if (mounted) setState(() => _dismissedBuild = p.getInt(_prefKey) ?? 0);
+        })
+        .catchError((_) {});
+  }
+
+  static const _prefKey = 'update_dismissed_build';
+
+  Future<void> _dismiss(int build) async {
+    setState(() {
+      _closed = true;
+      _dismissedBuild = build;
+    });
+    try {
+      await (await SharedPreferences.getInstance()).setInt(_prefKey, build);
+    } catch (_) {}
   }
 
   @override
@@ -44,7 +63,7 @@ class _UpdateBannerState extends ConsumerState<UpdateBanner> with WidgetsBinding
   @override
   Widget build(BuildContext context) {
     final update = ref.watch(availableUpdateProvider).value;
-    final visible = update != null && !_closed;
+    final visible = update != null && !_closed && update.build > _dismissedBuild;
     final c = context.fc;
     return AnimatedSwitcher(
       duration: const Duration(milliseconds: 220),
@@ -92,7 +111,7 @@ class _UpdateBannerState extends ConsumerState<UpdateBanner> with WidgetsBinding
                         ),
                         IconButton(
                           tooltip: 'Not now',
-                          onPressed: () => setState(() => _closed = true),
+                          onPressed: () => _dismiss(update.build),
                           icon: Icon(PhosphorIconsRegular.x, size: 18, color: c.muted),
                         ),
                       ],

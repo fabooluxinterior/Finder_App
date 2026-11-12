@@ -8,6 +8,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 Map<String, dynamic> _release(String tag, {String asset = 'finder-live-arm64.apk', String host = 'github.com'}) => {
   'tag_name': tag,
@@ -78,6 +79,21 @@ void main() {
       await t.pump(const Duration(milliseconds: 400));
       await t.pump();
       expect(find.text('A new version is available'), findsNothing);
+    });
+
+    testWidgets('a build the user dismissed never comes back; a newer one does', (t) async {
+      SharedPreferences.setMockInitialValues({'update_dismissed_build': 12});
+      await pump(t, supported: true, current: 10, latest: newer);
+      await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
+      await t.pump(const Duration(milliseconds: 400));
+      expect(find.text('A new version is available'), findsNothing);
+      await t.pumpWidget(const SizedBox()); // a fresh start of the app
+      SharedPreferences.setMockInitialValues({'update_dismissed_build': 11});
+      await pump(t, supported: true, current: 10, latest: newer);
+      await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
+      await t.pump(const Duration(milliseconds: 400));
+      expect(find.text('A new version is available'), findsOneWidget);
+      SharedPreferences.setMockInitialValues({});
     });
 
     testWidgets('stays hidden when up to date, offline, or on unsupported builds', (t) async {
