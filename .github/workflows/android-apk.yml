@@ -124,11 +124,11 @@ jobs:
       SUPABASE_URL: ${{ secrets.SUPABASE_URL || 'https://smwqghjyicpjulrnkcqp.supabase.co' }}
       SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNtd3FnaGp5aWNwanVscm5rY3FwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTQ0MDk1OTcsImV4cCI6MjEwOTk4NTU5N30.TbQ878BIk59dZiqcbxA-yVAa2-f4RUKREQ6SzSUSN9k' }}
       REVENUECAT_ANDROID_KEY: ${{ secrets.REVENUECAT_ANDROID_KEY }}
-      # Firebase (phone popups): public identifiers only. Empty = popups stay off.
-      FIREBASE_API_KEY: ${{ secrets.FIREBASE_API_KEY }}
-      FIREBASE_APP_ID: ${{ secrets.FIREBASE_APP_ID }}
-      FIREBASE_SENDER_ID: ${{ secrets.FIREBASE_SENDER_ID }}
-      FIREBASE_PROJECT_ID: ${{ secrets.FIREBASE_PROJECT_ID }}
+      # Firebase (phone popups): public identifiers only (safe in builds). Secrets override these defaults.
+      FIREBASE_API_KEY: ${{ secrets.FIREBASE_API_KEY || 'AIzaSyA1sXyUpSW6CloPrRCY5iQh08Sp3FKLohk' }}
+      FIREBASE_APP_ID: ${{ secrets.FIREBASE_APP_ID || '1:582986878237:android:9eba259201420d56f5e5f4' }}
+      FIREBASE_SENDER_ID: ${{ secrets.FIREBASE_SENDER_ID || '582986878237' }}
+      FIREBASE_PROJECT_ID: ${{ secrets.FIREBASE_PROJECT_ID || 'test-44e9a' }}
     steps:
       - uses: actions/checkout@v4
 
