@@ -13,6 +13,10 @@
         android:usesCleartextTraffic="false"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
+        <!-- Notifications sent by the server (Firebase): small icon, brand colour and the high-importance channel. -->
+        <meta-data android:name="com.google.firebase.messaging.default_notification_icon" android:resource="@drawable/ic_notification" />
+        <meta-data android:name="com.google.firebase.messaging.default_notification_color" android:value="#FF5A3D" />
+        <meta-data android:name="com.google.firebase.messaging.default_notification_channel_id" android:value="messages" />
         <activity
             android:name=".MainActivity"
             android:exported="true"

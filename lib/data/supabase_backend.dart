@@ -593,9 +593,11 @@ class SupabaseBackend implements FinderBackend {
         .order('responded_at', ascending: false);
 
     final out = <Connection>[];
+    final seenPeers = <String>{}; // one card per person, even if both directions were stored
     for (final r in rows) {
       final peerRow = (r['sender_id'] == me ? r['receiver'] : r['sender']) as Map<String, dynamic>?;
       if (peerRow == null) continue; // blocked: profile hidden by RLS
+      if (!seenPeers.add(peerRow['id'] as String)) continue;
       final peer = PublicProfile.fromProfileRow(peerRow, resolve: _mediaUrl);
       final thread = await _vault.load(me, peer.id);
       final last = thread.isEmpty ? null : thread.last;

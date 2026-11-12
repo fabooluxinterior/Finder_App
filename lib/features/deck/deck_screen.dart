@@ -139,6 +139,12 @@ class _DeckScreenState extends ConsumerState<DeckScreen> {
   Widget build(BuildContext context) {
     final c = context.fc;
     final feed = ref.watch(feedProvider);
+    // Someone you just connected with never stays in the deck.
+    ref.listen<AsyncValue<List<Connection>>>(connectionsProvider, (prev, next) {
+      final ids = next.value?.map((x) => x.profile.id).toSet() ?? const <String>{};
+      final cards = _cards;
+      if (cards != null && cards.any((p) => ids.contains(p.id))) _reload();
+    });
     final premium = isPremium(ref);
     // extendBody: the shell already adds the tab bar to the bottom padding.
     final bottomBar = MediaQuery.paddingOf(context).bottom;

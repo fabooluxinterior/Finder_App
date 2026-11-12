@@ -67,7 +67,18 @@ export function buildMessage(token: string, title: string, body: string, extras:
       token,
       notification: { title, body },
       data: { kind: extras.kind ?? "announcement" },
-      android: { priority: "HIGH", ...(extras.tag ? { notification: { tag: extras.tag } } : {}) },
+      android: {
+        priority: "HIGH",
+        notification: {
+          // High-importance channels (created by the app) make the banner slide in from the top.
+          channel_id: extras.kind === "message" ? "messages" : "announcements",
+          icon: "ic_notification",
+          color: "#FF5A3D",
+          default_sound: true,
+          notification_priority: "PRIORITY_HIGH",
+          ...(extras.tag ? { tag: extras.tag } : {}),
+        },
+      },
     },
   };
 }

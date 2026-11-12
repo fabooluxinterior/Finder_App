@@ -68,15 +68,10 @@ class _HomeShellState extends ConsumerState<HomeShell> {
     final enabled = await ref.read(pushEnabledProvider.future);
     for (final c in now) {
       if (c.unread <= (unreadBefore[c.profile.id] ?? 0) || c.profile.id == open) continue;
-      if (WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed) {
-        if (!mounted) return;
-        final text = c.lastMessage;
-        showSnack(
-          context,
-          text == null || text.isEmpty ? '${c.profile.firstName} sent you a message' : '${c.profile.firstName}: $text',
-          icon: PhosphorIconsFill.chatCircle,
-        );
-      } else if (enabled) {
+      // App in front: no banner (the unread badge and sound are enough). In the background the
+      // notification bar is used; with Firebase the server sends it, otherwise the app raises it.
+      if (WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed) continue;
+      if (enabled && !ref.read(pushServiceProvider).available) {
         await ref.read(localNotifierProvider).showMessage(peerId: c.profile.id, name: c.profile.firstName);
       }
     }

@@ -173,6 +173,17 @@ class _SuggestionsScreenState extends ConsumerState<SuggestionsScreen> {
     final t = Theme.of(context).textTheme;
     final bottomBar = MediaQuery.paddingOf(context).bottom;
     final status = _status;
+    // Someone you connect with (from anywhere) disappears from Suggestions.
+    ref.listen<AsyncValue<List<Connection>>>(connectionsProvider, (prev, next) {
+      final ids = next.value?.map((x) => x.profile.id).toSet() ?? const <String>{};
+      if (ids.isEmpty) return;
+      if (_main.any((s) => ids.contains(s.profile.id)) || _mayLike.any((s) => ids.contains(s.profile.id))) {
+        setState(() {
+          _main.removeWhere((s) => ids.contains(s.profile.id));
+          _mayLike.removeWhere((s) => ids.contains(s.profile.id));
+        });
+      }
+    });
 
     return Scaffold(
       body: SafeArea(

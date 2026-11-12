@@ -46,10 +46,11 @@ Deno.test("chat push: only the sender's first name, never content", () => {
   assertEquals(messageNotice("Anil Krishna"), { title: "Anil", body: "Sent you a message" });
   assertEquals(firstName(""), "Someone");
   assertEquals(firstName(null), "Someone");
-  assertEquals(buildMessage("t", "A", "B", { kind: "message", tag: "chat-1" }).message.android, {
-    priority: "HIGH",
-    notification: { tag: "chat-1" },
-  });
+  const n = buildMessage("t", "A", "B", { kind: "message", tag: "chat-1" }).message.android.notification;
+  assertEquals(n.channel_id, "messages");
+  assertEquals(n.tag, "chat-1");
+  assertEquals(n.notification_priority, "PRIORITY_HIGH");
+  assertEquals(buildMessage("t", "A", "B").message.android.notification.channel_id, "announcements");
 });
 
 Deno.test("chat push: shared secret is checked strictly", () => {

@@ -1,3 +1,5 @@
+import 'dart:ui' show Color;
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
@@ -37,9 +39,14 @@ class AndroidLocalNotifier implements LocalNotifier {
     if (kIsWeb || defaultTargetPlatform != TargetPlatform.android) return const NoopLocalNotifier();
     try {
       final plugin = FlutterLocalNotificationsPlugin();
-      await plugin.initialize(
-        settings: const InitializationSettings(android: AndroidInitializationSettings('@mipmap/ic_launcher')),
-      );
+      await plugin.initialize(settings: const InitializationSettings(android: AndroidInitializationSettings('ic_notification')));
+      // High importance = the banner slides down from the top of the screen like WhatsApp or PhonePe.
+      final android = plugin.resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>();
+      for (final ch in const [('messages', 'Messages'), ('announcements', 'Announcements')]) {
+        await android?.createNotificationChannel(
+          AndroidNotificationChannel(ch.$1, ch.$2, importance: Importance.high, playSound: true, enableVibration: true),
+        );
+      }
       return AndroidLocalNotifier._(plugin);
     } catch (_) {
       return const NoopLocalNotifier();
@@ -70,6 +77,10 @@ class AndroidLocalNotifier implements LocalNotifier {
             channelDescription: 'New chat messages',
             importance: Importance.high,
             priority: Priority.high,
+            icon: 'ic_notification',
+            color: Color(0xFFFF5A3D),
+            category: AndroidNotificationCategory.message,
+            visibility: NotificationVisibility.private,
           ),
         ),
       );
