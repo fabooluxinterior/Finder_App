@@ -29,6 +29,10 @@ class PlatformImageEncoder {
     ImageFormat.png => 'image/png',
     ImageFormat.webp => 'image/webp',
     ImageFormat.heic => 'image/heic',
+    ImageFormat.gif => 'image/gif',
+    ImageFormat.bmp => 'image/bmp',
+    ImageFormat.avif => 'image/avif',
+    ImageFormat.other => '',
   };
 
   Future<SourceSize> decodeSize(Uint8List input, ImageFormat format) async {

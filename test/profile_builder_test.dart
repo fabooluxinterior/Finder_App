@@ -40,6 +40,20 @@ void main() {
       expect(ImageOptimizer.sniff(h('%PDF-1.7 not a photo'.codeUnits)), isNull);
     });
 
+    test('chat photos: GIF, BMP and AVIF are recognised too, and a very detailed photo still gets compressed', () async {
+      Uint8List h(List<int> head) => Uint8List.fromList([...head, ...List.filled(16, 0)]);
+      expect(ImageOptimizer.sniff(h('GIF89a'.codeUnits)), ImageFormat.gif);
+      expect(ImageOptimizer.sniff(h([0x42, 0x4d, 0, 0])), ImageFormat.bmp);
+      expect(ImageOptimizer.sniff(h('\x00\x00\x00\x1cftypavif'.codeUnits)), ImageFormat.avif);
+      // Size falls with the square of the scale; this one only fits at the smallest chat scales.
+      final out = await ImageOptimizer.fitUnder(
+        300 * 1024,
+        scales: const [1.0, 0.85, 0.72, 0.6, 0.5, 0.4, 0.3, 0.2],
+        (q, s) async => EncodedImage(_bytes((q * 40000 * s * s).round()), 'image/webp'),
+      );
+      expect(out.bytes.lengthInBytes, lessThanOrEqualTo(300 * 1024));
+    });
+
     test('walks down quality, then size, until under 100 KB', () async {
       final tried = <(int, double)>[];
       final out = await ImageOptimizer.fitUnder(100 * 1024, (q, s) async {

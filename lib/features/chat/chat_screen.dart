@@ -166,8 +166,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       final raw = await ref.read(mediaProvider).pickOriginalPhoto();
       if (raw == null) return;
       setState(() => _sending = true);
-      // Resized to ≤1080 px and compressed on the device, then encrypted.
-      final img = await ImageOptimizer.optimize(raw);
+      // Any image type: resized and compressed on the device, then encrypted.
+      final img = await ImageOptimizer.optimizeForChat(raw);
       await ref.read(backendProvider).sendImage(widget.peer.id, img.bytes, width: img.width, height: img.height);
       Fx.instance.sent();
       _scrollToLatest();
