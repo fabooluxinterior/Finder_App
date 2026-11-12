@@ -11,6 +11,7 @@ import '../core/media_auth.dart';
 import '../models/access.dart';
 import '../models/follow_request.dart';
 import '../models/message.dart';
+import '../models/presence.dart';
 import '../models/moderation.dart';
 import '../models/profile.dart';
 import '../models/profile_update.dart';
@@ -621,6 +622,63 @@ class SupabaseBackend implements FinderBackend {
     }
     return out;
   });
+
+  // ----------------------------------------------------------- presence ----
+
+  final _presenceChannels = <String, RealtimeChannel>{};
+  final _presenceListeners = <String, int>{};
+  final _presenceCtl = <String, StreamController<PeerState>>{};
+
+  /// One private broadcast channel per chat: only the two connected people can join
+  /// (database rule chat_topic_allowed). Nothing sent on it is stored.
+  RealtimeChannel _presenceChannel(String peerId) {
+    return _presenceChannels.putIfAbsent(peerId, () {
+      final me = _me;
+      final ctl = _presenceCtl.putIfAbsent(peerId, () => StreamController<PeerState>.broadcast());
+      final ch = _db.channel('chat:${_pairKey(me, peerId)}', opts: const RealtimeChannelConfig(private: true));
+      ch.onBroadcast(
+        event: 'state',
+        callback: (p) {
+          final data = (p['payload'] is Map ? p['payload'] : p) as Map;
+          if (data['from'] == peerId) ctl.add(PeerState.parse(data['state']));
+        },
+      );
+      ch.subscribe();
+      return ch;
+    });
+  }
+
+  @override
+  Stream<PeerState> watchPeerState(String peerId) {
+    late StreamController<PeerState> out;
+    StreamSubscription<PeerState>? sub;
+    out = StreamController<PeerState>(
+      onListen: () {
+        _presenceListeners[peerId] = (_presenceListeners[peerId] ?? 0) + 1;
+        _presenceChannel(peerId);
+        sub = _presenceCtl[peerId]!.stream.listen(out.add, onError: out.addError);
+      },
+      onCancel: () async {
+        await sub?.cancel();
+        final left = (_presenceListeners[peerId] ?? 1) - 1;
+        _presenceListeners[peerId] = left;
+        if (left <= 0) {
+          final ch = _presenceChannels.remove(peerId);
+          _presenceListeners.remove(peerId);
+          if (ch != null) await _db.removeChannel(ch);
+        }
+      },
+    );
+    return out.stream;
+  }
+
+  @override
+  Future<void> sendPeerState(String peerId, PeerState state) async {
+    try {
+      if (currentUserId == null) return;
+      await _presenceChannel(peerId).sendBroadcastMessage(event: 'state', payload: {'from': _me, 'state': state.name});
+    } catch (_) {} // a lost signal is harmless: the other side clears it on its own
+  }
 
   @override
   Future<void> syncInbox() async {

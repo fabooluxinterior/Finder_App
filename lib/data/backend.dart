@@ -3,6 +3,7 @@ import 'dart:typed_data';
 import '../models/access.dart';
 import '../models/follow_request.dart';
 import '../models/message.dart';
+import '../models/presence.dart';
 import '../models/moderation.dart';
 import '../models/profile.dart';
 import '../models/profile_update.dart';
@@ -237,6 +238,11 @@ abstract class FinderBackend {
 
   /// Fires when requests/connections change (realtime).
   Stream<void> socialChanges();
+
+  /// The other person's live state in this chat (typing, recording audio, sending a photo).
+  /// Private to the two of them and never stored.
+  Stream<PeerState> watchPeerState(String peerId);
+  Future<void> sendPeerState(String peerId, PeerState state);
 
   /// Fetches any messages waiting for this phone right now (used when the app
   /// comes back to the foreground, as a safety net next to realtime).

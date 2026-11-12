@@ -188,7 +188,10 @@ enum TabKind { discover, suggestions, requests, chats, you }
 /// Tab-bar icons: outline when idle; when active they fill in and cut their
 /// detail out, like the mark. The Chats tab becomes the logo itself.
 class TabIcon extends StatelessWidget {
-  const TabIcon({super.key, required this.kind, required this.active, required this.color, this.size = 26});
+  const TabIcon({super.key, required this.kind, required this.active, required this.color, this.size = 26, this.cutout});
+
+  /// Colour of the shapes cut out of a filled icon (the page background).
+  final Color? cutout;
   final TabKind kind;
   int get index => switch (kind) {
     TabKind.discover => 0,
@@ -203,19 +206,19 @@ class TabIcon extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (index == 2 && active) return VoubyMark(size: size + 2, color: color);
     return SizedBox.square(
       dimension: size,
-      child: CustomPaint(painter: _TabPainter(index, active, color)),
+      child: CustomPaint(painter: _TabPainter(index, active, color, cutout ?? const Color(0xFF0B0B0C))),
     );
   }
 }
 
 class _TabPainter extends CustomPainter {
-  _TabPainter(this.index, this.active, this.color);
+  _TabPainter(this.index, this.active, this.color, this.cutout);
   final int index;
   final bool active;
   final Color color;
+  final Color cutout;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -235,7 +238,7 @@ class _TabPainter extends CustomPainter {
         if (active) {
           canvas.drawRRect(front, fill);
         } else {
-          canvas.drawRRect(front, Paint()..color = const Color(0xFF0B0B0C));
+          canvas.drawRRect(front, Paint()..color = cutout);
           canvas.drawRRect(front, stroke);
         }
       case 1: // Requests: person with a plus
@@ -246,16 +249,29 @@ class _TabPainter extends CustomPainter {
         } else {
           canvas.drawPath(_cached('M5 8a3.5 3.5 0 1 0 7 0a3.5 3.5 0 1 0-7 0M2 20a6.5 6.5 0 0 1 13 0M19 8v6M16 11h6'), stroke);
         }
-      case 2: // Chats: bubble with the v
-        canvas.drawPath(_cached(VIcons.chat), stroke);
-        canvas.drawPath(_cached(VIcons.chatV), stroke);
+      case 2: // Chats: the same bubble with the v, outlined or filled (v cut out)
+        if (active) {
+          canvas.drawPath(_cached(VIcons.chat), fill);
+          canvas.drawPath(
+            _cached(VIcons.chatV),
+            Paint()
+              ..color = cutout
+              ..style = PaintingStyle.stroke
+              ..strokeWidth = 2
+              ..strokeCap = StrokeCap.round
+              ..strokeJoin = StrokeJoin.round,
+          );
+        } else {
+          canvas.drawPath(_cached(VIcons.chat), stroke);
+          canvas.drawPath(_cached(VIcons.chatV), stroke);
+        }
       case 4: // Suggestions: compass (needle cut out when active)
         if (active) {
           canvas.drawCircle(const Offset(12, 12), 10, fill);
           canvas.drawPath(
             _cached('M15.5 8.5l-2 5-5 2 2-5z'),
             Paint()
-              ..color = const Color(0xFF0B0B0C)
+              ..color = cutout
               ..style = PaintingStyle.fill,
           );
         } else {
@@ -272,7 +288,7 @@ class _TabPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(_TabPainter old) => old.active != active || old.color != color || old.index != index;
+  bool shouldRepaint(_TabPainter old) => old.active != active || old.color != color || old.index != index || old.cutout != cutout;
 }
 
 /// Blue scalloped verified tick.

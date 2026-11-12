@@ -312,6 +312,15 @@ class _MyProfileScreenState extends ConsumerState<MyProfileScreen> {
                     MaterialPageRoute(builder: (_) => const NotificationsScreen()),
                   ).then((_) => ref.invalidate(notificationsProvider)),
                 ),
+                _Row(
+                  icon: PhosphorIconsRegular.chatCircle,
+                  title: 'Show when I’m typing',
+                  subtitle: 'Lets people you chat with see typing, recording and photos being sent',
+                  trailing: Switch(
+                    value: ref.watch(sharePresenceProvider).value ?? true,
+                    onChanged: (v) => ref.read(sharePresenceProvider.notifier).set(v),
+                  ),
+                ),
                 if (ref.watch(pushServiceProvider).available)
                   _Row(
                     icon: PhosphorIconsRegular.bell,

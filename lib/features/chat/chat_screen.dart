@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:typed_data';
 import 'dart:ui';
 
@@ -17,8 +18,10 @@ import '../../core/feedback.dart';
 import '../../core/sanitizer.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
+import '../../data/backend.dart';
 import '../../data/media_service.dart';
 import '../../models/message.dart';
+import '../../models/presence.dart';
 import '../../models/profile.dart';
 import '../../models/profile_catalog.dart';
 import '../requests/requests_screen.dart' show IntroQuote;
@@ -29,6 +32,7 @@ import '../safety/safety_actions.dart';
 import '../security/safety_number_screen.dart';
 import 'voice_bubble.dart';
 import 'voice_recorder_bar.dart';
+import 'words.dart';
 
 class ChatScreen extends ConsumerStatefulWidget {
   const ChatScreen({super.key, required this.peer});
@@ -56,8 +60,50 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     super.initState();
     // No alert for messages in the chat that is already open.
     _openChat = ref.read(openChatProvider.notifier);
+    _backend = ref.read(backendProvider);
+    _text.addListener(_onTextChanged);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) _openChat.open(widget.peer.id);
+    });
+  }
+
+  // ------------------------------------------- what the other person sees ----
+  // Typing, recording audio and sending a photo are shared as small live signals
+  // (private to this chat, never stored). They repeat every 2.5 s while they last.
+  late final FinderBackend _backend;
+  PeerState _mine = PeerState.idle;
+  Timer? _heartbeat;
+  Timer? _typingIdle;
+
+  bool get _sharing => ref.read(sharePresenceProvider).value ?? true;
+
+  void _setMine(PeerState s) {
+    _heartbeat?.cancel();
+    if (!_sharing) return;
+    final changed = s != _mine;
+    _mine = s;
+    if (s == PeerState.idle) {
+      if (changed) _backend.sendPeerState(widget.peer.id, s);
+      return;
+    }
+    _backend.sendPeerState(widget.peer.id, s);
+    if (s != PeerState.photo) {
+      _heartbeat = Timer.periodic(presenceRefresh, (_) => _backend.sendPeerState(widget.peer.id, s));
+    }
+  }
+
+  void _onTextChanged() {
+    if (_recording) return;
+    if (_text.text.trim().isEmpty) {
+      _typingIdle?.cancel();
+      if (_mine == PeerState.typing) _setMine(PeerState.idle);
+      return;
+    }
+    if (_mine != PeerState.typing) _setMine(PeerState.typing);
+    // Stopped typing without sending: say so after 4 s (the other side also clears it by itself).
+    _typingIdle?.cancel();
+    _typingIdle = Timer(const Duration(seconds: 4), () {
+      if (_mine == PeerState.typing) _setMine(PeerState.idle);
     });
   }
 
@@ -68,6 +114,10 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     final open = _openChat;
     final id = widget.peer.id;
     Future.microtask(() => open.closeIf(id));
+    _heartbeat?.cancel();
+    _typingIdle?.cancel();
+    if (_mine != PeerState.idle && _sharing) _backend.sendPeerState(id, PeerState.idle);
+    _text.removeListener(_onTextChanged);
     _text.dispose();
     _scroll.dispose();
     _recorder.dispose();
@@ -104,6 +154,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
 
     setState(() => _sending = true);
     try {
+      _setMine(PeerState.idle);
       await ref.read(backendProvider).sendText(widget.peer.id, text);
       Fx.instance.sent();
       _text.clear();
@@ -125,7 +176,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       return;
     }
     try {
-      await _recorder.start(onCapReached: () => _finishRecording(send: true));
+      // The bar owns the 45 second limit and moves to review when it is reached.
+      await _recorder.start(onCapReached: () {});
       Fx.instance.tap();
       setState(() => _recording = true);
     } catch (e) {
@@ -133,19 +185,29 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     }
   }
 
-  Future<void> _finishRecording({required bool send}) async {
-    if (!_recording) return;
+  /// The bar reports whether the microphone is open (recording or hands-free).
+  void _recordingActive(bool active) {
+    if (!mounted) return;
+    _setMine(active ? PeerState.recording : PeerState.idle);
+  }
+
+  void _voiceCancelled() {
+    if (mounted) setState(() => _recording = false);
+  }
+
+  void _voiceTooShort() {
+    if (!mounted) return;
     setState(() => _recording = false);
-    if (!send) {
-      await _recorder.cancel();
-      return;
-    }
-    final note = await _recorder.stop();
-    if (note == null || note.duration < const Duration(milliseconds: 800)) {
-      if (mounted) showSnack(context, 'Hold a little longer to record a voice note.');
-      return;
-    }
-    setState(() => _sending = true);
+    _recorder.cancel();
+    showSnack(context, 'Hold a little longer to record a voice note.');
+  }
+
+  Future<void> _sendVoice(VoiceNote note) async {
+    if (!mounted) return;
+    setState(() {
+      _recording = false;
+      _sending = true;
+    });
     try {
       await ref.read(backendProvider).sendVoice(widget.peer.id, note.bytes, localPath: note.path, duration: note.duration);
       Fx.instance.sent();
@@ -166,6 +228,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       final raw = await ref.read(mediaProvider).pickOriginalPhoto();
       if (raw == null) return;
       setState(() => _sending = true);
+      _setMine(PeerState.photo);
       // Any image type: resized and compressed on the device, then encrypted.
       final img = await ImageOptimizer.optimizeForChat(raw);
       await ref.read(backendProvider).sendImage(widget.peer.id, img.bytes, width: img.width, height: img.height);
@@ -174,6 +237,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     } catch (e) {
       await _handleError(e);
     } finally {
+      _setMine(PeerState.idle);
       if (mounted) setState(() => _sending = false);
     }
   }
@@ -196,6 +260,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     final backend = ref.watch(backendProvider);
     final me = backend.currentUserId;
     final messages = ref.watch(messagesProvider(widget.peer.id));
+    final theirState = ref.watch(peerStateProvider(widget.peer.id)).value ?? PeerState.idle;
 
     ref.listen(messagesProvider(widget.peer.id), (prev, next) {
       final list = next.value ?? const <ChatMessage>[];
@@ -263,8 +328,12 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                                 ],
                               ),
                               Text(
-                                widget.peer.city,
-                                style: TextStyle(fontSize: 13, height: 18 / 13, color: c.muted),
+                                theirState == PeerState.idle ? widget.peer.city : theirState.header,
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  height: 18 / 13,
+                                  color: theirState == PeerState.idle ? c.muted : c.accent,
+                                ),
                               ),
                             ],
                           ),
@@ -366,6 +435,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                     ),
             ),
           ),
+          PeerStateLine(state: theirState),
           SafeArea(
             top: false,
             child: AnimatedSwitcher(
@@ -382,8 +452,10 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                   ? VoiceRecorderBar(
                       key: const ValueKey('rec'),
                       recorder: _recorder,
-                      onCancel: () => _finishRecording(send: false),
-                      onSend: () => _finishRecording(send: true),
+                      onCancel: _voiceCancelled,
+                      onSend: _sendVoice,
+                      onTooShort: _voiceTooShort,
+                      onActive: _recordingActive,
                     )
                   : _Composer(
                       key: const ValueKey('compose'),

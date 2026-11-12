@@ -12,6 +12,7 @@ import '../core/sanitizer.dart';
 import '../models/access.dart';
 import '../models/follow_request.dart';
 import '../models/message.dart';
+import '../models/presence.dart';
 import '../models/moderation.dart';
 import '../models/profile.dart';
 import '../models/profile_update.dart';
@@ -1025,6 +1026,15 @@ class DemoBackend implements FinderBackend {
 
   @override
   Stream<void> socialChanges() => _social.stream;
+
+  final _peerStates = <String, StreamController<PeerState>>{};
+
+  @override
+  Stream<PeerState> watchPeerState(String peerId) =>
+      _peerStates.putIfAbsent(peerId, () => StreamController<PeerState>.broadcast()).stream;
+
+  @override
+  Future<void> sendPeerState(String peerId, PeerState state) async {}
 
   @override
   Future<void> syncInbox() async {}

@@ -9,6 +9,7 @@ import 'data/push_service.dart';
 import 'models/access.dart';
 import 'models/follow_request.dart';
 import 'models/message.dart';
+import 'models/presence.dart';
 import 'models/profile.dart';
 import 'models/profile_update.dart';
 
@@ -114,6 +115,25 @@ final privateProfileProvider = FutureProvider.family<PrivateProfile, String>((re
   ref.watch(socialTickProvider);
   return ref.watch(backendProvider).privateProfileOf(userId);
 });
+
+/// What the other person is doing in this chat (clears itself if the signal stops).
+final peerStateProvider = StreamProvider.autoDispose.family<PeerState, String>(
+  (ref, peerId) => withDecay(ref.watch(backendProvider).watchPeerState(peerId)),
+);
+
+/// Whether this phone tells the other person when you type, record or send a photo.
+class SharePresenceNotifier extends AsyncNotifier<bool> {
+  static const _key = 'share_presence';
+  @override
+  Future<bool> build() async => (await SharedPreferences.getInstance()).getBool(_key) ?? true;
+
+  Future<void> set(bool on) async {
+    state = AsyncData(on);
+    await (await SharedPreferences.getInstance()).setBool(_key, on);
+  }
+}
+
+final sharePresenceProvider = AsyncNotifierProvider<SharePresenceNotifier, bool>(SharePresenceNotifier.new);
 
 final messagesProvider = StreamProvider.autoDispose.family<List<ChatMessage>, String>(
   (ref, peerId) => ref.watch(backendProvider).watchMessages(peerId),

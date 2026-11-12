@@ -107,7 +107,8 @@ class _HomeShellState extends ConsumerState<HomeShell> {
     });
 
     final pending = ref.watch(incomingRequestsProvider).value?.count ?? 0;
-    final unread = ref.watch(connectionsProvider).value?.fold<int>(0, (s, c) => s + c.unread) ?? 0;
+    // The Chats tab counts conversations with something unread, not the number of messages.
+    final unread = ref.watch(connectionsProvider).value?.where((c) => c.unread > 0).length ?? 0;
 
     // Back: other tab -> Discover; Discover -> app goes to the background
     // (never closes, so you're never asked to sign in again).
@@ -195,7 +196,7 @@ class _TabBar extends StatelessWidget {
                   child: Semantics(
                     selected: i == index,
                     button: true,
-                    label: badges[i] > 0 ? '${_labels[i]}, ${badges[i]} new' : _labels[i],
+                    label: badges[i] > 0 ? '${_labels[i]}, ${badges[i]} ${i == 3 ? 'unread chats' : 'new'}' : _labels[i],
                     excludeSemantics: true,
                     child: SizedBox(
                       height: 52,
@@ -205,7 +206,7 @@ class _TabBar extends StatelessWidget {
                           Stack(
                             clipBehavior: Clip.none,
                             children: [
-                              TabIcon(kind: _kinds[i], active: i == index, color: i == index ? c.ink : c.muted),
+                              TabIcon(kind: _kinds[i], active: i == index, color: i == index ? c.ink : c.muted, cutout: c.paper),
                               if (badges[i] > 0) Positioned(top: -6, right: -14, child: _Badge(count: badges[i])),
                             ],
                           ),

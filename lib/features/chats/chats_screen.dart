@@ -210,6 +210,7 @@ class _ChatRow extends StatelessWidget {
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
           child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Avatar(url: p.primaryPhoto, name: p.fullName, size: 52),
               const SizedBox(width: 14),
@@ -228,8 +229,6 @@ class _ChatRow extends StatelessWidget {
                           ),
                         ),
                         if (p.isVerified) ...[const SizedBox(width: 5), const VerifiedBadge(size: 15)],
-                        const Spacer(),
-                        Text(_when(connection.connectedAt), style: TextStyle(fontSize: 13, color: c.muted)),
                       ],
                     ),
                     const SizedBox(height: 2),
@@ -242,20 +241,38 @@ class _ChatRow extends StatelessWidget {
                   ],
                 ),
               ),
-              if (locked) ...[
-                const SizedBox(width: 10),
-                Icon(PhosphorIconsFill.lockSimple, size: 15, color: c.muted),
-              ] else if (unread) ...[
-                const SizedBox(width: 10),
-                Semantics(
-                  label: '${connection.unread} unread',
-                  child: Container(
-                    width: 10,
-                    height: 10,
-                    decoration: BoxDecoration(color: c.accent, shape: BoxShape.circle),
-                  ),
+              const SizedBox(width: 10),
+              // Time sits at the top end; the unread count (or lock) sits under it.
+              SizedBox(
+                height: 52,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Text(
+                      _when(connection.connectedAt),
+                      style: TextStyle(fontSize: 13, height: 22 / 13, color: unread && !locked ? c.accent : c.muted),
+                    ),
+                    const Spacer(),
+                    if (locked)
+                      Icon(PhosphorIconsFill.lockSimple, size: 15, color: c.muted)
+                    else if (unread)
+                      Semantics(
+                        label: '${connection.unread} unread',
+                        child: Container(
+                          constraints: const BoxConstraints(minWidth: 22),
+                          height: 22,
+                          padding: const EdgeInsets.symmetric(horizontal: 6),
+                          alignment: Alignment.center,
+                          decoration: BoxDecoration(color: c.accent, borderRadius: BorderRadius.circular(999)),
+                          child: Text(
+                            connection.unread > 99 ? '99+' : '${connection.unread}',
+                            style: TextStyle(fontSize: 12.5, height: 1, fontWeight: FontWeight.w700, color: c.paper),
+                          ),
+                        ),
+                      ),
+                  ],
                 ),
-              ],
+              ),
             ],
           ),
         ),
