@@ -107,6 +107,8 @@ class _BlockedUsersScreenState extends ConsumerState<BlockedUsersScreen> {
                                     onPressed: _busy.contains(users[i].id) ? null : () => _unblock(users[i]),
                                     style: OutlinedButton.styleFrom(
                                       shape: const StadiumBorder(),
+                                      // The app's outlined buttons are full width; this one is a compact button in a row.
+                                      minimumSize: const Size(0, 40),
                                       side: BorderSide(color: c.hair),
                                       padding: const EdgeInsets.symmetric(horizontal: 18),
                                       foregroundColor: c.ink,

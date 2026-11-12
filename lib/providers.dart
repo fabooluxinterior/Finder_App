@@ -203,6 +203,8 @@ class OpenChatNotifier extends Notifier<String?> {
   String? build() => null;
   void open(String? peerId) => state = peerId;
   void closeIf(String peerId) {
+    // The chat screen calls this as it goes away; by then the provider itself may already be gone.
+    if (!ref.mounted) return;
     if (state == peerId) state = null;
   }
 }

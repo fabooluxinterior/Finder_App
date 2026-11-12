@@ -73,7 +73,9 @@ class VoiceNote {
 
 /// 45-second capped voice recorder: AAC-LC, mono, 32 kbps.
 class VoiceRecorder {
-  final _recorder = AudioRecorder();
+  // Created on first use, so opening a chat doesn't touch the microphone plugin.
+  AudioRecorder? _rec;
+  AudioRecorder get _recorder => _rec ??= AudioRecorder();
   final _stopwatch = Stopwatch();
   Timer? _cap;
 
@@ -129,6 +131,6 @@ class VoiceRecorder {
 
   Future<void> dispose() async {
     _cap?.cancel();
-    await _recorder.dispose();
+    await _rec?.dispose();
   }
 }

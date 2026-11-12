@@ -601,7 +601,9 @@ class _FollowTiles extends ConsumerWidget {
             children: [
               Icon(PhosphorIconsFill.lockSimple, size: 12, color: c.muted),
               const SizedBox(width: 6),
-              Text('Only you can see these numbers and lists', style: TextStyle(fontSize: 12, color: c.muted)),
+              Expanded(
+                child: Text('Only you can see these numbers and lists', style: TextStyle(fontSize: 12, color: c.muted)),
+              ),
             ],
           ),
         ),
