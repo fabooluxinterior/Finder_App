@@ -105,6 +105,13 @@ export interface MessageExtras {
   tag?: string; // same tag replaces the earlier notification (one per chat)
 }
 
+/** Android notification channel (created by the app, high importance) for each kind of notification. */
+export function channelFor(kind?: string): string {
+  if (kind === "message") return "messages";
+  if (kind === "announcement" || kind === undefined) return "announcements";
+  return "updates"; // request, match, suggestions, moderation, tickets, trial reminders…
+}
+
 export function buildMessage(token: string, title: string, body: string, extras: MessageExtras = {}) {
   return {
     message: {
@@ -115,7 +122,7 @@ export function buildMessage(token: string, title: string, body: string, extras:
         priority: "HIGH",
         notification: {
           // High-importance channels (created by the app) make the banner slide in from the top.
-          channel_id: extras.kind === "message" ? "messages" : "announcements",
+          channel_id: channelFor(extras.kind),
           icon: "ic_notification",
           color: "#FF5A3D",
           default_sound: true,
@@ -143,11 +150,10 @@ export async function sendFcm(
     body: JSON.stringify(buildMessage(token, title, body, extras)),
   });
   if (res.ok) return "ok";
-  // 404 UNREGISTERED / 400 INVALID_ARGUMENT for a dead token: remove it.
-  if (res.status === 404 || res.status === 400) {
-    await res.body?.cancel();
-    return "unregistered";
-  }
-  await res.body?.cancel();
+  // Only a token Google says no longer exists is removed; anything else (bad request, quota) keeps it.
+  const err = await res.json().then((j) => j.error ?? {}).catch(() => ({}));
+  const code = (err.details ?? []).map((d: { errorCode?: string }) => d.errorCode).find(Boolean) ?? err.status ?? "";
+  if (res.status === 404 || code === "UNREGISTERED") return "unregistered";
+  console.error(`fcm send failed: HTTP ${res.status} ${code}`);
   return "failed";
 }

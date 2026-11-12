@@ -1,6 +1,7 @@
-// Called by the database after a message is stored: POST { message_id } with header x-push-secret.
-// Sends "<name>: Sent you a message" to the receiver's registered phones so it appears in the
-// notification bar when the app is closed. Never includes message content (it is encrypted).
+// Called by the database: POST { message_id } (a new chat message) or { notification_id } (a row in the
+// user's notification list: request, connection, suggestions, moderation, ticket, trial) with header
+// x-push-secret. Sends it to the receiver's registered phones so it appears in the notification bar.
+// Chat messages show only the sender's first name: their content is encrypted and never seen here.
 import { admin } from "../_shared/auth.ts";
 import { diagnoseServiceAccount, fcmAccessToken, parseServiceAccount, sendFcm } from "../_shared/fcm.ts";
 import { handle, HttpError, json } from "../_shared/http.ts";
@@ -13,24 +14,32 @@ Deno.serve((req) =>
       throw new HttpError(401, "unauthenticated", "Not allowed.");
     }
     const b = await req.json().catch(() => ({}));
-    if (!isUuid(b.message_id)) throw new HttpError(400, "bad_request", "message_id required.");
-
     const sa = parseServiceAccount(Deno.env.get("FCM_SERVICE_ACCOUNT"));
     if (!sa) {
       console.error("push-message:", diagnoseServiceAccount(Deno.env.get("FCM_SERVICE_ACCOUNT")));
       return json(req, { sent: 0, push_configured: false });
     }
 
-    const { data: m } = await admin.from("messages").select("sender_id, receiver_id").eq("id", b.message_id).maybeSingle();
-    if (!m) return json(req, { sent: 0 });
-    const [{ data: sender }, { data: devices }] = await Promise.all([
-      admin.from("profiles").select("full_name").eq("id", m.sender_id).maybeSingle(),
-      admin.from("push_devices").select("token").eq("user_id", m.receiver_id).limit(5),
-    ]);
+    // Who gets what: a new chat message (name only: content is encrypted) or a row from the notification list.
+    let userId: string, title: string, body: string, kind: string, tag: string;
+    if (isUuid(b.message_id)) {
+      const { data: m } = await admin.from("messages").select("sender_id, receiver_id").eq("id", b.message_id).maybeSingle();
+      if (!m) return json(req, { sent: 0 });
+      const { data: sender } = await admin.from("profiles").select("full_name").eq("id", m.sender_id).maybeSingle();
+      ({ title, body } = messageNotice(sender?.full_name));
+      userId = m.receiver_id; kind = "message"; tag = `chat-${m.sender_id}`;
+    } else if (Number.isInteger(b.notification_id)) {
+      const { data: n } = await admin.from("user_notifications").select("user_id, kind, title, body").eq("id", b.notification_id).maybeSingle();
+      if (!n) return json(req, { sent: 0 });
+      userId = n.user_id; title = n.title; body = n.body; kind = n.kind; tag = `${n.kind}-${b.notification_id}`;
+    } else {
+      throw new HttpError(400, "bad_request", "message_id or notification_id required.");
+    }
+
+    const { data: devices } = await admin.from("push_devices").select("token").eq("user_id", userId).limit(5);
     const tokens = (devices ?? []).map((d: { token: string }) => d.token);
     if (tokens.length === 0) return json(req, { sent: 0 });
 
-    const { title, body } = messageNotice(sender?.full_name);
     let accessToken: string;
     try {
       accessToken = await fcmAccessToken(sa);
@@ -41,7 +50,7 @@ Deno.serve((req) =>
     const dead: string[] = [];
     let sent = 0;
     await Promise.all(tokens.map(async (t: string) => {
-      const r = await sendFcm(sa, accessToken, t, title, body, { kind: "message", tag: `chat-${m.sender_id}` }).catch(() => "failed" as const);
+      const r = await sendFcm(sa, accessToken, t, title, body, { kind, tag }).catch(() => "failed" as const);
       if (r === "ok") sent++;
       else if (r === "unregistered") dead.push(t);
     }));

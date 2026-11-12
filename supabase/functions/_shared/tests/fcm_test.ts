@@ -73,3 +73,10 @@ Deno.test("service account: tolerates quote marks added when pasting", () => {
   assert(parseServiceAccount('"project_id":"p","client_email":"e@x","private_key":"k"'), "braces left out when copying");
   assertEquals(parseServiceAccount('"just words"'), null);
 });
+
+import { channelFor } from "../fcm.ts";
+Deno.test("each notification kind goes to a high-importance channel", () => {
+  assertEquals(channelFor("message"), "messages");
+  assertEquals(channelFor("announcement"), "announcements");
+  for (const k of ["request", "match", "suggestions", "trial_24h", "ticket_update", "moderation"]) assertEquals(channelFor(k), "updates", k);
+});

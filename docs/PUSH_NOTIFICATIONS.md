@@ -24,3 +24,16 @@ When a message is stored, a database trigger (pg_net) calls the `push-message` f
 sees the content. Needs the same Firebase setup as above plus two private settings (already set on the live
 project): `push_webhook_url` and `push_webhook_secret` in `app_private_settings`, and the function secret
 `PUSH_WEBHOOK_SECRET` (same value). With the app open, messages arrive live through realtime and no notification is shown.
+
+## What gets a phone notification
+| Event | Notification text | Notes |
+|---|---|---|
+| New chat message | "Anil: Sent you a message" | Content is end-to-end encrypted, so the server cannot show it |
+| New request | "Meera sent you a request" | Free plan: "You have a new request" (the sender is never named) |
+| Request accepted | "You're connected with Meera" | Sent to the person who asked. Declines are silent |
+| Suggestions | "New people to meet" | Daily at 18:00 IST, only if Suggestions wasn't opened that day |
+| Moderation, tickets, trial reminders | their own title and text | Written to the in-app notification list first |
+| Dashboard message | your title and text | Sent from Messaging → Notifications |
+
+A blocked person is never notified (and cannot send a request). Pushes use three high-importance Android channels
+(Messages, Requests and updates, Announcements). `pg_cron` runs the daily suggestion nudge and hourly trial reminders.

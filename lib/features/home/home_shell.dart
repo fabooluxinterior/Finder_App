@@ -48,14 +48,11 @@ class _HomeShellState extends ConsumerState<HomeShell> {
       _tokenSub = push.tokenRefreshes.listen((t) async {
         if (await ref.read(pushEnabledProvider.future)) ref.read(backendProvider).registerPushToken(t).catchError((_) {});
       });
-      // The system shows no popup while the app is open, so show it here.
+      // With the app open there is no system notification and no banner: the list, badges and sound are enough.
       _pushSub = push.foregroundMessages.listen((m) {
         if (!mounted) return;
-        // Chat messages already appear live in the open app; only dashboard messages need a banner.
-        if (m.kind == 'message') return;
-        ref.invalidate(notificationsProvider);
+        if (m.kind != 'message') ref.invalidate(notificationsProvider);
         Fx.instance.received();
-        showSnack(context, m.body.isEmpty ? m.title : '${m.title}: ${m.body}', icon: PhosphorIconsFill.bell);
       });
     });
   }
