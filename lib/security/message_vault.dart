@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import '../models/message.dart';
@@ -10,6 +11,21 @@ class MessageVault {
   final SecureKv _kv;
   static const _maxPerThread = 500;
 
+  /// Every read-modify-write runs one after the other. Without this, a message arriving at the same moment
+  /// as "mark as read" could write back its older copy and bring the unread count back.
+  Future<void> _tail = Future.value();
+  Future<T> _serial<T>(Future<T> Function() f) {
+    final done = Completer<T>();
+    _tail = _tail.then((_) async {
+      try {
+        done.complete(await f());
+      } catch (e, st) {
+        done.completeError(e, st);
+      }
+    });
+    return done.future;
+  }
+
   String _key(String me, String peer) => 'vault:$me:$peer';
   String _seenKey(String me) => 'vault:$me:_seen';
 
@@ -19,7 +35,9 @@ class MessageVault {
     return (jsonDecode(raw) as List).map((e) => ChatMessage.fromJson((e as Map).cast<String, dynamic>())).toList();
   }
 
-  Future<List<ChatMessage>> upsert(String me, String peer, ChatMessage m) async {
+  Future<List<ChatMessage>> upsert(String me, String peer, ChatMessage m) => _serial(() => _upsert(me, peer, m));
+
+  Future<List<ChatMessage>> _upsert(String me, String peer, ChatMessage m) async {
     final list = await load(me, peer);
     final i = list.indexWhere((x) => x.id == m.id);
     if (i >= 0) {
@@ -33,7 +51,10 @@ class MessageVault {
     return trimmed;
   }
 
-  Future<List<ChatMessage>> update(String me, String peer, ChatMessage Function(ChatMessage) f) async {
+  Future<List<ChatMessage>> update(String me, String peer, ChatMessage Function(ChatMessage) f) =>
+      _serial(() => _update(me, peer, f));
+
+  Future<List<ChatMessage>> _update(String me, String peer, ChatMessage Function(ChatMessage) f) async {
     final list = (await load(me, peer)).map(f).toList();
     await _kv.write(_key(me, peer), jsonEncode(list.map((e) => e.toJson()).toList()));
     return list;

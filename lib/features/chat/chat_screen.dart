@@ -98,7 +98,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   void _markReadIfNeeded(List<ChatMessage> list, String? me) {
     if (_markingRead || !list.any((m) => m.receiverId == me && !m.isRead)) return;
     _markingRead = true;
-    _backend.markThreadRead(widget.peer.id).whenComplete(() => _markingRead = false);
+    _backend.markThreadRead(widget.peer.id).catchError((_) {}).whenComplete(() => _markingRead = false);
   }
 
   // ------------------------------------------- what the other person sees ----

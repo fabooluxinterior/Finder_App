@@ -1056,13 +1056,17 @@ class SupabaseBackend implements FinderBackend {
   });
 
   @override
-  Future<void> markThreadRead(String peerId) => _guard(() async {
+  Future<void> markThreadRead(String peerId) async {
     final me = _me;
-    await _db.from('messages').update({'is_read': true}).eq('receiver_id', me).eq('sender_id', peerId).eq('is_read', false);
+    // The unread count lives on this phone, so it is cleared first and always; telling the server (for the
+    // sender's double tick) is best effort and can't leave the count stuck.
     final list = await _vault.update(me, peerId, (m) => m.receiverId == me && !m.isRead ? m.copyWith(isRead: true) : m);
     _threads[peerId]?.add(list);
     _social.add(null);
-  });
+    try {
+      await _db.from('messages').update({'is_read': true}).eq('receiver_id', me).eq('sender_id', peerId).eq('is_read', false);
+    } catch (_) {}
+  }
 
   @override
   Future<String?> safetyNumber(String peerId) => _guard(() async {
