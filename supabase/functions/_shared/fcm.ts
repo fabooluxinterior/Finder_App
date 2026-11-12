@@ -7,16 +7,56 @@ export interface ServiceAccount {
   private_key: string;
 }
 
+/** Pasting often adds quote marks or escapes around the JSON; undo that so a correct key still works. */
+function unwrap(raw: string): string {
+  let v = raw.trim();
+  for (let i = 0; i < 2; i++) {
+    if (v.startsWith("{")) return v;
+    if (v.length > 1 && v.startsWith('"') && v.endsWith('"')) {
+      const inner = v.slice(1, -1).trim();
+      if (inner.startsWith("{")) {
+        // either a JSON-encoded string ("{\"type\":...}") or the plain JSON in quotes
+        try {
+          const decoded = JSON.parse(v);
+          if (typeof decoded === "string") { v = decoded.trim(); continue; }
+        } catch { /* plain JSON in quotes */ }
+        return inner;
+      }
+    }
+    break;
+  }
+  // The outer { } were left out when copying: the text starts at "type": and ends with a quote.
+  if (v.startsWith('"') && v.includes('"private_key"') && !v.startsWith('"{')) return `{${v}}`;
+  return v;
+}
+
 /** Parses the secret; null when it is missing or incomplete (reported as "Not configured"). */
 export function parseServiceAccount(raw: string | undefined | null): ServiceAccount | null {
   if (!raw) return null;
   try {
-    const j = JSON.parse(raw);
+    const j = JSON.parse(unwrap(raw));
     if (typeof j.project_id === "string" && typeof j.client_email === "string" && typeof j.private_key === "string") {
       return { project_id: j.project_id, client_email: j.client_email, private_key: j.private_key };
     }
   } catch { /* fall through */ }
   return null;
+}
+
+/** Why the secret can't be used, without ever revealing it ("" when it is fine). */
+export function diagnoseServiceAccount(raw: string | undefined | null): string {
+  if (!raw) return "FCM_SERVICE_ACCOUNT is not set.";
+  let j: Record<string, unknown>;
+  try {
+    j = JSON.parse(unwrap(raw));
+  } catch {
+    // Only the first and last three characters (punctuation/whitespace in a JSON file), to show the shape.
+    const u = unwrap(raw);
+    return `The value is not valid JSON (length ${raw.length}; after removing quotes it starts ${JSON.stringify(u.slice(0, 3))} and ends ${JSON.stringify(u.slice(-3))}). Paste the whole file, from { to }.`;
+  }
+  if (typeof j !== "object" || j === null) return "The value is JSON but not an object.";
+  const missing = ["project_id", "client_email", "private_key"].filter((k) => typeof j[k] !== "string");
+  if (missing.length) return `The JSON is missing: ${missing.join(", ")}.`;
+  return "";
 }
 
 const b64url = (data: Uint8Array | string): string => {

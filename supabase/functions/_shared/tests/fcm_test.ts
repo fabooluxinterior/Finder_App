@@ -63,3 +63,13 @@ Deno.test("chat push: shared secret is checked strictly", () => {
   assert(isUuid("11111111-2222-3333-4444-555555555555"));
   assert(!isUuid("x"));
 });
+
+Deno.test("service account: tolerates quote marks added when pasting", () => {
+  const plain = '{"project_id":"p","client_email":"e@x","private_key":"k"}';
+  assert(parseServiceAccount(plain));
+  assert(parseServiceAccount(`"${plain}"`), "plain JSON inside quote marks");
+  assert(parseServiceAccount(JSON.stringify(plain)), "JSON-encoded string");
+  assert(parseServiceAccount(`  \n${plain}\n `), "surrounding whitespace");
+  assert(parseServiceAccount('"project_id":"p","client_email":"e@x","private_key":"k"'), "braces left out when copying");
+  assertEquals(parseServiceAccount('"just words"'), null);
+});

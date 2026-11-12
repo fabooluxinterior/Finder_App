@@ -2,7 +2,7 @@
 // Sends "<name>: Sent you a message" to the receiver's registered phones so it appears in the
 // notification bar when the app is closed. Never includes message content (it is encrypted).
 import { admin } from "../_shared/auth.ts";
-import { fcmAccessToken, parseServiceAccount, sendFcm } from "../_shared/fcm.ts";
+import { diagnoseServiceAccount, fcmAccessToken, parseServiceAccount, sendFcm } from "../_shared/fcm.ts";
 import { handle, HttpError, json } from "../_shared/http.ts";
 import { isUuid, messageNotice, secretMatches } from "../_shared/push_message.ts";
 
@@ -16,7 +16,10 @@ Deno.serve((req) =>
     if (!isUuid(b.message_id)) throw new HttpError(400, "bad_request", "message_id required.");
 
     const sa = parseServiceAccount(Deno.env.get("FCM_SERVICE_ACCOUNT"));
-    if (!sa) return json(req, { sent: 0, push_configured: false });
+    if (!sa) {
+      console.error("push-message:", diagnoseServiceAccount(Deno.env.get("FCM_SERVICE_ACCOUNT")));
+      return json(req, { sent: 0, push_configured: false });
+    }
 
     const { data: m } = await admin.from("messages").select("sender_id, receiver_id").eq("id", b.message_id).maybeSingle();
     if (!m) return json(req, { sent: 0 });
