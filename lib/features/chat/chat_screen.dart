@@ -55,6 +55,14 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   /// Messages present when the thread opened don't animate; new ones do.
   Set<String>? _initialIds;
 
+  /// The message being edited (the composer holds its text until sent or cancelled).
+  ChatMessage? _editing;
+
+  /// "online" / "last seen …" for the other person, refreshed while this chat is open.
+  DateTime? _lastActive;
+  Timer? _presenceTimer;
+  bool _markingRead = false;
+
   @override
   void initState() {
     super.initState();
@@ -65,6 +73,32 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) _openChat.open(widget.peer.id);
     });
+    _refreshPresence();
+    _presenceTimer = Timer.periodic(const Duration(seconds: 30), (_) => _refreshPresence());
+  }
+
+  Future<void> _refreshPresence() async {
+    final t = await _backend.peerLastActive(widget.peer.id);
+    if (mounted && t != _lastActive) setState(() => _lastActive = t);
+  }
+
+  /// "online" when active in the last 2 minutes, otherwise "last seen …".
+  String? get _presenceText {
+    final t = _lastActive;
+    if (t == null) return null;
+    final ago = DateTime.now().difference(t);
+    if (ago.inSeconds < 120) return 'online';
+    final time = DateFormat('h:mm a').format(t);
+    if (DateUtils.isSameDay(t, DateTime.now())) return 'last seen today at $time';
+    if (DateUtils.isSameDay(t, DateTime.now().subtract(const Duration(days: 1)))) return 'last seen yesterday at $time';
+    return 'last seen ${DateFormat('d MMM').format(t)}';
+  }
+
+  /// Opening a chat marks everything in it as read (once per change; never loops).
+  void _markReadIfNeeded(List<ChatMessage> list, String? me) {
+    if (_markingRead || !list.any((m) => m.receiverId == me && !m.isRead)) return;
+    _markingRead = true;
+    _backend.markThreadRead(widget.peer.id).whenComplete(() => _markingRead = false);
   }
 
   // ------------------------------------------- what the other person sees ----
@@ -116,6 +150,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     Future.microtask(() => open.closeIf(id));
     _heartbeat?.cancel();
     _typingIdle?.cancel();
+    _presenceTimer?.cancel();
     if (_mine != PeerState.idle && _sharing) _backend.sendPeerState(id, PeerState.idle);
     _text.removeListener(_onTextChanged);
     _text.dispose();
@@ -155,10 +190,28 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     setState(() => _sending = true);
     try {
       _setMine(PeerState.idle);
-      await ref.read(backendProvider).sendText(widget.peer.id, text);
-      Fx.instance.sent();
+      final editing = _editing;
+      if (editing != null) {
+        if (ContactSanitizer.containsContactInfo(text) &&
+            thread.where((m) => m.senderId == me).length <= AppConfig.sanitizedOpeningMessages) {
+          showSnack(
+            context,
+            'Contact details can’t be added yet. Get to know each other first.',
+            icon: PhosphorIconsFill.shieldCheck,
+          );
+          return;
+        }
+        if (text != (editing.content ?? '').trim()) {
+          await ref.read(backendProvider).editMessage(widget.peer.id, editing.id, text);
+          Fx.instance.sent();
+        }
+        if (mounted) setState(() => _editing = null);
+      } else {
+        await ref.read(backendProvider).sendText(widget.peer.id, text);
+        Fx.instance.sent();
+        _scrollToLatest();
+      }
       _text.clear();
-      _scrollToLatest();
     } catch (e) {
       await _handleError(e);
     } finally {
@@ -242,6 +295,106 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     }
   }
 
+  void _startEdit(ChatMessage m) {
+    setState(() => _editing = m);
+    _text.text = m.content ?? '';
+    _text.selection = TextSelection.collapsed(offset: _text.text.length);
+  }
+
+  void _cancelEdit() {
+    setState(() => _editing = null);
+    _text.clear();
+  }
+
+  Future<void> _deleteMessage(ChatMessage m) async {
+    final c = context.fc;
+    final ok = await showModalBottomSheet<bool>(
+      context: context,
+      backgroundColor: c.surface,
+      showDragHandle: true,
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Delete this message?',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600, color: c.ink),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                'It is removed for both of you. ${widget.peer.firstName} will only see that a message was deleted.',
+                style: TextStyle(fontSize: 14.5, height: 1.4, color: c.ink3),
+              ),
+              const SizedBox(height: 16),
+              PillButton(label: 'Delete for everyone', onTap: () => Navigator.pop(ctx, true)),
+              const SizedBox(height: 8),
+              Center(
+                child: TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    if (ok != true || !mounted) return;
+    try {
+      await ref.read(backendProvider).deleteMessage(widget.peer.id, m.id);
+      Fx.instance.tap();
+    } catch (e) {
+      await _handleError(e);
+    }
+  }
+
+  /// Long-press: your own messages can be edited or deleted; anyone's can be picked to report.
+  Future<void> _messageActions(ChatMessage m, bool mine) async {
+    if (m.deleted) return;
+    Fx.instance.tap();
+    final c = context.fc;
+    final canEdit = mine && m.content != null && !m.isVoice && !m.isImage;
+    final choice = await showModalBottomSheet<String>(
+      context: context,
+      backgroundColor: c.surface,
+      showDragHandle: true,
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (canEdit)
+              ListTile(
+                leading: Icon(Icons.edit_outlined, color: c.ink2),
+                title: const Text('Edit'),
+                onTap: () => Navigator.pop(ctx, 'edit'),
+              ),
+            if (mine)
+              ListTile(
+                leading: Icon(PhosphorIconsRegular.trash, color: c.accent),
+                title: Text('Delete for everyone', style: TextStyle(color: c.accent)),
+                onTap: () => Navigator.pop(ctx, 'delete'),
+              ),
+            ListTile(
+              leading: Icon(PhosphorIconsRegular.flag, color: c.ink2),
+              title: const Text('Select to report'),
+              onTap: () => Navigator.pop(ctx, 'report'),
+            ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+    if (!mounted) return;
+    switch (choice) {
+      case 'edit':
+        _startEdit(m);
+      case 'delete':
+        await _deleteMessage(m);
+      case 'report':
+        _toggle(m);
+    }
+  }
+
   void _toggle(ChatMessage m) => setState(() => _selected.contains(m.id) ? _selected.remove(m.id) : _selected.add(m.id));
 
   Future<void> _reportSelected(List<ChatMessage> thread) async {
@@ -264,7 +417,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
 
     ref.listen(messagesProvider(widget.peer.id), (prev, next) {
       final list = next.value ?? const <ChatMessage>[];
-      if (list.any((m) => m.receiverId == me && !m.isRead)) backend.markThreadRead(widget.peer.id);
+      _markReadIfNeeded(list, me);
       final before = prev?.value ?? const <ChatMessage>[];
       if (before.isNotEmpty && list.length > before.length && list.last.senderId != me) Fx.instance.received();
       if (before.length < list.length) WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToLatest());
@@ -272,6 +425,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
 
     final thread = messages.value ?? const <ChatMessage>[];
     if (_initialIds == null && messages.hasValue) _initialIds = thread.map((m) => m.id).toSet();
+    // ref.listen only fires on changes, so messages that were already waiting are marked read here.
+    if (messages.hasValue) WidgetsBinding.instance.addPostFrameCallback((_) => mounted ? _markReadIfNeeded(thread, me) : null);
 
     final conn = ref.watch(connectionsProvider).value?.where((x) => x.profile.id == widget.peer.id).firstOrNull;
     final intro = conn?.introText == null
@@ -328,11 +483,11 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                                 ],
                               ),
                               Text(
-                                theirState == PeerState.idle ? widget.peer.city : theirState.header,
+                                theirState != PeerState.idle ? theirState.header : (_presenceText ?? widget.peer.city),
                                 style: TextStyle(
                                   fontSize: 13,
                                   height: 18 / 13,
-                                  color: theirState == PeerState.idle ? c.muted : c.accent,
+                                  color: theirState != PeerState.idle || _presenceText == 'online' ? c.accent : c.muted,
                                 ),
                               ),
                             ],
@@ -411,10 +566,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                         final picked = _selected.contains(m.id);
                         final bubble = GestureDetector(
                           behavior: HitTestBehavior.translucent,
-                          onLongPress: () {
-                            Fx.instance.tap();
-                            _toggle(m);
-                          },
+                          onLongPress: () => _selected.isEmpty ? _messageActions(m, mine) : _toggle(m),
                           onTap: _selected.isEmpty ? null : () => _toggle(m),
                           child: AnimatedContainer(
                             duration: Motion.of(context, Motion.fast),
@@ -459,13 +611,46 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                       onTooShort: _voiceTooShort,
                       onActive: _recordingActive,
                     )
-                  : _Composer(
+                  : Column(
                       key: const ValueKey('compose'),
-                      controller: _text,
-                      sending: _sending,
-                      onSend: () => _sendText(thread),
-                      onMic: _startRecording,
-                      onPhoto: _sendPhoto,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (_editing != null)
+                          Container(
+                            margin: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+                            padding: const EdgeInsets.fromLTRB(14, 8, 4, 8),
+                            decoration: BoxDecoration(
+                              color: c.surface,
+                              borderRadius: BorderRadius.circular(14),
+                              border: Border.all(color: c.hair),
+                            ),
+                            child: Row(
+                              children: [
+                                Icon(Icons.edit_outlined, size: 16, color: c.accent),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    'Editing message',
+                                    style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w600, color: c.ink2),
+                                  ),
+                                ),
+                                IconButton(
+                                  onPressed: _cancelEdit,
+                                  tooltip: 'Cancel edit',
+                                  icon: Icon(PhosphorIconsRegular.x, size: 18, color: c.muted),
+                                ),
+                              ],
+                            ),
+                          ),
+                        _Composer(
+                          controller: _text,
+                          sending: _sending,
+                          editing: _editing != null,
+                          onSend: () => _sendText(thread),
+                          onMic: _startRecording,
+                          onPhoto: _sendPhoto,
+                        ),
+                      ],
                     ),
             ),
           ),
@@ -508,13 +693,14 @@ class _Arrive extends StatelessWidget {
 
 class _Composer extends StatelessWidget {
   const _Composer({
-    super.key,
     required this.controller,
     required this.sending,
     required this.onSend,
     required this.onMic,
     required this.onPhoto,
+    this.editing = false,
   });
+  final bool editing;
   final TextEditingController controller;
   final bool sending;
   final VoidCallback onSend;
@@ -530,14 +716,14 @@ class _Composer extends StatelessWidget {
       child: ValueListenableBuilder<TextEditingValue>(
         valueListenable: controller,
         builder: (_, value, _) {
-          final hasText = value.text.trim().isNotEmpty;
+          final hasText = editing || value.text.trim().isNotEmpty;
           return Row(
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
               Padding(
                 padding: const EdgeInsets.only(bottom: 2),
                 child: IconButton(
-                  onPressed: sending ? null : onPhoto,
+                  onPressed: sending || editing ? null : onPhoto,
                   tooltip: 'Send a photo',
                   icon: Icon(PhosphorIconsRegular.image, size: 26, color: c.ink2),
                 ),
@@ -632,6 +818,36 @@ class _Bubble extends StatelessWidget {
     final time = DateFormat('h:mm a').format(message.createdAt);
     final fg = mine ? c.paper : c.ink;
     final meta = mine ? c.paper.withValues(alpha: 0.6) : c.muted;
+    if (message.deleted) {
+      // Nothing of the original is kept: a dim line in its place.
+      return Align(
+        alignment: mine ? Alignment.centerRight : Alignment.centerLeft,
+        child: Container(
+          margin: EdgeInsets.only(top: 3, bottom: tail ? 7 : 2),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+          decoration: BoxDecoration(
+            border: Border.all(color: c.hair),
+            borderRadius: BorderRadius.circular(20),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(PhosphorIconsRegular.prohibit, size: 14, color: c.muted.withValues(alpha: 0.7)),
+              const SizedBox(width: 6),
+              Text(
+                'Message deleted',
+                style: TextStyle(fontSize: 14, fontStyle: FontStyle.italic, color: c.muted.withValues(alpha: 0.75)),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                time,
+                style: TextStyle(fontFamily: 'Geist', color: c.muted.withValues(alpha: 0.6), fontSize: 11),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
     return Align(
       alignment: mine ? Alignment.centerRight : Alignment.centerLeft,
       child: ConstrainedBox(
@@ -670,6 +886,13 @@ class _Bubble extends StatelessWidget {
               Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
+                  if (message.edited) ...[
+                    Text(
+                      'edited',
+                      style: TextStyle(fontFamily: 'Geist', color: meta, fontSize: 11, fontStyle: FontStyle.italic),
+                    ),
+                    const SizedBox(width: 6),
+                  ],
                   Text(
                     time,
                     style: TextStyle(fontFamily: 'Geist', color: meta, fontSize: 11),

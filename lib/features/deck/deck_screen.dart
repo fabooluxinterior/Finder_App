@@ -202,7 +202,7 @@ class _DeckScreenState extends ConsumerState<DeckScreen> {
                             action: 'Try again',
                             onAction: _reload,
                           )
-                        : const SizedBox.shrink())
+                        : const _DeckSkeleton())
                   : _exhausted
                   ? _Empty(
                       icon: PhosphorIconsRegular.sparkle,
@@ -277,6 +277,65 @@ class _Empty extends StatelessWidget {
             const SizedBox(height: 20),
             PillButton(label: action, dark: false, expand: false, height: 46, onTap: onAction),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Shown while profiles load, instead of an empty screen.
+class _DeckSkeleton extends StatefulWidget {
+  const _DeckSkeleton();
+
+  @override
+  State<_DeckSkeleton> createState() => _DeckSkeletonState();
+}
+
+class _DeckSkeletonState extends State<_DeckSkeleton> with SingleTickerProviderStateMixin {
+  late final AnimationController _pulse = AnimationController(vsync: this, duration: const Duration(milliseconds: 1100))
+    ..repeat(reverse: true);
+
+  @override
+  void dispose() {
+    _pulse.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.fc;
+    return Semantics(
+      label: 'Loading profiles',
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(12, 0, 12, 90),
+        child: AnimatedBuilder(
+          animation: _pulse,
+          builder: (_, _) => Container(
+            decoration: BoxDecoration(
+              color: Color.lerp(c.surface, c.hair, _pulse.value * 0.6),
+              borderRadius: BorderRadius.circular(28),
+              border: Border.all(color: c.hair),
+            ),
+            alignment: Alignment.bottomLeft,
+            padding: const EdgeInsets.all(22),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  width: 150,
+                  height: 26,
+                  decoration: BoxDecoration(color: c.hair, borderRadius: BorderRadius.circular(8)),
+                ),
+                const SizedBox(height: 12),
+                Container(
+                  width: 220,
+                  height: 14,
+                  decoration: BoxDecoration(color: c.hair, borderRadius: BorderRadius.circular(7)),
+                ),
+              ],
+            ),
+          ),
         ),
       ),
     );

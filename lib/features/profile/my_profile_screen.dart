@@ -314,8 +314,8 @@ class _MyProfileScreenState extends ConsumerState<MyProfileScreen> {
                 ),
                 _Row(
                   icon: PhosphorIconsRegular.chatCircle,
-                  title: 'Show when I’m typing',
-                  subtitle: 'Lets people you chat with see typing, recording and photos being sent',
+                  title: 'Show when I’m typing and online',
+                  subtitle: 'Lets people you chat with see typing, recording, photos, and when you are online or last seen',
                   trailing: Switch(
                     value: ref.watch(sharePresenceProvider).value ?? true,
                     onChanged: (v) => ref.read(sharePresenceProvider.notifier).set(v),

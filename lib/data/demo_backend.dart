@@ -1014,6 +1014,8 @@ class DemoBackend implements FinderBackend {
                       ? '📷 Photo'
                       : last.isVoice
                       ? '🎤 Voice note'
+                      : last.deleted
+                      ? 'Message deleted'
                       : last.content),
             unread: thread.where((m) => m.receiverId == meId && !m.isRead).length,
             introPromptId: r.introPromptId,
@@ -1238,6 +1240,48 @@ class DemoBackend implements FinderBackend {
     _social.add(null);
   }
 
+  void _replace(String peerId, String id, ChatMessage Function(ChatMessage) f) {
+    final t = _threads[peerId];
+    if (t == null) return;
+    for (var i = 0; i < t.length; i++) {
+      if (t[i].id == id) t[i] = f(t[i]);
+    }
+    _threadCtl[peerId]?.add(List.unmodifiable(t));
+    _social.add(null);
+  }
+
+  ChatMessage _mineOrThrow(String peerId, String id) {
+    final m = (_threads[peerId] ?? const <ChatMessage>[])
+        .where((x) => x.id == id && x.senderId == meId && !x.deleted)
+        .firstOrNull;
+    if (m == null) throw const AppException(AppErrorCode.invalidInput, 'That message can’t be changed.');
+    return m;
+  }
+
+  @override
+  Future<void> editMessage(String peerId, String messageId, String text) async {
+    final t = text.trim();
+    if (t.isEmpty) throw const AppException(AppErrorCode.invalidInput, 'Write something first.');
+    final m = _mineOrThrow(peerId, messageId);
+    if (m.content == null || m.isVoice || m.isImage) {
+      throw const AppException(AppErrorCode.invalidInput, 'Only text messages can be edited.');
+    }
+    _replace(peerId, messageId, (x) => x.withEditedText(t));
+  }
+
+  @override
+  Future<void> deleteMessage(String peerId, String messageId) async {
+    _mineOrThrow(peerId, messageId);
+    _replace(peerId, messageId, (x) => x.asDeleted());
+  }
+
+  @override
+  Future<void> touchPresence() async {}
+
+  @override
+  Future<DateTime?> peerLastActive(String peerId) async =>
+      _connected(meId, peerId) ? DateTime.now().subtract(Duration(minutes: peerId.hashCode.abs() % 3 == 0 ? 0 : 47)) : null;
+
   @override
   Future<void> sendText(String peerId, String text) async {
     if (!_hasAccess) throw const AppException(AppErrorCode.subscriptionRequired, 'Messaging is part of Fast-Track');
@@ -1296,15 +1340,7 @@ class DemoBackend implements FinderBackend {
     for (var i = 0; i < t.length; i++) {
       final m = t[i];
       if (m.receiverId == meId && !m.isRead) {
-        t[i] = ChatMessage(
-          id: m.id,
-          senderId: m.senderId,
-          receiverId: m.receiverId,
-          content: m.content,
-          localAudioPath: m.localAudioPath,
-          isRead: true,
-          createdAt: m.createdAt,
-        );
+        t[i] = m.copyWith(isRead: true);
         changed = true;
       }
     }

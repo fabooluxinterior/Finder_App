@@ -1,14 +1,10 @@
-import 'dart:typed_data';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/errors.dart';
 import '../../core/feedback.dart';
-import '../../core/image_optimizer.dart';
 import '../../core/phosphor.dart';
 import '../../core/theme.dart';
-import '../../core/widgets.dart';
 import '../../models/support.dart';
 import '../../providers.dart';
 import '../profile_builder/choice_sheet.dart' show TagChip;
@@ -16,9 +12,9 @@ import 'my_tickets_screen.dart';
 
 final _supportEmailProvider = FutureProvider.autoDispose<String?>((ref) => ref.watch(backendProvider).supportEmail());
 
-/// Contact support: category, subject, description and an optional
-/// screenshot (compressed on the device). The signed-in account and its
-/// registered email are attached by the server.
+/// Contact support, laid out as a chat. Vouby Help asks what the problem is, you answer, and the
+/// request goes to the team. Nothing here answers for the team: a person reads every request and
+/// replies afterwards (by email, or in My tickets), the same as before. No attachments.
 class ContactSupportScreen extends ConsumerStatefulWidget {
   const ContactSupportScreen({super.key, this.category});
   final SupportCategory? category;
@@ -27,170 +23,277 @@ class ContactSupportScreen extends ConsumerStatefulWidget {
   ConsumerState<ContactSupportScreen> createState() => _ContactSupportScreenState();
 }
 
+class _Line {
+  const _Line({required this.mine, required this.text});
+  final bool mine;
+  final String text;
+}
+
+enum _Step { category, describe, sending, done }
+
 class _ContactSupportScreenState extends ConsumerState<ContactSupportScreen> {
-  late SupportCategory? _category = widget.category;
-  final _subject = TextEditingController();
-  final _description = TextEditingController();
-  Uint8List? _shot;
-  bool _busy = false;
-  String? _error;
+  final _lines = <_Line>[];
+  final _input = TextEditingController();
+  final _scroll = ScrollController();
+  final _focus = FocusNode();
+  _Step _step = _Step.category;
+  SupportCategory? _category;
+  SupportTicket? _ticket;
+
+  @override
+  void initState() {
+    super.initState();
+    _lines.add(const _Line(mine: false, text: 'Hi, this is Vouby Help. What do you need help with?'));
+    final preset = widget.category;
+    if (preset != null) _pick(preset);
+  }
 
   @override
   void dispose() {
-    _subject.dispose();
-    _description.dispose();
+    _input.dispose();
+    _scroll.dispose();
+    _focus.dispose();
     super.dispose();
   }
 
-  Future<void> _pickShot() async {
-    try {
-      final raw = await ref.read(mediaProvider).pickOriginalPhoto();
-      if (raw == null) return;
-      final img = await ImageOptimizer.optimize(raw);
-      if (mounted) setState(() => _shot = img.bytes);
-    } catch (e) {
-      if (mounted) showSnack(context, 'Couldn’t use that image: $e', icon: PhosphorIconsFill.warningCircle);
-    }
+  void _add(_Line l) {
+    setState(() => _lines.add(l));
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_scroll.hasClients) {
+        _scroll.animateTo(_scroll.position.maxScrollExtent, duration: Motion.of(context, Motion.medium), curve: Motion.easeOut);
+      }
+    });
   }
 
-  Future<void> _submit() async {
+  void _pick(SupportCategory cat) {
+    Fx.instance.tap();
+    _category = cat;
+    _add(_Line(mine: true, text: cat.label));
+    _add(
+      const _Line(
+        mine: false,
+        text: 'Thanks. Tell us what happened, in your own words. Please don’t include passwords or one-time codes.',
+      ),
+    );
+    setState(() => _step = _Step.describe);
+    WidgetsBinding.instance.addPostFrameCallback((_) => _focus.requestFocus());
+  }
+
+  static String _subject(SupportCategory cat, String text) {
+    final first = text.trim().split(RegExp(r'[\n.!?]')).first.trim();
+    final s = first.length >= 3 ? first : cat.label;
+    return s.length > 100 ? '${s.substring(0, 97)}...' : s;
+  }
+
+  Future<void> _send() async {
     final cat = _category;
-    final problem = cat == null ? 'Choose a category.' : validateTicket(subject: _subject.text, description: _description.text);
+    final text = _input.text.trim();
+    if (cat == null || _step != _Step.describe) return;
+    final subject = _subject(cat, text);
+    final problem = validateTicket(subject: subject, description: text);
     if (problem != null) {
-      setState(() => _error = problem);
+      _add(_Line(mine: false, text: problem));
       return;
     }
-    setState(() {
-      _busy = true;
-      _error = null;
-    });
+    _input.clear();
+    _add(_Line(mine: true, text: text));
+    setState(() => _step = _Step.sending);
     try {
-      final t = await ref
-          .read(backendProvider)
-          .submitSupportTicket(category: cat!, subject: _subject.text, description: _description.text, screenshotWebp: _shot);
+      final t = await ref.read(backendProvider).submitSupportTicket(category: cat, subject: subject, description: text);
       if (!mounted) return;
       Fx.instance.request();
-      await showDialog<void>(
-        context: context,
-        builder: (c) => AlertDialog(
-          icon: Icon(PhosphorIconsFill.checkCircle, color: context.fc.ok, size: 36),
-          title: const Text('Request received'),
-          content: Text(
-            'Your ticket number is ${t.ticketNo}. '
-            '${t.email == null ? 'We’ll reply here' : 'We’ll reply to ${t.email}'} and you can follow the status in My tickets.',
-          ),
-          actions: [TextButton(onPressed: () => Navigator.pop(c), child: const Text('OK'))],
+      _ticket = t;
+      final email = t.email;
+      _add(
+        _Line(
+          mine: false,
+          text:
+              'Your request is with our team. Ticket number: ${t.ticketNo}. A person reads every request and replies '
+              '${email == null ? 'in My tickets' : 'to $email'}. It isn’t instant, usually within a day or two.',
         ),
       );
-      if (!mounted) return;
-      Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const MyTicketsScreen()));
+      setState(() => _step = _Step.done);
     } on AppException catch (e) {
-      if (mounted) setState(() => _error = e.message);
-    } finally {
-      if (mounted) setState(() => _busy = false);
+      if (!mounted) return;
+      _input.text = text;
+      _add(_Line(mine: false, text: '${e.message} Your message is still in the box. Tap send to try again.'));
+      setState(() => _step = _Step.describe);
     }
   }
 
   @override
   Widget build(BuildContext context) {
     final c = context.fc;
-    final email = ref.watch(_supportEmailProvider).value;
     return Scaffold(
-      appBar: AppBar(title: const Text('Contact support')),
-      body: ListView(
-        padding: const EdgeInsets.fromLTRB(20, 8, 20, 40),
-        children: [
-          Text(
-            'Tell us what’s going on. A person from the Vouby team reads every request.',
-            style: TextStyle(fontSize: 15, height: 1.45, color: c.ink3),
-          ),
-          const SectionLabel('Category', padding: EdgeInsets.fromLTRB(2, 20, 2, 10)),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              for (final s in SupportCategory.values)
-                TagChip(label: s.label, selected: _category == s, onTap: () => setState(() => _category = s)),
-            ],
-          ),
-          const SizedBox(height: 18),
-          TextField(
-            controller: _subject,
-            maxLength: 120,
-            textCapitalization: TextCapitalization.sentences,
-            decoration: const InputDecoration(labelText: 'Subject'),
-          ),
-          const SizedBox(height: 8),
-          TextField(
-            controller: _description,
-            maxLength: 4000,
-            minLines: 5,
-            maxLines: 10,
-            textCapitalization: TextCapitalization.sentences,
-            decoration: const InputDecoration(
-              labelText: 'Describe the issue',
-              alignLabelWithHint: true,
-              helperText: 'Don’t include passwords or one-time codes.',
+      appBar: AppBar(
+        titleSpacing: 0,
+        title: Row(
+          children: [
+            Container(
+              width: 36,
+              height: 36,
+              decoration: BoxDecoration(color: c.accent, shape: BoxShape.circle),
+              child: Icon(PhosphorIconsFill.lifebuoy, size: 20, color: c.paper),
             ),
-          ),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(
-                child: OutlinedButton.icon(
-                  onPressed: _busy ? null : _pickShot,
-                  icon: Icon(_shot == null ? PhosphorIconsRegular.image : PhosphorIconsFill.image, size: 18),
-                  label: Text(_shot == null ? 'Attach a screenshot (optional)' : 'Screenshot attached'),
-                ),
-              ),
-              if (_shot != null)
-                IconButton(
-                  tooltip: 'Remove screenshot',
-                  onPressed: () => setState(() => _shot = null),
-                  icon: Icon(PhosphorIconsRegular.x, size: 18, color: c.muted),
-                ),
-            ],
-          ),
-          if (_shot != null)
-            Padding(
-              padding: const EdgeInsets.only(top: 10),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(14),
-                child: Image.memory(_shot!, height: 160, fit: BoxFit.cover),
-              ),
-            ),
-          const SizedBox(height: 16),
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: c.surface,
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: c.hair),
-            ),
-            child: Row(
+            const SizedBox(width: 10),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(PhosphorIconsRegular.envelopeSimple, size: 18, color: c.ink2),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Text(
-                    email == null ? 'We’ll reply in the app (My tickets).' : 'We’ll reply to $email',
-                    style: TextStyle(fontSize: 14, color: c.ink2),
-                  ),
+                const Text('Vouby Help', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600)),
+                Text(
+                  ref.watch(_supportEmailProvider).value == null ? 'Replies in My tickets' : 'Replies by email',
+                  style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w400, color: c.muted),
                 ),
               ],
             ),
+          ],
+        ),
+      ),
+      body: Column(
+        children: [
+          Expanded(
+            child: ListView(
+              controller: _scroll,
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+              children: [
+                for (final l in _lines) _Bubble(line: l),
+                if (_step == _Step.category)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 4, bottom: 4),
+                    child: Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        for (final s in SupportCategory.values) TagChip(label: s.label, selected: false, onTap: () => _pick(s)),
+                      ],
+                    ),
+                  ),
+                if (_step == _Step.sending)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 6),
+                    child: Align(
+                      alignment: Alignment.centerLeft,
+                      child: SizedBox.square(dimension: 18, child: CircularProgressIndicator(strokeWidth: 2, color: c.muted)),
+                    ),
+                  ),
+                if (_step == _Step.done)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 10),
+                    child: Align(
+                      alignment: Alignment.centerLeft,
+                      child: OutlinedButton(
+                        onPressed: () =>
+                            Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const MyTicketsScreen())),
+                        child: Text(_ticket == null ? 'My tickets' : 'View my tickets'),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
           ),
-          if (_error != null)
-            Padding(
-              padding: const EdgeInsets.only(top: 12),
-              child: Text(
-                _error!,
-                style: TextStyle(color: c.accent, fontWeight: FontWeight.w600),
+          SafeArea(
+            top: false,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(12, 6, 12, 12),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: _input,
+                      focusNode: _focus,
+                      enabled: _step == _Step.describe,
+                      minLines: 1,
+                      maxLines: 6,
+                      maxLength: 4000,
+                      textCapitalization: TextCapitalization.sentences,
+                      decoration: InputDecoration(
+                        hintText: switch (_step) {
+                          _Step.category => 'Choose a topic above',
+                          _Step.describe => 'Describe what happened',
+                          _Step.sending => 'Sending…',
+                          _Step.done => 'Request sent',
+                        },
+                        counterText: '',
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 15),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(26),
+                          borderSide: BorderSide(color: c.hair),
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(26),
+                          borderSide: BorderSide(color: c.hair),
+                        ),
+                        disabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(26),
+                          borderSide: BorderSide(color: c.hair),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(26),
+                          borderSide: BorderSide(color: c.ink3),
+                        ),
+                      ),
+                      onSubmitted: (_) => _send(),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  IconButton.filled(
+                    onPressed: _step == _Step.describe ? _send : null,
+                    tooltip: 'Send',
+                    style: IconButton.styleFrom(
+                      backgroundColor: c.accent,
+                      foregroundColor: c.paper,
+                      fixedSize: const Size(52, 52),
+                    ),
+                    icon: const Icon(Icons.arrow_upward_rounded, size: 22),
+                  ),
+                ],
               ),
             ),
-          const SizedBox(height: 20),
-          PillButton(label: 'Send request', busy: _busy, onTap: _submit),
+          ),
         ],
+      ),
+    );
+  }
+}
+
+class _Bubble extends StatelessWidget {
+  const _Bubble({required this.line});
+  final _Line line;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.fc;
+    final mine = line.mine;
+    return TweenAnimationBuilder<double>(
+      tween: Tween(begin: 0, end: 1),
+      duration: Motion.of(context, const Duration(milliseconds: 200)),
+      curve: Curves.easeOutCubic,
+      builder: (_, v, child) => Opacity(
+        opacity: v,
+        child: Transform.translate(offset: Offset(0, 6 * (1 - v)), child: child),
+      ),
+      child: Align(
+        alignment: mine ? Alignment.centerRight : Alignment.centerLeft,
+        child: ConstrainedBox(
+          constraints: BoxConstraints(maxWidth: MediaQuery.sizeOf(context).width * 0.78),
+          child: Container(
+            margin: const EdgeInsets.symmetric(vertical: 4),
+            padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 11),
+            decoration: BoxDecoration(
+              color: mine ? c.accent : c.surface,
+              border: mine ? null : Border.all(color: c.hair),
+              borderRadius: BorderRadius.only(
+                topLeft: const Radius.circular(20),
+                topRight: const Radius.circular(20),
+                bottomLeft: Radius.circular(mine ? 20 : 6),
+                bottomRight: Radius.circular(mine ? 6 : 20),
+              ),
+            ),
+            child: Text(line.text, style: TextStyle(fontSize: 15.5, height: 1.4, color: mine ? c.paper : c.ink)),
+          ),
+        ),
       ),
     );
   }

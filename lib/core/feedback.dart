@@ -64,7 +64,17 @@ class Fx {
     _play('sent');
   }
 
-  void received() => _play('received');
+  DateTime? _lastReceived;
+
+  /// One sound per incoming message: the chat, the home screen and a push can all notice the same
+  /// message, so calls within 1.5 s of the last one are ignored.
+  void received() {
+    final now = DateTime.now();
+    final last = _lastReceived;
+    if (last != null && now.difference(last) < const Duration(milliseconds: 1500)) return;
+    _lastReceived = now;
+    _play('received');
+  }
 
   void unlock() {
     HapticFeedback.mediumImpact();

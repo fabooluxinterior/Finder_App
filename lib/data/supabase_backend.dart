@@ -202,6 +202,14 @@ class SupabaseBackend implements FinderBackend {
               acked.add(r['message_id'] as String);
               continue; // duplicate / replayed payload
             }
+            if (p.isControl) {
+              // An edit or a delete of an earlier message: only its own sender may change it.
+              final list = await _applyControl(me, peer, sender, p);
+              _threads[peer]?.add(list);
+              touched.add(peer);
+              acked.add(r['message_id'] as String);
+              continue;
+            }
             msg = ChatMessage(
               id: m['id'] as String,
               senderId: sender,
@@ -232,6 +240,17 @@ class SupabaseBackend implements FinderBackend {
         if (rows.length == 100) unawaited(_drain());
       })
       .catchError((_) {});
+
+  /// Applies an edit or delete to the local copy of the thread. Ignored unless [sender] wrote the target.
+  Future<List<ChatMessage>> _applyControl(String me, String peer, String sender, SecurePayload p) {
+    final target = p.editTarget ?? p.deleteTarget!;
+    return _vault.update(me, peer, (x) {
+      if (x.id != target || x.senderId != sender || x.deleted) return x;
+      if (p.deleteTarget != null) return x.asDeleted();
+      if (x.content == null || x.isVoice || x.isImage) return x;
+      return x.withEditedText(p.text ?? '');
+    });
+  }
 
   Future<void> _onReadReceipt(Map<String, dynamic> row) async {
     if (row['is_read'] != true) return;
@@ -532,7 +551,14 @@ class SupabaseBackend implements FinderBackend {
 
   @override
   Future<List<PublicProfile>> fetchFeed() => _guard(() async {
-    final rows = await _db.rpc('get_feed', params: {'p_limit': 20}) as List;
+    // A stalled connection must never leave the deck loading forever: give up after 12 s and try once more.
+    Future<List> load() async => await _db.rpc('get_feed', params: {'p_limit': 20}).timeout(const Duration(seconds: 12)) as List;
+    List rows;
+    try {
+      rows = await load();
+    } on TimeoutException {
+      rows = await load();
+    }
     return rows.cast<Map<String, dynamic>>().map((r) => PublicProfile.fromFeedRow(r, resolve: _mediaUrl)).toList();
   });
 
@@ -612,6 +638,8 @@ class SupabaseBackend implements FinderBackend {
                     ? '📷 Photo'
                     : last.isVoice
                     ? '🎤 Voice note'
+                    : last.deleted
+                    ? 'Message deleted'
                     : last.content),
           unread: thread.where((m) => m.receiverId == me && !m.isRead).length,
           introPromptId: r['intro_prompt_id'] as String?,
@@ -865,6 +893,74 @@ class SupabaseBackend implements FinderBackend {
     _threads[peerId]?.add(list);
     _social.add(null);
   });
+
+  Future<void> _sendControl(String peerId, SecurePayload payload, int kind) => _guard(() async {
+    await _ready();
+    final envelopes = await _engine.encryptFor(peerId, payload.encode());
+    await _db.rpc(
+      'send_message_control',
+      params: {
+        'p_receiver': peerId,
+        'p_client_msg_id': payload.clientId,
+        'p_sender_device': _engine.deviceId,
+        'p_envelopes': envelopes.map((e) => e.toJson()).toList(),
+        'p_kind': kind,
+      },
+    );
+    await _vault.markSeen(_me, _me, payload.clientId);
+  });
+
+  Future<ChatMessage> _mine(String peerId, String messageId) async {
+    final me = _me;
+    final m = (await _vault.load(me, peerId)).where((x) => x.id == messageId && x.senderId == me && !x.deleted).firstOrNull;
+    if (m == null) throw const AppException(AppErrorCode.invalidInput, 'That message can’t be changed.');
+    return m;
+  }
+
+  @override
+  Future<void> editMessage(String peerId, String messageId, String text) async {
+    final t = text.trim();
+    if (t.isEmpty) throw const AppException(AppErrorCode.invalidInput, 'Write something first.');
+    final m = await _mine(peerId, messageId);
+    if (m.content == null || m.isVoice || m.isImage) {
+      throw const AppException(AppErrorCode.invalidInput, 'Only text messages can be edited.');
+    }
+    await _sendControl(peerId, SecurePayload(clientId: _uuid.v4(), sentAt: DateTime.now(), editTarget: messageId, text: t), 1);
+    final list = await _vault.update(_me, peerId, (x) => x.id == messageId ? x.withEditedText(t) : x);
+    _threads[peerId]?.add(list);
+    _social.add(null);
+  }
+
+  @override
+  Future<void> deleteMessage(String peerId, String messageId) async {
+    final m = await _mine(peerId, messageId);
+    await _sendControl(peerId, SecurePayload(clientId: _uuid.v4(), sentAt: DateTime.now(), deleteTarget: messageId), 2);
+    final list = await _vault.update(_me, peerId, (x) => x.id == messageId ? x.asDeleted() : x);
+    _threads[peerId]?.add(list);
+    _social.add(null);
+    // Housekeeping: the encrypted file of a deleted voice note or photo is no longer needed.
+    try {
+      if (m.voice != null) await _db.storage.from('voice_notes').remove([m.voice!.path]);
+      if (m.image != null) await _db.storage.from('chat_images').remove([m.image!.path]);
+    } catch (_) {}
+  }
+
+  @override
+  Future<void> touchPresence() async {
+    try {
+      await _db.rpc('touch_presence');
+    } catch (_) {}
+  }
+
+  @override
+  Future<DateTime?> peerLastActive(String peerId) async {
+    try {
+      final r = await _db.rpc('peer_presence', params: {'p_peer': peerId});
+      return r == null ? null : DateTime.parse(r as String).toLocal();
+    } catch (_) {
+      return null;
+    }
+  }
 
   @override
   Future<void> sendText(String peerId, String text) =>

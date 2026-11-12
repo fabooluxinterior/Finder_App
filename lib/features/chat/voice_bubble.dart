@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:audioplayers/audioplayers.dart';
 
+import '../../models/security.dart' show VoicePlayback;
 import '../../data/voice_audio.dart';
 
 import 'package:flutter/material.dart';
@@ -33,8 +34,11 @@ class _VoiceBubbleState extends ConsumerState<VoiceBubble> {
   static const _candles = 34;
   static const _rates = [1.0, 1.5, 2.0];
 
-  final _player = speechPlayer();
+  // Created on the first play, not when the bubble is built: a long chat has many voice notes and
+  // every player holds a native audio resource.
+  AudioPlayer? _playerOrNull;
   final _subs = <StreamSubscription<dynamic>>[];
+  VoicePlayback? _playback; // decrypted once, kept so replaying never downloads again
   PlayerState _state = PlayerState.stopped;
   Duration _pos = Duration.zero;
   Duration _dur = Duration.zero;
@@ -49,28 +53,37 @@ class _VoiceBubbleState extends ConsumerState<VoiceBubble> {
     super.initState();
     final ms = widget.message.voice?.millis ?? 0;
     if (ms > 0) _dur = Duration(milliseconds: ms);
+  }
+
+  AudioPlayer get _player => _playerOrNull ??= _createPlayer();
+
+  AudioPlayer _createPlayer() {
+    final p = speechPlayer();
     _subs
       ..add(
-        _player.onPlayerStateChanged.listen((s) {
+        p.onPlayerStateChanged.listen((s) {
           if (mounted) setState(() => _state = s);
         }),
       )
       ..add(
-        _player.onPositionChanged.listen((p) {
-          if (mounted) setState(() => _pos = p);
+        p.onPositionChanged.listen((pos) {
+          if (mounted) setState(() => _pos = pos);
         }),
       )
       ..add(
-        _player.onDurationChanged.listen((d) {
+        p.onDurationChanged.listen((d) {
           if (mounted) setState(() => _dur = d);
         }),
       )
       ..add(
-        _player.onPlayerComplete.listen((_) {
+        p.onPlayerComplete.listen((_) {
           VoiceBubble.listened.add(widget.message.id);
+          // A finished clip has released its source: the next tap loads it again from memory.
+          _sourceSet = false;
           if (mounted) setState(() => _pos = Duration.zero);
         }),
       );
+    return p;
   }
 
   @override
@@ -79,35 +92,37 @@ class _VoiceBubbleState extends ConsumerState<VoiceBubble> {
     for (final s in _subs) {
       s.cancel();
     }
-    _player.dispose(); // leaving the chat stops playback
+    _playerOrNull?.dispose(); // leaving the chat stops playback
     super.dispose();
   }
 
   bool get _playing => _state == PlayerState.playing;
 
+  Future<void> _setSource() async {
+    _playback ??= await ref.read(backendProvider).voicePlayback(widget.message);
+    final playback = _playback!;
+    if (playback.bytes != null) {
+      await _player.setSource(BytesSource(playback.bytes!, mimeType: 'audio/mp4'));
+    } else {
+      final url = playback.url!;
+      final isRemote = url.startsWith('http') || url.startsWith('blob:');
+      await _player.setSource(isRemote ? UrlSource(url) : DeviceFileSource(url));
+    }
+    _sourceSet = true;
+  }
+
   Future<void> _toggle() async {
     if (_playing) {
-      await _player.pause();
+      try {
+        await _player.pause();
+      } catch (_) {}
       return;
     }
-    if (_failed) {
-      setState(() {
-        _failed = false;
-        _sourceSet = false;
-      });
-    }
+    if (_failed) setState(() => _failed = false);
     if (!_sourceSet) {
       setState(() => _loading = true);
       try {
-        final playback = await ref.read(backendProvider).voicePlayback(widget.message);
-        if (playback.bytes != null) {
-          await _player.setSource(BytesSource(playback.bytes!, mimeType: 'audio/mp4'));
-        } else {
-          final url = playback.url!;
-          final isRemote = url.startsWith('http') || url.startsWith('blob:');
-          await _player.setSource(isRemote ? UrlSource(url) : DeviceFileSource(url));
-        }
-        _sourceSet = true;
+        await _setSource();
       } catch (_) {
         if (mounted) setState(() => _failed = true);
       } finally {
@@ -115,20 +130,43 @@ class _VoiceBubbleState extends ConsumerState<VoiceBubble> {
       }
       if (!_sourceSet) return;
     }
-    if (_active != null && _active != this) await _active!._player.pause();
+    // Starting this one pauses any other; that other player may already be finished or gone.
+    final other = _active;
+    if (other != null && other != this) {
+      try {
+        await other._playerOrNull?.pause();
+      } catch (_) {}
+    }
     _active = this;
-    await _player.setPlaybackRate(_rates[_rate]);
-    await _player.resume();
+    try {
+      await _player.setPlaybackRate(_rates[_rate]);
+      await _player.resume();
+    } catch (_) {
+      // The player lost its source (finished, or the phone reclaimed it): load again and retry once.
+      try {
+        await _setSource();
+        await _player.setPlaybackRate(_rates[_rate]);
+        await _player.resume();
+      } catch (_) {
+        if (mounted) setState(() => _failed = true);
+      }
+    }
   }
 
   Future<void> _cycleSpeed() async {
     setState(() => _rate = (_rate + 1) % _rates.length);
-    if (_sourceSet) await _player.setPlaybackRate(_rates[_rate]);
+    if (_sourceSet) {
+      try {
+        await _player.setPlaybackRate(_rates[_rate]);
+      } catch (_) {}
+    }
   }
 
   Future<void> _seekTo(double f) async {
     if (!_sourceSet || _dur == Duration.zero) return;
-    await _player.seek(Duration(milliseconds: (f * _dur.inMilliseconds).round()));
+    try {
+      await _player.seek(Duration(milliseconds: (f * _dur.inMilliseconds).round()));
+    } catch (_) {}
   }
 
   static String _fmt(Duration d) => '${d.inMinutes}:${(d.inSeconds % 60).toString().padLeft(2, '0')}';

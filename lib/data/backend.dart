@@ -152,6 +152,18 @@ abstract class FinderBackend {
   Future<void> markThreadRead(String peerId);
   Future<VoicePlayback> voicePlayback(ChatMessage message);
 
+  /// Changes the text of a message you sent. The other person's copy is updated and marked "edited".
+  Future<void> editMessage(String peerId, String messageId, String text);
+
+  /// Deletes a message you sent from both phones; "Message deleted" stays in its place.
+  Future<void> deleteMessage(String peerId, String messageId);
+
+  /// Tells the server you are using the app (for "online" / "last seen"). Cheap and rate-limited server side.
+  Future<void> touchPresence();
+
+  /// When the other person was last active; null when unknown or not allowed.
+  Future<DateTime?> peerLastActive(String peerId);
+
   /// Sends a photo, end-to-end encrypted on this device (already compressed
   /// to WebP by the image optimizer). Needs chat access (Fast-Track or trial).
   Future<void> sendImage(String peerId, Uint8List webp, {required int width, required int height});

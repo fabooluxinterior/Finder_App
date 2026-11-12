@@ -80,6 +80,8 @@ class ChatMessage {
     this.localAudioPath,
     this.image,
     this.localImageUrl,
+    this.edited = false,
+    this.deleted = false,
   });
 
   /// Server message id (or a client id until confirmed).
@@ -99,6 +101,12 @@ class ChatMessage {
   final bool isRead;
   final DateTime createdAt;
 
+  /// The sender changed the text after sending.
+  final bool edited;
+
+  /// The sender deleted it for everyone: nothing of the original is kept.
+  final bool deleted;
+
   bool get isVoice => voice != null || localAudioPath != null;
 
   ChatMessage copyWith({String? id, bool? isRead}) => ChatMessage(
@@ -112,6 +120,30 @@ class ChatMessage {
     localImageUrl: localImageUrl,
     isRead: isRead ?? this.isRead,
     createdAt: createdAt,
+    edited: edited,
+    deleted: deleted,
+  );
+
+  /// The same message with new text, marked "edited".
+  ChatMessage withEditedText(String text) => ChatMessage(
+    id: id,
+    senderId: senderId,
+    receiverId: receiverId,
+    content: text,
+    isRead: isRead,
+    createdAt: createdAt,
+    edited: true,
+  );
+
+  /// Deleted for everyone: the content, voice note and photo reference are dropped.
+  ChatMessage asDeleted() => ChatMessage(
+    id: id,
+    senderId: senderId,
+    receiverId: receiverId,
+    content: null,
+    isRead: isRead,
+    createdAt: createdAt,
+    deleted: true,
   );
 
   Map<String, Object?> toJson() => {
@@ -123,6 +155,8 @@ class ChatMessage {
     if (image != null) 'img': image!.toJson(),
     'read': isRead,
     'at': createdAt.toUtc().toIso8601String(),
+    if (edited) 'ed': true,
+    if (deleted) 'del': true,
   };
 
   factory ChatMessage.fromJson(Map<String, dynamic> j) => ChatMessage(
@@ -134,6 +168,8 @@ class ChatMessage {
     image: j['img'] == null ? null : ImageRef.fromJson((j['img'] as Map).cast<String, dynamic>()),
     isRead: j['read'] as bool? ?? false,
     createdAt: DateTime.parse(j['at'] as String).toLocal(),
+    edited: j['ed'] as bool? ?? false,
+    deleted: j['del'] as bool? ?? false,
   );
 }
 
@@ -141,12 +177,29 @@ class ChatMessage {
 /// message id, bound into the encrypted payload so a relayed or duplicated
 /// envelope can be recognised and ignored.
 class SecurePayload {
-  const SecurePayload({required this.clientId, required this.sentAt, this.text, this.voice, this.image});
+  const SecurePayload({
+    required this.clientId,
+    required this.sentAt,
+    this.text,
+    this.voice,
+    this.image,
+    this.editTarget,
+    this.deleteTarget,
+  });
   final String clientId;
   final DateTime sentAt;
   final String? text;
   final VoiceRef? voice;
   final ImageRef? image;
+
+  /// Control payloads: change or delete an earlier message (its server id). Only honoured when they
+  /// come from that message's own sender. [text] carries the new text for an edit.
+  final String? editTarget;
+  final String? deleteTarget;
+  bool get isControl => editTarget != null || deleteTarget != null;
+
+  /// What an older app version shows for a control message (it has no idea what to do with it).
+  static const deleteFallbackText = 'This message was deleted.';
 
   Uint8List encode() => Uint8List.fromList(
     utf8.encode(
@@ -155,9 +208,18 @@ class SecurePayload {
         'id': clientId,
         'ts': sentAt.toUtc().toIso8601String(),
         // Older app versions only understand text/voice: give them a hint.
-        if (text != null) 'text': text else if (image != null) 'text': photoFallbackText,
+        if (deleteTarget != null)
+          'text': deleteFallbackText
+        else if (editTarget != null)
+          'text': 'Edited: $text'
+        else if (text != null)
+          'text': text
+        else if (image != null)
+          'text': photoFallbackText,
         if (voice != null) 'voice': voice!.toJson(),
         if (image != null) 'image': image!.toJson(),
+        if (editTarget != null) 'edit': {'t': editTarget, 'text': text},
+        if (deleteTarget != null) 'del': deleteTarget,
       }),
     ),
   );
@@ -165,10 +227,19 @@ class SecurePayload {
   factory SecurePayload.decode(Uint8List bytes) {
     final j = jsonDecode(utf8.decode(bytes)) as Map<String, dynamic>;
     if (j['v'] != 1) throw const FormatException('Unsupported payload version');
+    final edit = j['edit'] as Map?;
     return SecurePayload(
       clientId: j['id'] as String,
       sentAt: DateTime.parse(j['ts'] as String),
-      text: j['image'] != null && j['text'] == photoFallbackText ? null : j['text'] as String?,
+      editTarget: edit?['t'] as String?,
+      deleteTarget: j['del'] as String?,
+      text: edit != null
+          ? edit['text'] as String?
+          : j['del'] != null
+          ? null
+          : j['image'] != null && j['text'] == photoFallbackText
+          ? null
+          : j['text'] as String?,
       voice: j['voice'] == null ? null : VoiceRef.fromJson((j['voice'] as Map).cast<String, dynamic>()),
       image: j['image'] == null ? null : ImageRef.fromJson((j['image'] as Map).cast<String, dynamic>()),
     );

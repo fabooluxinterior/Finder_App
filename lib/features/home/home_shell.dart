@@ -32,14 +32,31 @@ class HomeShell extends ConsumerStatefulWidget {
   ConsumerState<HomeShell> createState() => _HomeShellState();
 }
 
-class _HomeShellState extends ConsumerState<HomeShell> {
+class _HomeShellState extends ConsumerState<HomeShell> with WidgetsBindingObserver {
   int _tab = 0;
+  Timer? _presenceTimer;
   StreamSubscription<PushNotice>? _pushSub;
   StreamSubscription<String>? _tokenSub;
+
+  /// "Online" / "last seen" for people in your chats: a quiet ping while the app is open, only when
+  /// "Show when I'm typing" (activity sharing) is on.
+  Future<void> _beat() async {
+    if (!mounted || WidgetsBinding.instance.lifecycleState != AppLifecycleState.resumed) return;
+    if (!(ref.read(sharePresenceProvider).value ?? true)) return;
+    await ref.read(backendProvider).touchPresence();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) _beat();
+  }
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _beat();
+    _presenceTimer = Timer.periodic(const Duration(seconds: 45), (_) => _beat());
     final push = ref.read(pushServiceProvider);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
@@ -76,6 +93,8 @@ class _HomeShellState extends ConsumerState<HomeShell> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _presenceTimer?.cancel();
     _pushSub?.cancel();
     _tokenSub?.cancel();
     super.dispose();
