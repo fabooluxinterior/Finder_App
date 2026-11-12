@@ -43,7 +43,7 @@ class RequestsScreen extends ConsumerWidget {
             slivers: [
               SliverToBoxAdapter(
                 child: Padding(
-                  padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
+                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -69,7 +69,7 @@ class RequestsScreen extends ConsumerWidget {
                 )
               else
                 SliverPadding(
-                  padding: EdgeInsets.fromLTRB(12, 16, 12, bottomBar + 16),
+                  padding: EdgeInsets.fromLTRB(16, 16, 16, bottomBar + 16),
                   sliver: SliverList.separated(
                     itemCount: incoming.value!.requests.length,
                     separatorBuilder: (_, _) => const SizedBox(height: 10),

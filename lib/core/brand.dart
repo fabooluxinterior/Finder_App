@@ -135,6 +135,10 @@ class VIcons {
   static const invite = 'M5 8a3.5 3.5 0 1 0 7 0a3.5 3.5 0 1 0-7 0M2 20a6.5 6.5 0 0 1 13 0M19 8v6M16 11h6';
   static const profile = 'M8 8a4 4 0 1 0 8 0a4 4 0 1 0-8 0M4 21a8 8 0 0 1 16 0';
   static const chat = 'M12 3.5a8.5 8.5 0 0 1 3.4 16.3L11.3 22.3a.6.6 0 0 1-.9-.4l-.6-2.6A8.5 8.5 0 0 1 12 3.5z';
+
+  /// The familiar rounded speech bubble (the Chats tab uses this).
+  static const chatBubble =
+      'M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z';
   static const chatV = 'M9 10.2c.6 2 1.6 4 2.8 4.2 1.2 0 2.5-2.3 3.2-4.6';
   static const cards =
       'M10 3h8a3 3 0 0 1 3 3v10a3 3 0 0 1-3 3M6 6h8a3 3 0 0 1 3 3v9a3 3 0 0 1-3 3H6a3 3 0 0 1-3-3V9a3 3 0 0 1 3-3z';
@@ -186,7 +190,7 @@ class _IconPainter extends CustomPainter {
 enum TabKind { discover, suggestions, requests, chats, you }
 
 /// Tab-bar icons: outline when idle; when active they fill in and cut their
-/// detail out, like the mark. The Chats tab becomes the logo itself.
+/// detail out, like the mark. The Chats tab uses the familiar speech-bubble icon.
 class TabIcon extends StatelessWidget {
   const TabIcon({super.key, required this.kind, required this.active, required this.color, this.size = 26, this.cutout});
 
@@ -249,22 +253,8 @@ class _TabPainter extends CustomPainter {
         } else {
           canvas.drawPath(_cached('M5 8a3.5 3.5 0 1 0 7 0a3.5 3.5 0 1 0-7 0M2 20a6.5 6.5 0 0 1 13 0M19 8v6M16 11h6'), stroke);
         }
-      case 2: // Chats: the same bubble with the v, outlined or filled (v cut out)
-        if (active) {
-          canvas.drawPath(_cached(VIcons.chat), fill);
-          canvas.drawPath(
-            _cached(VIcons.chatV),
-            Paint()
-              ..color = cutout
-              ..style = PaintingStyle.stroke
-              ..strokeWidth = 2
-              ..strokeCap = StrokeCap.round
-              ..strokeJoin = StrokeJoin.round,
-          );
-        } else {
-          canvas.drawPath(_cached(VIcons.chat), stroke);
-          canvas.drawPath(_cached(VIcons.chatV), stroke);
-        }
+      case 2: // Chats: the standard speech bubble, outlined or filled
+        canvas.drawPath(_cached(VIcons.chatBubble), active ? fill : stroke);
       case 4: // Suggestions: compass (needle cut out when active)
         if (active) {
           canvas.drawCircle(const Offset(12, 12), 10, fill);
