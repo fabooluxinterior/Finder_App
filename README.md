@@ -161,7 +161,7 @@ These rules and the security layer are covered by the SQL suites in `supabase/te
 
 ### Note on voice-note size
 
-45 s of AAC-LC at 32 kbps is about 176 KB, so it can't also stay under 120 KB. The recorder uses the requested 32 kbps / 45 s, and the `voice_notes` bucket limit is 192 KB. If the 120 KB cap matters more, set `AppConfig.voiceBitRate` to `20000` and the bucket limit to `122880`.
+45 s of AAC-LC at 32 kbps is about 176 KB, so it can't also stay under 120 KB. Voice notes now record at 64 kbps / 44.1 kHz mono (about 360 KB for 45 s) for clear speech, and the `voice_notes` bucket limit is 512 KB (migration 20261128). Older, smaller voice notes still play.
 
 ## Profile builder
 

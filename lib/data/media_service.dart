@@ -96,8 +96,11 @@ class VoiceRecorder {
         bitRate: AppConfig.voiceBitRate,
         sampleRate: AppConfig.voiceSampleRate,
         numChannels: 1,
-        noiseSuppress: true,
-        echoCancel: true,
+        // The phone's noise suppression and echo cancelling can chop speech into pieces; leave them
+        // off and let a gentle automatic gain keep quiet voices audible.
+        noiseSuppress: false,
+        echoCancel: false,
+        autoGain: true,
       ),
       path: path,
     );

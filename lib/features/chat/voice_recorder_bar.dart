@@ -2,6 +2,9 @@ import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:audioplayers/audioplayers.dart';
+
+import '../../data/voice_audio.dart';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
@@ -161,7 +164,7 @@ class _VoiceRecorderBarState extends State<VoiceRecorderBar> with WidgetsBinding
     final note = _note;
     if (note == null) return;
     if (_player == null) {
-      final p = AudioPlayer();
+      final p = speechPlayer();
       _player = p;
       _playerSubs
         ..add(

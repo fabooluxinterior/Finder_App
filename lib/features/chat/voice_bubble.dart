@@ -1,6 +1,9 @@
 import 'dart:async';
 
 import 'package:audioplayers/audioplayers.dart';
+
+import '../../data/voice_audio.dart';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -30,7 +33,7 @@ class _VoiceBubbleState extends ConsumerState<VoiceBubble> {
   static const _candles = 34;
   static const _rates = [1.0, 1.5, 2.0];
 
-  final _player = AudioPlayer();
+  final _player = speechPlayer();
   final _subs = <StreamSubscription<dynamic>>[];
   PlayerState _state = PlayerState.stopped;
   Duration _pos = Duration.zero;

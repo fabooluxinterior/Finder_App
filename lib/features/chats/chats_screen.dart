@@ -232,11 +232,21 @@ class _ChatRow extends StatelessWidget {
                       ],
                     ),
                     const SizedBox(height: 2),
-                    Text(
-                      locked ? 'Unlock with Fast-Track to read and reply' : preview,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(fontSize: 15, height: 21 / 15, color: unread && !locked ? c.ink : c.muted),
+                    AnimatedSwitcher(
+                      duration: Motion.of(context, const Duration(milliseconds: 160)),
+                      transitionBuilder: (child, anim) => FadeTransition(opacity: anim, child: child),
+                      layoutBuilder: (current, previous) =>
+                          Stack(alignment: Alignment.centerLeft, children: [...previous, ?current]),
+                      child: Align(
+                        key: ValueKey(locked ? 'locked' : preview),
+                        alignment: Alignment.centerLeft,
+                        child: Text(
+                          locked ? 'Unlock with Fast-Track to read and reply' : preview,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(fontSize: 15, height: 21 / 15, color: unread && !locked ? c.ink : c.muted),
+                        ),
+                      ),
                     ),
                   ],
                 ),

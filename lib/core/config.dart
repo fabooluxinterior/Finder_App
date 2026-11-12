@@ -37,8 +37,9 @@ class AppConfig {
 
   static const passHideDays = 7;
   static const voiceMaxSeconds = 45;
-  static const voiceBitRate = 32000;
-  static const voiceSampleRate = 22050;
+  // Clear speech: 64 kbps / 44.1 kHz mono AAC is about 360 KB for the full 45 s (bucket cap 512 KB).
+  static const voiceBitRate = 64000;
+  static const voiceSampleRate = 44100;
 
   /// Messages a sender writes into a thread before contact-info filtering relaxes.
   static const sanitizedOpeningMessages = 5;

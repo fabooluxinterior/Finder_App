@@ -428,7 +428,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                         return Column(
                           children: [
                             if (showDay) _DayChip(m.createdAt),
-                            _initialIds?.contains(m.id) ?? true ? bubble : _Arrive(key: ValueKey(m.id), child: bubble),
+                            _initialIds?.contains(m.id) ?? true
+                                ? bubble
+                                : _Arrive(key: ValueKey(m.id), mine: mine, child: bubble),
                           ],
                         );
                       },
@@ -484,19 +486,21 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   );
 }
 
-/// New messages rise 8 px and fade in (180 ms, ease-out).
+/// A new message eases in from its own side: 10 px sideways and 4 px up, a faint fade (160 ms).
+/// Kept deliberately small so a busy chat stays calm; skipped when the phone reduces motion.
 class _Arrive extends StatelessWidget {
-  const _Arrive({super.key, required this.child});
+  const _Arrive({super.key, required this.child, required this.mine});
   final Widget child;
+  final bool mine;
 
   @override
   Widget build(BuildContext context) => TweenAnimationBuilder<double>(
     tween: Tween(begin: 0, end: 1),
-    duration: Motion.of(context, Motion.fast),
-    curve: Motion.easeOut,
+    duration: Motion.of(context, const Duration(milliseconds: 160)),
+    curve: Curves.easeOutCubic,
     builder: (_, v, child) => Opacity(
-      opacity: v,
-      child: Transform.translate(offset: Offset(0, (1 - v) * 8), child: child),
+      opacity: 0.2 + 0.8 * v,
+      child: Transform.translate(offset: Offset((mine ? 10 : -10) * (1 - v), 4 * (1 - v)), child: child),
     ),
     child: child,
   );
