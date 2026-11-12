@@ -7,6 +7,7 @@ import 'app.dart';
 import 'core/feedback.dart';
 import 'core/config.dart';
 import 'data/demo_backend.dart';
+import 'data/local_notifier.dart';
 import 'data/purchases_service.dart';
 import 'data/push_service.dart';
 import 'data/supabase_backend.dart';
@@ -52,11 +53,13 @@ Future<void> main() async {
   );
   final backend = SupabaseBackend(Supabase.instance.client, kv: kv);
   final push = await FirebasePush.create();
+  final local = await AndroidLocalNotifier.create();
   runApp(
     ProviderScope(
       overrides: [
         backendProvider.overrideWithValue(backend),
         pushServiceProvider.overrideWithValue(push),
+        localNotifierProvider.overrideWithValue(local),
         // Real Google Play billing once the build has a RevenueCat key; until then the
         // server's closed-testing demo payment (nothing is charged).
         purchasesProvider.overrideWithValue(

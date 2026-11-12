@@ -41,10 +41,10 @@ class _HomeShellState extends ConsumerState<HomeShell> {
   void initState() {
     super.initState();
     final push = ref.read(pushServiceProvider);
-    if (!push.available) return;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       askForPushOnce(context, ref);
+      if (!push.available) return;
       _tokenSub = push.tokenRefreshes.listen((t) async {
         if (await ref.read(pushEnabledProvider.future)) ref.read(backendProvider).registerPushToken(t).catchError((_) {});
       });
@@ -58,6 +58,28 @@ class _HomeShellState extends ConsumerState<HomeShell> {
         showSnack(context, m.body.isEmpty ? m.title : '${m.title}: ${m.body}', icon: PhosphorIconsFill.bell);
       });
     });
+  }
+
+  /// A message arrived from someone whose chat isn't open: a banner while the app is
+  /// in front, a notification-bar alert when it is in the background.
+  Future<void> _announceNewMessages(List<Connection> before, List<Connection> now) async {
+    final open = ref.read(openChatProvider);
+    final unreadBefore = {for (final c in before) c.profile.id: c.unread};
+    final enabled = await ref.read(pushEnabledProvider.future);
+    for (final c in now) {
+      if (c.unread <= (unreadBefore[c.profile.id] ?? 0) || c.profile.id == open) continue;
+      if (WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed) {
+        if (!mounted) return;
+        final text = c.lastMessage;
+        showSnack(
+          context,
+          text == null || text.isEmpty ? '${c.profile.firstName} sent you a message' : '${c.profile.firstName}: $text',
+          icon: PhosphorIconsFill.chatCircle,
+        );
+      } else if (enabled) {
+        await ref.read(localNotifierProvider).showMessage(peerId: c.profile.id, name: c.profile.firstName);
+      }
+    }
   }
 
   @override
@@ -86,6 +108,7 @@ class _HomeShellState extends ConsumerState<HomeShell> {
           showSnack(context, 'You and ${c.profile.firstName} are connected', icon: PhosphorIconsFill.heart);
         }
       }
+      _announceNewMessages(before, now);
       final unreadBefore = before.fold<int>(0, (s, c) => s + c.unread);
       final unreadNow = now.fold<int>(0, (s, c) => s + c.unread);
       if (unreadNow > unreadBefore) Fx.instance.received();

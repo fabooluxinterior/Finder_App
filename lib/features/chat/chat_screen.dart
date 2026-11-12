@@ -52,7 +52,22 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   Set<String>? _initialIds;
 
   @override
+  void initState() {
+    super.initState();
+    // No alert for messages in the chat that is already open.
+    _openChat = ref.read(openChatProvider.notifier);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _openChat.open(widget.peer.id);
+    });
+  }
+
+  late final OpenChatNotifier _openChat;
+
+  @override
   void dispose() {
+    final open = _openChat;
+    final id = widget.peer.id;
+    Future.microtask(() => open.closeIf(id));
     _text.dispose();
     _scroll.dispose();
     _recorder.dispose();

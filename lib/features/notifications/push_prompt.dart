@@ -22,6 +22,7 @@ Future<void> askForPushOnce(BuildContext context, WidgetRef ref) async {
     await notifier.start();
     return;
   }
+  if (!ref.read(localNotifierProvider).available && !ref.read(pushServiceProvider).available) return;
   if (!context.mounted) return;
   final allow = await showModalBottomSheet<bool>(
     context: context,
@@ -42,7 +43,7 @@ Future<void> askForPushOnce(BuildContext context, WidgetRef ref) async {
               Text('Turn on notifications?', style: t.headlineSmall),
               const SizedBox(height: 8),
               Text(
-                'Get a notification on your phone when someone messages you, even when the app is closed. '
+                'Get a notification on your phone when someone messages you. '
                 'You can change this any time in You → Popup notifications.',
                 style: t.bodyMedium?.copyWith(color: c.ink2),
               ),
@@ -62,6 +63,7 @@ Future<void> askForPushOnce(BuildContext context, WidgetRef ref) async {
     await (await SharedPreferences.getInstance()).setBool(_askedKey, true);
   } catch (_) {}
   if (allow == true) {
+    await ref.read(localNotifierProvider).requestPermission();
     await notifier.start();
   } else {
     await notifier.set(false);

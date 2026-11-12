@@ -3,6 +3,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'data/backend.dart';
 import 'data/media_service.dart';
+import 'data/local_notifier.dart';
 import 'data/purchases_service.dart';
 import 'data/push_service.dart';
 import 'models/access.dart';
@@ -166,6 +167,21 @@ final accessStatusProvider = FutureProvider<AccessStatus>((ref) async {
 });
 
 final pushServiceProvider = Provider<PushService>((ref) => const NoopPush());
+
+/// Notification-bar alerts raised by the app itself (no Firebase needed).
+final localNotifierProvider = Provider<LocalNotifier>((ref) => const NoopLocalNotifier());
+
+/// The chat the user is looking at right now (no alert for messages in it).
+class OpenChatNotifier extends Notifier<String?> {
+  @override
+  String? build() => null;
+  void open(String? peerId) => state = peerId;
+  void closeIf(String peerId) {
+    if (state == peerId) state = null;
+  }
+}
+
+final openChatProvider = NotifierProvider<OpenChatNotifier, String?>(OpenChatNotifier.new);
 
 /// Whether this phone should show popup notifications (default on; the user can switch it off).
 class PushEnabledNotifier extends AsyncNotifier<bool> {
