@@ -28,7 +28,13 @@ Deno.serve((req) =>
     if (tokens.length === 0) return json(req, { sent: 0 });
 
     const { title, body } = messageNotice(sender?.full_name);
-    const accessToken = await fcmAccessToken(sa);
+    let accessToken: string;
+    try {
+      accessToken = await fcmAccessToken(sa);
+    } catch (e) {
+      console.error("push-message: could not get a Google token:", (e as Error).message);
+      throw new HttpError(502, "push_unavailable", "Push service refused the credentials.");
+    }
     const dead: string[] = [];
     let sent = 0;
     await Promise.all(tokens.map(async (t: string) => {

@@ -52,7 +52,11 @@ export async function fcmAccessToken(sa: ServiceAccount): Promise<string> {
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body: new URLSearchParams({ grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer", assertion: await signServiceJwt(sa) }),
   });
-  if (!res.ok) throw new Error(`fcm_auth_${res.status}`);
+  if (!res.ok) {
+    // Google's error code only (never the key or token) so a bad setup can be diagnosed from the logs.
+    const detail = await res.json().then((j) => String(j.error_description ?? j.error ?? "")).catch(() => "");
+    throw new Error(`fcm_auth_${res.status} ${detail}`.trim());
+  }
   return (await res.json()).access_token as string;
 }
 
