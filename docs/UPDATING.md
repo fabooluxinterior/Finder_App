@@ -20,7 +20,7 @@ A silent background update is not possible for an app installed this way; Google
 
 ## One-time setup: the permanent signing key
 
-Builds are only published as releases when these repository secrets exist
+Builds are only published as releases when these repository secrets exist (the key password is the same as the keystore password: PKCS12)
 (GitHub > Settings > Secrets and variables > Actions):
 
 | Secret | What |
@@ -28,7 +28,6 @@ Builds are only published as releases when these repository secrets exist
 | `KEYSTORE_BASE64` | the release keystore, base64 on one line |
 | `KEYSTORE_PASSWORD` | keystore password |
 | `KEY_ALIAS` | key alias (`vouby`) |
-| `KEY_PASSWORD` | key password |
 
 **Back the key up.** If it is lost, installed apps can no longer be updated (they must be
 uninstalled). Never commit it. Without the secrets, CI still builds, signed with a

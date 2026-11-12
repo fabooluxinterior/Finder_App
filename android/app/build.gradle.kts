@@ -46,7 +46,7 @@ android {
     }
 
     // Release signing uses one permanent key supplied by CI (KEYSTORE_FILE plus
-    // KEYSTORE_PASSWORD / KEY_ALIAS / KEY_PASSWORD from repository secrets), so
+    // KEYSTORE_PASSWORD / KEY_ALIAS from repository secrets), so
     // every new build installs over the previous one and keeps the user's data.
     // Without those variables (local builds) it falls back to the debug key.
     val releaseKeystore = System.getenv("KEYSTORE_FILE")?.takeIf { it.isNotBlank() }?.let { file(it) }
@@ -56,7 +56,8 @@ android {
                 storeFile = releaseKeystore
                 storePassword = System.getenv("KEYSTORE_PASSWORD")
                 keyAlias = System.getenv("KEY_ALIAS")
-                keyPassword = System.getenv("KEY_PASSWORD")
+                // PKCS12 keystores use one password for the store and the key.
+                keyPassword = System.getenv("KEYSTORE_PASSWORD")
             }
         }
     }
