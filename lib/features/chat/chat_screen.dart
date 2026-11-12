@@ -482,13 +482,28 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                                   if (widget.peer.isVerified) const VerifiedBadge(size: 16),
                                 ],
                               ),
-                              Text(
-                                theirState != PeerState.idle ? theirState.header : (_presenceText ?? widget.peer.city),
-                                style: TextStyle(
-                                  fontSize: 13,
-                                  height: 18 / 13,
-                                  color: theirState != PeerState.idle || _presenceText == 'online' ? c.accent : c.muted,
-                                ),
+                              // What they are doing uses the same quiet words with a sweeping light as the line
+                              // under the messages; otherwise online / last seen.
+                              AnimatedSwitcher(
+                                duration: Motion.of(context, const Duration(milliseconds: 180)),
+                                transitionBuilder: (child, a) => FadeTransition(opacity: a, child: child),
+                                layoutBuilder: (current, previous) =>
+                                    Stack(alignment: Alignment.centerLeft, children: [...previous, ?current]),
+                                child: theirState != PeerState.idle
+                                    ? SizedBox(
+                                        key: ValueKey(theirState),
+                                        height: 18,
+                                        child: WordsLine(words: theirState.words, size: 13, color: c.accent),
+                                      )
+                                    : Text(
+                                        _presenceText ?? widget.peer.city,
+                                        key: const ValueKey('presence'),
+                                        style: TextStyle(
+                                          fontSize: 13,
+                                          height: 18 / 13,
+                                          color: _presenceText == 'online' ? c.accent : c.muted,
+                                        ),
+                                      ),
                               ),
                             ],
                           ),

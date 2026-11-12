@@ -111,6 +111,12 @@ final connectionsProvider = FutureProvider<List<Connection>>((ref) async {
   return ref.watch(backendProvider).connections();
 });
 
+/// People you blocked (only you ever see this).
+final blockedUsersProvider = FutureProvider.autoDispose<List<BlockedUser>>((ref) async {
+  ref.watch(socialTickProvider);
+  return ref.watch(backendProvider).blockedUsers();
+});
+
 final privateProfileProvider = FutureProvider.family<PrivateProfile, String>((ref, userId) async {
   ref.watch(socialTickProvider);
   return ref.watch(backendProvider).privateProfileOf(userId);

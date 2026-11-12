@@ -619,12 +619,20 @@ class SupabaseBackend implements FinderBackend {
         .or('sender_id.eq.$me,receiver_id.eq.$me')
         .order('responded_at', ascending: false);
 
-    final out = <Connection>[];
-    final seenPeers = <String>{}; // one card per person, even if both directions were stored
+    // One card per person, even when both directions were stored; remember who followed whom.
+    final first = <String, Map<String, dynamic>>{};
+    final iFollow = <String>{}, followsMe = <String>{};
     for (final r in rows) {
       final peerRow = (r['sender_id'] == me ? r['receiver'] : r['sender']) as Map<String, dynamic>?;
       if (peerRow == null) continue; // blocked: profile hidden by RLS
-      if (!seenPeers.add(peerRow['id'] as String)) continue;
+      final id = peerRow['id'] as String;
+      first.putIfAbsent(id, () => r);
+      (r['sender_id'] == me ? iFollow : followsMe).add(id);
+    }
+    final out = <Connection>[];
+    for (final entry in first.entries) {
+      final r = entry.value;
+      final peerRow = (r['sender_id'] == me ? r['receiver'] : r['sender']) as Map<String, dynamic>;
       final peer = PublicProfile.fromProfileRow(peerRow, resolve: _mediaUrl);
       final thread = await _vault.load(me, peer.id);
       final last = thread.isEmpty ? null : thread.last;
@@ -632,6 +640,9 @@ class SupabaseBackend implements FinderBackend {
         Connection(
           profile: peer,
           connectedAt: DateTime.parse((r['responded_at'] ?? r['created_at']) as String).toLocal(),
+          lastAt: last?.createdAt,
+          iFollow: iFollow.contains(peer.id),
+          followsMe: followsMe.contains(peer.id),
           lastMessage: last == null
               ? null
               : (last.isImage
@@ -1072,6 +1083,26 @@ class SupabaseBackend implements FinderBackend {
   Future<void> blockUser(String peerId) => _guard(() async {
     await _db.rpc('block_user', params: {'p_peer': peerId});
     await _vault.deleteThread(_me, peerId);
+    _social.add(null);
+  });
+
+  @override
+  Future<List<BlockedUser>> blockedUsers() => _guard(() async {
+    final rows = (await _db.rpc('my_blocked_users') as List).cast<Map<String, dynamic>>();
+    return [
+      for (final r in rows)
+        BlockedUser(
+          id: r['user_id'] as String,
+          fullName: r['full_name'] as String,
+          city: (r['city'] as String?) ?? '',
+          blockedAt: DateTime.parse(r['blocked_at'] as String).toLocal(),
+        ),
+    ];
+  });
+
+  @override
+  Future<void> unblock(String peerId) => _guard(() async {
+    await _db.rpc('unblock_user', params: {'p_peer': peerId});
     _social.add(null);
   });
 

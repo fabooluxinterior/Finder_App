@@ -11,6 +11,7 @@ import '../../core/config.dart';
 import '../../core/feedback.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
+import '../../models/profile.dart';
 import '../../models/security.dart';
 import '../../providers.dart';
 import 'profile_editor_screen.dart';
@@ -27,6 +28,8 @@ import '../help/notifications_screen.dart';
 import '../subscription/trial_banner.dart';
 import '../verification/verification_screen.dart';
 import 'profile_detail_screen.dart';
+import 'blocked_users_screen.dart';
+import 'follow_lists_screen.dart';
 
 class MyProfileScreen extends ConsumerStatefulWidget {
   const MyProfileScreen({super.key});
@@ -84,86 +87,19 @@ class _MyProfileScreenState extends ConsumerState<MyProfileScreen> {
               ),
             ),
             const SizedBox(height: 14),
-            Row(
-              children: [
-                Pressable(
-                  scale: 0.98,
-                  semanticLabel: 'Preview your profile',
-                  onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => ProfileDetailScreen(profile: me))),
-                  child: Container(
-                    width: 112,
-                    height: 144,
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(26),
-                      border: Border.all(color: c.surface, width: 3),
-                    ),
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(23),
-                      child: ProfilePhoto(url: me.primaryPhoto, name: me.fullName, decodeWidth: 300),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 14),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Wrap(
-                        crossAxisAlignment: WrapCrossAlignment.center,
-                        spacing: 6,
-                        runSpacing: 4,
-                        children: [
-                          Text.rich(
-                            TextSpan(
-                              children: [
-                                TextSpan(text: me.firstName),
-                                TextSpan(
-                                  text: ' ${me.age}',
-                                  style: const TextStyle(fontWeight: FontWeight.w400, color: Color(0xFFC9C9CF)),
-                                ),
-                              ],
-                            ),
-                            style: TextStyle(
-                              fontSize: 28,
-                              height: 32 / 28,
-                              fontWeight: FontWeight.w700,
-                              letterSpacing: -0.8,
-                              color: c.ink,
-                            ),
-                          ),
-                          if (me.isVerified) const VerifiedBadge(size: 22),
-                        ],
-                      ),
-                      const SizedBox(height: 6),
-                      Text(
-                        '${me.city}, ${me.photoCount} ${me.photoCount == 1 ? 'photo' : 'photos'}',
-                        style: TextStyle(fontSize: 15, height: 20 / 15, color: c.ink3),
-                      ),
-                      const SizedBox(height: 10),
-                      Pressable(
-                        onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ProfileEditorScreen())),
-                        child: Container(
-                          height: 36,
-                          padding: const EdgeInsets.symmetric(horizontal: 14),
-                          decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(999),
-                            border: Border.all(color: c.hair),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Text(
-                                'Edit profile',
-                                style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: c.ink),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
+            _ProfileCard(
+              me: me,
+              onPreview: () => Navigator.push(context, MaterialPageRoute(builder: (_) => ProfileDetailScreen(profile: me))),
+              onEdit: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ProfileEditorScreen())),
+            ),
+            const SizedBox(height: 10),
+            const _FollowTiles(),
+            const SizedBox(height: 10),
+            _QuickActions(
+              onEdit: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ProfileEditorScreen())),
+              onPeople: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const FollowListsScreen())),
+              onBlocked: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const BlockedUsersScreen())),
+              onPlan: () => showPaywall(context),
             ),
             const SizedBox(height: 16),
             Container(
@@ -470,5 +406,256 @@ class _Row extends StatelessWidget {
       ),
     );
     return onTap == null ? row : Pressable(scale: 0.99, onTap: onTap, child: row);
+  }
+}
+
+/// Photo inside a completion ring, name, city and Edit.
+class _ProfileCard extends StatelessWidget {
+  const _ProfileCard({required this.me, required this.onPreview, required this.onEdit});
+  final PublicProfile me;
+  final VoidCallback onPreview;
+  final VoidCallback onEdit;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.fc;
+    final pct = me.completionScore.clamp(0, 100);
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: c.surface,
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: c.hair),
+      ),
+      child: Row(
+        children: [
+          Pressable(
+            scale: 0.97,
+            semanticLabel: 'Preview your profile, $pct% complete',
+            onTap: onPreview,
+            child: SizedBox(
+              width: 70,
+              height: 70,
+              child: Stack(
+                clipBehavior: Clip.none,
+                alignment: Alignment.center,
+                children: [
+                  CustomPaint(
+                    size: const Size(70, 70),
+                    painter: _RingPainter(progress: pct / 100, track: c.hair, color: c.accent),
+                  ),
+                  Avatar(url: me.primaryPhoto, name: me.fullName, size: 54),
+                  Positioned(
+                    right: -6,
+                    bottom: -4,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
+                      decoration: BoxDecoration(color: c.accent, borderRadius: BorderRadius.circular(9)),
+                      child: Text(
+                        '$pct%',
+                        style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w700, color: c.paper),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Flexible(
+                      child: Text(
+                        '${me.firstName}, ${me.age}',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 21,
+                          height: 26 / 21,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: -0.4,
+                          color: c.ink,
+                        ),
+                      ),
+                    ),
+                    if (me.isVerified) ...[const SizedBox(width: 6), const VerifiedBadge(size: 19)],
+                  ],
+                ),
+                Text(
+                  '${me.city} · ${me.photoCount} ${me.photoCount == 1 ? 'photo' : 'photos'}',
+                  style: TextStyle(fontSize: 14.5, height: 20 / 14.5, color: c.muted),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          Pressable(
+            onTap: onEdit,
+            child: Container(
+              height: 40,
+              padding: const EdgeInsets.symmetric(horizontal: 18),
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(999),
+                border: Border.all(color: c.hair),
+              ),
+              child: Text(
+                'Edit',
+                style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: c.ink),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _RingPainter extends CustomPainter {
+  const _RingPainter({required this.progress, required this.track, required this.color});
+  final double progress;
+  final Color track;
+  final Color color;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final rect = Offset.zero & size;
+    final stroke = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 3.5
+      ..strokeCap = StrokeCap.round;
+    final r = rect.deflate(2);
+    canvas.drawArc(r, 0, 6.2832, false, stroke..color = track);
+    canvas.drawArc(r, -1.5708, 6.2832 * progress, false, stroke..color = color);
+  }
+
+  @override
+  bool shouldRepaint(_RingPainter old) => old.progress != progress || old.color != color || old.track != track;
+}
+
+/// Followers and Following, each with its own count. Visible only to you.
+class _FollowTiles extends ConsumerWidget {
+  const _FollowTiles();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final c = context.fc;
+    final all = ref.watch(connectionsProvider).value ?? const [];
+    final followers = all.where((x) => x.followsMe).length;
+    final following = all.where((x) => x.iFollow).length;
+    Widget tile(String label, int n, FollowTab tab) => Expanded(
+      child: Pressable(
+        scale: 0.98,
+        semanticLabel: '$n $label',
+        onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => FollowListsScreen(initial: tab))),
+        child: Container(
+          padding: const EdgeInsets.fromLTRB(16, 14, 12, 14),
+          decoration: BoxDecoration(
+            color: c.surface,
+            borderRadius: BorderRadius.circular(22),
+            border: Border.all(color: c.hair),
+          ),
+          child: Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '$n',
+                      style: TextStyle(
+                        fontSize: 26,
+                        height: 30 / 26,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: -0.5,
+                        color: c.ink,
+                      ),
+                    ),
+                    Text(label, style: TextStyle(fontSize: 14, color: c.muted)),
+                  ],
+                ),
+              ),
+              Icon(PhosphorIconsBold.caretRight, size: 15, color: c.muted),
+            ],
+          ),
+        ),
+      ),
+    );
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            tile('Followers', followers, FollowTab.followers),
+            const SizedBox(width: 10),
+            tile('Following', following, FollowTab.following),
+          ],
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(2, 8, 2, 0),
+          child: Row(
+            children: [
+              Icon(PhosphorIconsFill.lockSimple, size: 12, color: c.muted),
+              const SizedBox(width: 6),
+              Text('Only you can see these numbers and lists', style: TextStyle(fontSize: 12, color: c.muted)),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _QuickActions extends StatelessWidget {
+  const _QuickActions({required this.onEdit, required this.onPeople, required this.onBlocked, required this.onPlan});
+  final VoidCallback onEdit;
+  final VoidCallback onPeople;
+  final VoidCallback onBlocked;
+  final VoidCallback onPlan;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.fc;
+    Widget item(IconData icon, String label, VoidCallback onTap) => Expanded(
+      child: Pressable(
+        scale: 0.97,
+        semanticLabel: label,
+        onTap: onTap,
+        child: Container(
+          height: 76,
+          decoration: BoxDecoration(
+            color: c.surface,
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(color: c.hair),
+          ),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(icon, size: 22, color: c.ink),
+              const SizedBox(height: 6),
+              Text(
+                label,
+                style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w600, color: c.ink),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    return Row(
+      children: [
+        item(Icons.edit_outlined, 'Edit', onEdit),
+        const SizedBox(width: 8),
+        item(Icons.group_outlined, 'People', onPeople),
+        const SizedBox(width: 8),
+        item(PhosphorIconsRegular.prohibit, 'Blocked', onBlocked),
+        const SizedBox(width: 8),
+        item(Icons.bolt_rounded, 'Plan', onPlan),
+      ],
+    );
   }
 }

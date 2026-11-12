@@ -1008,6 +1008,9 @@ class DemoBackend implements FinderBackend {
           return Connection(
             profile: _people[peer]!.profile,
             connectedAt: r.respondedAt ?? r.createdAt,
+            lastAt: last?.createdAt,
+            iFollow: r.sender == meId,
+            followsMe: r.sender != meId,
             lastMessage: last == null
                 ? null
                 : (last.isImage
@@ -1373,9 +1376,24 @@ class DemoBackend implements FinderBackend {
 
   @override
   Future<void> blockUser(String peerId) async {
+    final who = _people[peerId]?.profile;
+    if (who != null) {
+      _blocked[peerId] = BlockedUser(id: peerId, fullName: who.fullName, city: who.city, blockedAt: DateTime.now());
+    }
     _endConnection(peerId);
     _swipes.remove((peerId, meId));
     _swipes[(meId, peerId)] = _Swipe(meId, peerId, 'rejected');
+    _social.add(null);
+  }
+
+  final _blocked = <String, BlockedUser>{};
+
+  @override
+  Future<List<BlockedUser>> blockedUsers() async => _blocked.values.toList()..sort((a, b) => b.blockedAt.compareTo(a.blockedAt));
+
+  @override
+  Future<void> unblock(String peerId) async {
+    _blocked.remove(peerId);
     _social.add(null);
   }
 

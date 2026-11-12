@@ -1,3 +1,5 @@
+import '../profile/blocked_users_screen.dart';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
@@ -161,6 +163,13 @@ class SecurityCenterScreen extends ConsumerWidget {
                 }, 'Other sessions signed out'),
               ),
             ],
+          ),
+          const Divider(),
+          ListTile(
+            leading: const Icon(Icons.block_outlined),
+            title: const Text('Blocked users'),
+            subtitle: const Text('See who you blocked and unblock them'),
+            onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const BlockedUsersScreen())),
           ),
           if (staff != null) ...[
             const Divider(),

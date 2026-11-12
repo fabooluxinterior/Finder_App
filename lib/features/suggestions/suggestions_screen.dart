@@ -1,5 +1,6 @@
+import 'suggestion_carousel.dart';
+
 import 'package:flutter/material.dart';
-import 'package:flutter_card_swiper/flutter_card_swiper.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/brand.dart';
@@ -43,16 +44,6 @@ class _SuggestionsScreenState extends ConsumerState<SuggestionsScreen> {
   /// Everyone shown in this session (for "next page").
   final _seen = <String>{};
 
-  /// Sliding cards for the best matches: index of the card on top.
-  final _swiper = CardSwiperController();
-  int _top = 0;
-
-  @override
-  void dispose() {
-    _swiper.dispose();
-    super.dispose();
-  }
-
   @override
   void initState() {
     super.initState();
@@ -73,7 +64,6 @@ class _SuggestionsScreenState extends ConsumerState<SuggestionsScreen> {
       if (!mounted) return;
       setState(() {
         _main = main;
-        _top = 0;
         _mayLike = mayLike;
         _status = status;
         _seen.addAll([...main, ...mayLike].map((s) => s.profile.id));
@@ -100,9 +90,8 @@ class _SuggestionsScreenState extends ConsumerState<SuggestionsScreen> {
       final status = await backend.suggestionStatus();
       if (!mounted) return;
       setState(() {
-        if (nextPage || _top >= _main.length) {
+        if (nextPage || _main.isEmpty) {
           _main = more;
-          _top = 0;
         } else {
           _main = [..._main, ...more];
         }
@@ -142,26 +131,15 @@ class _SuggestionsScreenState extends ConsumerState<SuggestionsScreen> {
     }
   }
 
-  bool _onSwipe(int previous, int? current, CardSwiperDirection direction) {
-    final p = _main[previous].profile;
-    setState(() => _top = current ?? _main.length);
-    _send(p, follow: direction == CardSwiperDirection.right);
-    return true;
-  }
-
-  bool _isTop(Suggestion s) => _top < _main.length && _main[_top].profile.id == s.profile.id;
-
   void _open(Suggestion s) {
-    // From the top sliding card, Pass/Request in the profile slide it away.
-    final top = _isTop(s);
     Navigator.push(
       context,
       MaterialPageRoute(
         builder: (_) => ProfileDetailScreen(
           profile: s.profile,
-          onPass: () => top ? _swiper.swipe(CardSwiperDirection.left) : _act(s.profile, follow: false),
-          onRequest: () => top ? _swiper.swipe(CardSwiperDirection.right) : _act(s.profile, follow: true),
-          onReplied: () => top ? setState(() => _top++) : _remove(s.profile.id),
+          onPass: () => _act(s.profile, follow: false),
+          onRequest: () => _act(s.profile, follow: true),
+          onReplied: () => _remove(s.profile.id),
         ),
       ),
     );
@@ -196,7 +174,7 @@ class _SuggestionsScreenState extends ConsumerState<SuggestionsScreen> {
             slivers: [
               SliverToBoxAdapter(
                 child: Padding(
-                  padding: const EdgeInsets.fromLTRB(20, 16, 12, 6),
+                  padding: const EdgeInsets.fromLTRB(16, 16, 12, 6),
                   child: Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -301,10 +279,10 @@ class _SuggestionsScreenState extends ConsumerState<SuggestionsScreen> {
     final c = context.fc;
     return [
       if (_mayLike.isNotEmpty) ...[
-        const SliverToBoxAdapter(child: SectionLabel('You may like', padding: EdgeInsets.fromLTRB(20, 18, 20, 10))),
+        const SliverToBoxAdapter(child: SectionLabel('You may like', padding: EdgeInsets.fromLTRB(18, 18, 18, 10))),
         SliverToBoxAdapter(
           child: SizedBox(
-            height: 250,
+            height: 204,
             child: ListView.separated(
               scrollDirection: Axis.horizontal,
               padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -316,42 +294,14 @@ class _SuggestionsScreenState extends ConsumerState<SuggestionsScreen> {
         ),
       ],
       if (_main.isNotEmpty)
-        const SliverToBoxAdapter(child: SectionLabel('Best matches for you', padding: EdgeInsets.fromLTRB(20, 22, 20, 10))),
+        const SliverToBoxAdapter(child: SectionLabel('Best matches for you', padding: EdgeInsets.fromLTRB(18, 22, 18, 10))),
       if (_main.isNotEmpty)
         SliverToBoxAdapter(
-          child: SizedBox(
-            height: 600,
-            child: _top >= _main.length
-                ? Center(
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 32),
-                      child: Text(
-                        'You’ve gone through these suggestions.',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(fontSize: 15, color: c.muted),
-                      ),
-                    ),
-                  )
-                : CardSwiper(
-                    key: ValueKey(_main),
-                    controller: _swiper,
-                    cardsCount: _main.length,
-                    numberOfCardsDisplayed: _main.length - _top >= 2 ? 2 : 1,
-                    isLoop: false,
-                    initialIndex: _top.clamp(0, _main.length - 1),
-                    duration: Motion.of(context, const Duration(milliseconds: 220)),
-                    threshold: 35,
-                    maxAngle: 12,
-                    scale: 0.95,
-                    backCardOffset: const Offset(0, 12),
-                    padding: const EdgeInsets.fromLTRB(12, 0, 12, 14),
-                    allowedSwipeDirection: const AllowedSwipeDirection.symmetric(horizontal: true),
-                    onSwipe: _onSwipe,
-                    cardBuilder: (context, index, dx, dy) {
-                      final s = _main[index];
-                      return SuggestionCard(suggestion: s, dragX: index == _top ? dx : 0, onTap: () => _open(s));
-                    },
-                  ),
+          child: SuggestionCarousel(
+            items: _main,
+            onOpen: _open,
+            onRequest: (x) => _act(x.profile, follow: true),
+            onPass: (x) => _act(x.profile, follow: false),
           ),
         ),
       SliverToBoxAdapter(
@@ -614,61 +564,73 @@ class _MiniCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final c = context.fc;
     final p = suggestion.profile;
     final why = suggestion.reasons.isEmpty ? null : suggestion.reasons.first.label;
     return Pressable(
       scale: 0.97,
       onTap: onTap,
       semanticLabel: '${p.firstName}, ${p.age}. ${why ?? ''}',
-      child: SizedBox(
-        width: 150,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            ClipRRect(
-              borderRadius: BorderRadius.circular(22),
-              child: SizedBox(
-                width: 150,
-                height: 180,
-                child: Stack(
-                  fit: StackFit.expand,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(22),
+        child: SizedBox(
+          width: 146,
+          height: 200,
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              ProfilePhoto(url: p.primaryPhoto, name: p.fullName, decodeWidth: 400),
+              const Positioned(
+                left: 0,
+                right: 0,
+                bottom: 0,
+                height: 120,
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [Color(0x000B0B0C), Color(0xE60B0B0C)],
+                    ),
+                  ),
+                ),
+              ),
+              Positioned(
+                left: 8,
+                top: 8,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(color: Colors.black.withValues(alpha: 0.55), borderRadius: BorderRadius.circular(99)),
+                  child: Text(
+                    '${suggestion.compatibility}%',
+                    style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: Colors.white),
+                  ),
+                ),
+              ),
+              Positioned(
+                left: 12,
+                right: 12,
+                bottom: 12,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    ProfilePhoto(url: p.primaryPhoto, name: p.fullName, decodeWidth: 360),
-                    Positioned(
-                      left: 8,
-                      top: 8,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                        decoration: BoxDecoration(
-                          color: Colors.black.withValues(alpha: 0.55),
-                          borderRadius: BorderRadius.circular(99),
-                        ),
-                        child: Text(
-                          '${suggestion.compatibility}%',
-                          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: Colors.white),
-                        ),
-                      ),
+                    Text(
+                      '${p.firstName}, ${p.age}',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontSize: 15.5, fontWeight: FontWeight.w600, color: Colors.white),
+                    ),
+                    Text(
+                      p.city,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(fontSize: 12.5, color: Colors.white.withValues(alpha: 0.78)),
                     ),
                   ],
                 ),
               ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              '${p.firstName}, ${p.age}',
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: c.ink),
-            ),
-            if (why != null)
-              Text(
-                why,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(fontSize: 12.5, height: 1.3, color: c.muted),
-              ),
-          ],
+            ],
+          ),
         ),
       ),
     );

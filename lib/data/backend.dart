@@ -178,6 +178,12 @@ abstract class FinderBackend {
   Future<void> unmatch(String peerId);
   Future<void> blockUser(String peerId);
 
+  /// People you blocked, most recent first.
+  Future<List<BlockedUser>> blockedUsers();
+
+  /// Removes the block. The old connection and chat are not restored; a new request is needed.
+  Future<void> unblock(String peerId);
+
   /// [evidence] is decrypted on this device and shared only with explicit consent.
   Future<void> report(String peerId, ReportReason reason, {String? details, List<ChatMessage> evidence, bool block});
 

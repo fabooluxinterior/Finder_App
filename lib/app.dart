@@ -1,3 +1,5 @@
+import 'dart:ui' show PointerDeviceKind;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -23,9 +25,30 @@ class FinderApp extends StatelessWidget {
       theme: buildTheme(Brightness.dark),
       darkTheme: buildTheme(Brightness.dark),
       themeMode: ThemeMode.dark,
+      scrollBehavior: const _SmoothScroll(),
       home: const _Intro(child: _AuthGate()),
     );
   }
+}
+
+/// Every list and page scrolls with the same soft, springy feel on all phones (momentum, gentle
+/// overscroll bounce, no stretch glow), and can also be dragged with a mouse or trackpad.
+class _SmoothScroll extends MaterialScrollBehavior {
+  const _SmoothScroll();
+
+  @override
+  ScrollPhysics getScrollPhysics(BuildContext context) => const BouncingScrollPhysics(parent: AlwaysScrollableScrollPhysics());
+
+  @override
+  Set<PointerDeviceKind> get dragDevices => {
+    PointerDeviceKind.touch,
+    PointerDeviceKind.mouse,
+    PointerDeviceKind.stylus,
+    PointerDeviceKind.trackpad,
+  };
+
+  @override
+  Widget buildOverscrollIndicator(BuildContext context, Widget child, ScrollableDetails details) => child;
 }
 
 class _AuthGate extends ConsumerWidget {
