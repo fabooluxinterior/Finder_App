@@ -11,6 +11,7 @@ import '../../core/widgets.dart';
 import '../../models/follow_request.dart';
 import '../../providers.dart';
 import '../chats/chats_screen.dart';
+import 'social_refresher.dart';
 import '../deck/deck_screen.dart';
 import '../match/match_screen.dart';
 import '../profile/my_profile_screen.dart';
@@ -77,6 +78,7 @@ class _HomeShellState extends ConsumerState<HomeShell> {
               index: _tab,
               children: const [DeckScreen(), SuggestionsScreen(), RequestsScreen(), ChatsScreen(), MyProfileScreen()],
             ),
+            SocialRefresher(tab: _tab),
             // "Your profile needs a small update" (only when a detail is missing).
             Builder(
               builder: (context) => Positioned(

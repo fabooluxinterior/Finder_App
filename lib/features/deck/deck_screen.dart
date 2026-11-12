@@ -83,7 +83,12 @@ class _DeckScreenState extends ConsumerState<DeckScreen> {
   Future<void> _commit(PublicProfile p, {required bool follow}) async {
     try {
       final outcome = await ref.read(backendProvider).swipe(p.id, follow: follow);
-      if (!mounted || outcome != SwipeOutcome.matched) return;
+      if (!mounted) return;
+      if (outcome == SwipeOutcome.requested) {
+        showSnack(context, 'Request sent to ${p.firstName}', icon: PhosphorIconsFill.paperPlaneTilt);
+        return;
+      }
+      if (outcome != SwipeOutcome.matched) return;
       ref.invalidate(connectionsProvider);
       ref.invalidate(incomingRequestsProvider);
       final me = await ref.read(myProfileProvider.future);
