@@ -648,6 +648,21 @@ class SupabaseBackend implements FinderBackend {
   @override
   Future<bool> serverPremium() async => (await accessStatus()).hasChatAccess;
 
+  @override
+  Future<String> paymentsMode() => _guard(() async => (await _db.rpc('payments_mode') as String?) ?? 'live');
+
+  @override
+  Future<void> demoActivateFastTrack() => _guard(() async {
+    try {
+      await _db.rpc('demo_activate_fast_track');
+    } on PostgrestException catch (e) {
+      if (e.hint == 'DEMO_PAYMENTS_OFF') {
+        throw const AppException(AppErrorCode.unknown, 'Payments aren’t open yet.');
+      }
+      rethrow;
+    }
+  });
+
   // -------------------------------------------------------------- access ----
 
   @override

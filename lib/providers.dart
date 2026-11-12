@@ -38,14 +38,19 @@ final socialTickProvider = StreamProvider<int>((ref) async* {
   }
 });
 
-/// Fast-Track status: RevenueCat entitlement (instant) OR server flag (webhook).
+/// Fast-Track / trial access: the server decides (paid plan or free trial); a
+/// RevenueCat entitlement only adds to it, and its failures are ignored.
 class PremiumNotifier extends AsyncNotifier<bool> {
   @override
   Future<bool> build() async {
     final uid = ref.watch(authUserProvider).value;
     if (uid == null) return false;
     final purchases = ref.watch(purchasesProvider);
-    await purchases.identify(uid);
+    // Billing problems (for example no store key in this build) must never hide
+    // the access the server has granted (paid plan or free trial).
+    try {
+      await purchases.identify(uid);
+    } catch (_) {}
     final results = await Future.wait([
       purchases.isFastTrackActive().catchError((_) => false),
       ref.watch(backendProvider).serverPremium().catchError((_) => false),
@@ -72,6 +77,17 @@ class PremiumNotifier extends AsyncNotifier<bool> {
 }
 
 final premiumProvider = AsyncNotifierProvider<PremiumNotifier, bool>(PremiumNotifier.new);
+
+/// 'demo' while the server's demo-payment window is open (closed testing), else 'live'.
+final paymentsModeProvider = FutureProvider<String>((ref) async {
+  final uid = ref.watch(authUserProvider).value;
+  if (uid == null) return 'live';
+  try {
+    return await ref.watch(backendProvider).paymentsMode();
+  } catch (_) {
+    return 'live';
+  }
+});
 
 bool isPremium(WidgetRef ref) => ref.watch(premiumProvider).value ?? false;
 

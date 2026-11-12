@@ -1029,6 +1029,15 @@ class DemoBackend implements FinderBackend {
   @override
   Future<bool> serverPremium() async => _hasAccess;
 
+  @override
+  Future<String> paymentsMode() async => 'demo';
+
+  @override
+  Future<void> demoActivateFastTrack() async {
+    await _latency();
+    setPremium(true);
+  }
+
   // -------------------------------------------------------------- access ----
 
   /// Demo trial: starts when setup finishes (a demo account is always new),

@@ -74,6 +74,7 @@ class _PaywallSheetState extends ConsumerState<_PaywallSheet> {
     final price = ref.watch(_priceProvider).value ?? '₹$fastTrackMonthlyRupees';
     final perDay = perDayFromLabel(price);
     final access = ref.watch(accessStatusProvider).value;
+    final demoPayments = ref.watch(paymentsModeProvider).value == 'demo';
     final headline = switch (widget.reason) {
       PaywallReason.requests => 'See who wants to follow you',
       PaywallReason.messaging => 'Start the conversation',
@@ -118,7 +119,7 @@ class _PaywallSheetState extends ConsumerState<_PaywallSheet> {
           Text(
             [
               if (perDay != null) 'About $perDay a day, less than a cup of tea.',
-              'Billed monthly through Google Play. Cancel anytime.',
+              demoPayments ? 'Demo payment: nothing is charged.' : 'Billed monthly through Google Play. Cancel anytime.',
             ].join(' '),
             style: t.bodySmall?.copyWith(color: c.muted),
           ),
@@ -139,11 +140,17 @@ class _PaywallSheetState extends ConsumerState<_PaywallSheet> {
           ),
           const _Perk(icon: PhosphorIconsFill.mapPin, title: 'Kerala City Boost', subtitle: 'Top of your city’s Discover deck.'),
           const SizedBox(height: 16),
-          PillButton(label: 'Continue with Google Play', busy: _busy, onTap: () => _buy()),
+          PillButton(
+            label: demoPayments ? 'Activate Fast-Track (demo)' : 'Continue with Google Play',
+            busy: _busy,
+            onTap: () => _buy(),
+          ),
           const SizedBox(height: 10),
           Text(
             AppConfig.isDemo
                 ? 'Demo mode: no payment is taken.'
+                : demoPayments
+                ? 'Closed testing: this turns on Fast-Track for 30 days. No payment is taken.'
                 : 'UPI · Google Pay · Cards. You’re charged only after you confirm in Google Play.',
             textAlign: TextAlign.center,
             style: t.bodySmall?.copyWith(color: c.muted),

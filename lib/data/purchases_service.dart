@@ -2,6 +2,7 @@ import 'package:flutter/services.dart';
 import 'package:purchases_flutter/purchases_flutter.dart';
 
 import '../core/config.dart';
+import 'backend.dart';
 import 'demo_backend.dart';
 
 abstract class PurchasesService {
@@ -94,4 +95,31 @@ class DemoPurchases implements PurchasesService {
 
   @override
   Future<bool> restore() async => _backend.premium;
+}
+
+/// Used while Google Play billing isn't set up (no RevenueCat key in the build):
+/// a "purchase" asks the server for a demo plan, which only works while the
+/// server's demo-payment window is open. Nothing is charged, and the app can't
+/// grant itself access: the server decides.
+class ServerDemoPurchases implements PurchasesService {
+  ServerDemoPurchases(this._backend);
+  final FinderBackend _backend;
+
+  @override
+  Future<void> identify(String userId) async {}
+
+  @override
+  Future<bool> isFastTrackActive() async => false; // the server's access status is the source of truth
+
+  @override
+  Future<String> priceLabel() async => '₹79';
+
+  @override
+  Future<bool> purchaseFastTrack() async {
+    await _backend.demoActivateFastTrack();
+    return _backend.serverPremium();
+  }
+
+  @override
+  Future<bool> restore() async => _backend.serverPremium();
 }

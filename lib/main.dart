@@ -49,11 +49,16 @@ Future<void> main() async {
     ),
     debug: false,
   );
+  final backend = SupabaseBackend(Supabase.instance.client, kv: kv);
   runApp(
     ProviderScope(
       overrides: [
-        backendProvider.overrideWithValue(SupabaseBackend(Supabase.instance.client, kv: kv)),
-        purchasesProvider.overrideWithValue(RevenueCatPurchases()),
+        backendProvider.overrideWithValue(backend),
+        // Real Google Play billing once the build has a RevenueCat key; until then the
+        // server's closed-testing demo payment (nothing is charged).
+        purchasesProvider.overrideWithValue(
+          AppConfig.revenueCatAndroidKey.isEmpty ? ServerDemoPurchases(backend) : RevenueCatPurchases(),
+        ),
       ],
       child: const FinderApp(),
     ),

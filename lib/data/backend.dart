@@ -237,4 +237,11 @@ abstract class FinderBackend {
   /// Chat access from the server: paid Fast-Track (RevenueCat webhook) or
   /// an active trial.
   Future<bool> serverPremium();
+
+  /// 'demo' while the server's closed-testing demo-payment window is open, else 'live'.
+  Future<String> paymentsMode();
+
+  /// Demo payment: the server activates Fast-Track for 30 days (only in demo
+  /// mode; nothing is charged). Throws when demo payments are off.
+  Future<void> demoActivateFastTrack();
 }

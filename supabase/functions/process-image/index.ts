@@ -48,18 +48,15 @@ Deno.serve((req) =>
     }
 
     let verdict = await moderate(clean.webp);
-    // With no moderation provider configured: staff accounts' own photos publish
-    // immediately (they can approve photos anyway), and during the time-limited
-    // closed-beta window (MODERATION_AUTO_APPROVE_UNTIL) everyone's do. It never
-    // overrides a provider's answer or error, and verification selfies always
-    // go to review.
-    if (verdict.status === "pending" && verdict.labels.provider === "none" && kind !== "selfie") {
-      if (betaAutoApproveActive((k) => Deno.env.get(k))) {
-        verdict = { status: "approved", labels: { provider: "beta_auto_approve" } };
-      } else {
-        const { data: staff } = await admin.from("staff_roles").select("role").eq("user_id", user.id).maybeSingle();
-        if (staff) verdict = { status: "approved", labels: { provider: "staff_trusted" } };
-      }
+    // With no moderation provider configured, the time-limited closed-beta window
+    // (MODERATION_AUTO_APPROVE_UNTIL) publishes everyone's photos alike: no account,
+    // staff included, is treated differently. It never overrides a provider's
+    // answer or error, and verification selfies always go to review.
+    if (
+      verdict.status === "pending" && verdict.labels.provider === "none" && kind !== "selfie" &&
+      betaAutoApproveActive((k) => Deno.env.get(k))
+    ) {
+      verdict = { status: "approved", labels: { provider: "beta_auto_approve" } };
     }
     if (verdict.status === "rejected") {
       await securityEvent(user.id, "upload_blocked_by_moderation", "warning", {});
