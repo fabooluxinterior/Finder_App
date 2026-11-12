@@ -195,12 +195,17 @@ jobs:
       # Only for builds signed with the permanent key (a debug-signed APK would
       # make later updates fail). Keeps the newest 5 releases.
       - name: Publish release
-        if: ${{ github.event_name == 'push' && env.KEYSTORE_FILE != '' && hashFiles('out/finder-live-arm64.apk') != '' }}
+        if: ${{ github.event_name != 'pull_request' && env.KEYSTORE_FILE != '' && hashFiles('out/finder-live-arm64.apk') != '' }}
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          # An older, delayed run must never take over the "latest" link from a newer build.
+          latest_tag="$(gh release view --json tagName --jq .tagName 2>/dev/null || true)"
+          latest_num="${latest_tag#build-}"
+          flag="--latest"
+          if [[ "$latest_num" =~ ^[0-9]+$ ]] && [ "$latest_num" -gt "$GITHUB_RUN_NUMBER" ]; then flag="--latest=false"; fi
           gh release create "build-$GITHUB_RUN_NUMBER" out/finder-live-arm64.apk --target "$GITHUB_SHA" \
-            --title "Vouby build $GITHUB_RUN_NUMBER" --latest \
+            --title "Vouby build $GITHUB_RUN_NUMBER" "$flag" \
             --notes "Live app, build $GITHUB_RUN_NUMBER. Install it over the current app to update; your account and the chats on the phone are kept."
           gh release list --limit 100 --json tagName --jq '.[5:][].tagName' | while read -r old; do
             gh release delete "$old" --cleanup-tag --yes
