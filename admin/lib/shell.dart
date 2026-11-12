@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'api.dart';
 import 'pages/data_migration.dart';
 import 'pages/integrations.dart';
+import 'pages/notifications.dart';
 import 'pages/safety.dart';
 import 'ui.dart';
 
@@ -20,6 +21,7 @@ final _dests = <_Dest>[
   _Dest('Reports', Icons.flag_outlined, 'Safety', false, (a) => ReportsPage(api: a)),
   _Dest('Photo review', Icons.image_outlined, 'Safety', false, (a) => MediaReviewPage(api: a)),
   _Dest('Verification', Icons.verified_outlined, 'Safety', false, (a) => VerificationPage(api: a)),
+  _Dest('Notifications', Icons.notifications_outlined, 'Messaging', true, (a) => NotificationsPage(api: a)),
   _Dest('Database & Data Migration', Icons.storage_outlined, 'Settings', true, (a) => DataMigrationPage(api: a)),
   _Dest('Integrations & credentials', Icons.key_outlined, 'Settings', true, (a) => IntegrationsPage(api: a)),
 ];

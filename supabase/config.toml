@@ -51,6 +51,9 @@ verify_enabled = true
 timebox = "720h"
 inactivity_timeout = "336h"
 
+[functions.push-send]
+verify_jwt = true
+
 [functions.process-image]
 verify_jwt = true
 static_files = ["./functions/_shared/wasm/*.wasm"]

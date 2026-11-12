@@ -1,8 +1,10 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'data/backend.dart';
 import 'data/media_service.dart';
 import 'data/purchases_service.dart';
+import 'data/push_service.dart';
 import 'models/access.dart';
 import 'models/follow_request.dart';
 import 'models/message.dart';
@@ -162,6 +164,43 @@ final accessStatusProvider = FutureProvider<AccessStatus>((ref) async {
     return const AccessStatus();
   }
 });
+
+final pushServiceProvider = Provider<PushService>((ref) => const NoopPush());
+
+/// Whether this phone should show popup notifications (default on; the user can switch it off).
+class PushEnabledNotifier extends AsyncNotifier<bool> {
+  static const _key = 'push_enabled';
+  @override
+  Future<bool> build() async => (await SharedPreferences.getInstance()).getBool(_key) ?? true;
+
+  Future<void> set(bool on) async {
+    final push = ref.read(pushServiceProvider);
+    final backend = ref.read(backendProvider);
+    await (await SharedPreferences.getInstance()).setBool(_key, on);
+    state = AsyncData(on);
+    if (!push.available) return;
+    if (on) {
+      await start();
+    } else {
+      final token = await push.currentToken();
+      if (token != null) await backend.unregisterPushToken(token).catchError((_) {});
+      await push.deleteToken();
+    }
+  }
+
+  /// Registers this phone for popups (asks permission the first time). Never throws.
+  Future<void> start() async {
+    final push = ref.read(pushServiceProvider);
+    if (!push.available || ref.read(authUserProvider).value == null) return;
+    if (!(state.value ?? await future)) return;
+    try {
+      final token = await push.requestToken();
+      if (token != null) await ref.read(backendProvider).registerPushToken(token);
+    } catch (_) {}
+  }
+}
+
+final pushEnabledProvider = AsyncNotifierProvider<PushEnabledNotifier, bool>(PushEnabledNotifier.new);
 
 /// In-app notices (trial reminders, ticket updates, moderation notices).
 final notificationsProvider = FutureProvider<List<AppNotification>>((ref) async {

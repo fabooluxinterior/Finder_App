@@ -1104,6 +1104,12 @@ class DemoBackend implements FinderBackend {
   Future<List<AppNotification>> notifications() async => List.unmodifiable(_notes);
 
   @override
+  Future<void> registerPushToken(String token) async {}
+
+  @override
+  Future<void> unregisterPushToken(String token) async {}
+
+  @override
   Future<void> markNotificationsRead() async {
     for (var i = 0; i < _notes.length; i++) {
       final n = _notes[i];

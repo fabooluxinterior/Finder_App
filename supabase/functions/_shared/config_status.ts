@@ -79,6 +79,14 @@ export const SERVICES: ServiceSpec[] = [
       "MSG91 → Authkey and a DLT-approved OTP template ID; set MSG91_AUTHKEY and MSG91_TEMPLATE_ID in Supabase → Edge Functions → Secrets. SEND_SMS_HOOK_SECRET is created together with the Send SMS hook (Authentication → Hooks).",
   },
   {
+    service: "push",
+    label: "Phone popup notifications (Firebase)",
+    required: false,
+    vars: ["FCM_SERVICE_ACCOUNT"],
+    setup:
+      "Firebase console → Project settings → Service accounts → Generate new private key; paste the whole JSON as the FCM_SERVICE_ACCOUNT secret in Supabase → Edge Functions → Secrets. The app also needs the public FIREBASE_* values in its build.",
+  },
+  {
     service: "support_email",
     label: "Support ticket emails",
     required: false,

@@ -43,6 +43,10 @@ abstract class AdminApi {
   Future<List<VerificationQueueItem>> verificationQueue();
   Future<void> reviewVerification(String requestId, {required bool approve});
   Map<String, String> get mediaHeaders;
+
+  // Messaging → Notifications (admins only)
+  Future<PushSendResult> sendPush({required String title, required String body, required String audience, String? phone});
+  Future<List<PushCampaign>> pushCampaigns();
 }
 
 /// "98765 43210", "+91 98765-43210" or "919876543210" → "+919876543210".
@@ -170,6 +174,33 @@ class SupabaseAdminApi extends AdminApi {
     );
     final services = ((res.data as Map)['services'] as List).cast<Map>();
     return [for (final s in services) IntegrationStatus.fromJson(s.cast<String, dynamic>())];
+  });
+
+  @override
+  Future<PushSendResult> sendPush({required String title, required String body, required String audience, String? phone}) =>
+      _guard(() async {
+        final res = await _db.functions.invoke(
+          'push-send',
+          body: {
+            'title': title,
+            'body': body,
+            'audience': audience,
+            'phone': ?phone == null ? null : normalizeIndianPhone(phone),
+          },
+        );
+        final m = (res.data as Map).cast<String, dynamic>();
+        return PushSendResult(
+          recipients: (m['recipients'] as num?)?.toInt() ?? 0,
+          delivered: (m['delivered'] as num?)?.toInt() ?? 0,
+          failed: (m['failed'] as num?)?.toInt() ?? 0,
+          pushConfigured: m['push_configured'] == true,
+        );
+      });
+
+  @override
+  Future<List<PushCampaign>> pushCampaigns() => _guard(() async {
+    final rows = await _db.rpc('mod_list_push_campaigns') as List;
+    return [for (final r in rows) PushCampaign.fromJson((r as Map).cast<String, dynamic>())];
   });
 
   @override

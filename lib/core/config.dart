@@ -8,6 +8,14 @@ class AppConfig {
   static const supabaseAnonKey = String.fromEnvironment('SUPABASE_ANON_KEY');
   static const revenueCatAndroidKey = String.fromEnvironment('REVENUECAT_ANDROID_KEY');
 
+  // Firebase (phone popups). Public identifiers only; the sending key is a server secret.
+  static const firebaseApiKey = String.fromEnvironment('FIREBASE_API_KEY');
+  static const firebaseAppId = String.fromEnvironment('FIREBASE_APP_ID');
+  static const firebaseSenderId = String.fromEnvironment('FIREBASE_SENDER_ID');
+  static const firebaseProjectId = String.fromEnvironment('FIREBASE_PROJECT_ID');
+  static bool get pushConfigured =>
+      firebaseApiKey.isNotEmpty && firebaseAppId.isNotEmpty && firebaseSenderId.isNotEmpty && firebaseProjectId.isNotEmpty;
+
   static const isDemo = bool.fromEnvironment('DEMO');
 
   /// The CI run number the app was built from (--dart-define=BUILD_NUMBER). It

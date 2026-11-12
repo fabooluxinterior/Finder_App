@@ -104,6 +104,36 @@ class DemoAdminApi extends AdminApi {
     ),
   ];
 
+  final _campaigns = <PushCampaign>[];
+
+  @override
+  Future<PushSendResult> sendPush({required String title, required String body, required String audience, String? phone}) async {
+    if (audience == 'user') normalizeIndianPhone(phone ?? '');
+    final n = switch (audience) {
+      'all' => 120,
+      'free' => 80,
+      'plan' => 40,
+      _ => 1,
+    };
+    _campaigns.insert(
+      0,
+      PushCampaign(
+        id: 'c${_campaigns.length}',
+        title: title,
+        body: body,
+        audience: audience,
+        recipients: n,
+        delivered: n,
+        failed: 0,
+        createdAt: DateTime.now(),
+      ),
+    );
+    return PushSendResult(recipients: n, delivered: n, failed: 0, pushConfigured: true);
+  }
+
+  @override
+  Future<List<PushCampaign>> pushCampaigns() async => List.unmodifiable(_campaigns);
+
   @override
   Future<void> sendReminder(String key) async => _reminder = DateTime.now();
 

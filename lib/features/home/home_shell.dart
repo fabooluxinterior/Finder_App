@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -8,6 +10,7 @@ import '../../core/brand.dart';
 import '../../core/feedback.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
+import '../../data/push_service.dart';
 import '../../models/follow_request.dart';
 import '../../providers.dart';
 import '../chats/chats_screen.dart';
@@ -30,6 +33,36 @@ class HomeShell extends ConsumerStatefulWidget {
 
 class _HomeShellState extends ConsumerState<HomeShell> {
   int _tab = 0;
+  StreamSubscription<PushNotice>? _pushSub;
+  StreamSubscription<String>? _tokenSub;
+
+  @override
+  void initState() {
+    super.initState();
+    final push = ref.read(pushServiceProvider);
+    if (!push.available) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      ref.read(pushEnabledProvider.notifier).start();
+      _tokenSub = push.tokenRefreshes.listen((t) async {
+        if (await ref.read(pushEnabledProvider.future)) ref.read(backendProvider).registerPushToken(t).catchError((_) {});
+      });
+      // The system shows no popup while the app is open, so show it here.
+      _pushSub = push.foregroundMessages.listen((m) {
+        if (!mounted) return;
+        ref.invalidate(notificationsProvider);
+        Fx.instance.received();
+        showSnack(context, m.body.isEmpty ? m.title : '${m.title}: ${m.body}', icon: PhosphorIconsFill.bell);
+      });
+    });
+  }
+
+  @override
+  void dispose() {
+    _pushSub?.cancel();
+    _tokenSub?.cancel();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {

@@ -188,6 +188,10 @@ abstract class FinderBackend {
   Future<List<AppNotification>> notifications();
   Future<void> markNotificationsRead();
 
+  /// Phone popups: this device's push token (a token follows whoever signed in last).
+  Future<void> registerPushToken(String token);
+  Future<void> unregisterPushToken(String token);
+
   // Help & support
   /// Email registered on the account (shown prefilled; the server uses its own copy).
   Future<String?> supportEmail();

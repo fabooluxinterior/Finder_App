@@ -312,6 +312,16 @@ class _MyProfileScreenState extends ConsumerState<MyProfileScreen> {
                     MaterialPageRoute(builder: (_) => const NotificationsScreen()),
                   ).then((_) => ref.invalidate(notificationsProvider)),
                 ),
+                if (ref.watch(pushServiceProvider).available)
+                  _Row(
+                    icon: PhosphorIconsRegular.bell,
+                    title: 'Popup notifications',
+                    subtitle: 'Messages from Vouby on this phone',
+                    trailing: Switch(
+                      value: ref.watch(pushEnabledProvider).value ?? true,
+                      onChanged: (v) => ref.read(pushEnabledProvider.notifier).set(v),
+                    ),
+                  ),
               ],
             ),
             const SectionLabel('Help', padding: EdgeInsets.fromLTRB(4, 24, 4, 8)),

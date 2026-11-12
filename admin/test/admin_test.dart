@@ -84,4 +84,13 @@ void main() {
     expect(find.text('Image moderation (Google Vision)'), findsOneWidget);
     expect(find.textContaining('Missing: GOOGLE_VISION_API_KEY'), findsOneWidget);
   });
+
+  test('push: audiences, mobile number needed for one user, and the log', () async {
+    final api = DemoAdminApi();
+    expect(pushAudiences.keys, ['all', 'free', 'plan', 'user']);
+    await expectLater(api.sendPush(title: 'Hi', body: 'There', audience: 'user', phone: '123'), throwsA(isA<AdminException>()));
+    final r = await api.sendPush(title: 'Hi', body: 'There', audience: 'plan');
+    expect(r.pushConfigured, isTrue);
+    expect((await api.pushCampaigns()).single.title, 'Hi');
+  });
 }

@@ -686,6 +686,14 @@ class SupabaseBackend implements FinderBackend {
   Future<void> markNotificationsRead() => _guard(() async => await _db.rpc('mark_notifications_read'));
 
   @override
+  Future<void> registerPushToken(String token) =>
+      _guard(() async => await _db.rpc('register_push_token', params: {'p_token': token, 'p_platform': 'android'}));
+
+  @override
+  Future<void> unregisterPushToken(String token) =>
+      _guard(() async => await _db.rpc('unregister_push_token', params: {'p_token': token}));
+
+  @override
   Future<AccountRestriction?> myRestriction() => _guard(() async {
     final rows = await _db.rpc('my_restriction') as List;
     if (rows.isEmpty) return null;

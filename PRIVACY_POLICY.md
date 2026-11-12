@@ -13,6 +13,7 @@ Vouby ("we", "us") is operated by **<FILL: Company name>**, **<FILL: Registered 
 |---|---|---|
 | Mobile number (or, for older accounts, email) | Signing you in with one-time codes | Only you and our systems. Never shown to other users |
 | Contact email (you add it after signing up; we don't verify it) | Account and support notifications, and replies to your support tickets | Only you and our systems. Never shown to other users, and not used to sign in |
+| Phone notification token (only if you allow notifications) | To show popup notifications from Vouby on your phone | Our systems and Google's Firebase Cloud Messaging, which delivers the popup. You can switch it off in You → Popup notifications |
 | Date of birth | Confirming you're 18 or older and showing your age | Only you. Other users see your age, never your date of birth |
 | Name, age, district/city, bio, photos, interests | Your profile | Every signed-in Vouby user, except people you've blocked or who blocked you |
 | Gender, pronouns, height, work, education, languages, lifestyle answers (what you're looking for, exercise, drinking, smoking, star sign, background) | Optional profile details you choose to add | Every signed-in Vouby user, as above |

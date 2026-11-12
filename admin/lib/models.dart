@@ -205,3 +205,53 @@ class VerificationQueueItem {
 
 /// Who is signed in, and whether they may use the admin app.
 enum StaffAccess { signedOut, needsMfa, noAccess, moderator, admin }
+
+/// One notification sent from the dashboard to phones.
+class PushCampaign {
+  const PushCampaign({
+    required this.id,
+    required this.title,
+    required this.body,
+    required this.audience,
+    required this.recipients,
+    required this.delivered,
+    required this.failed,
+    required this.createdAt,
+  });
+  final String id;
+  final String title;
+  final String body;
+  final String audience;
+  final int recipients;
+  final int delivered;
+  final int failed;
+  final DateTime createdAt;
+
+  factory PushCampaign.fromJson(Map<String, dynamic> m) => PushCampaign(
+    id: m['id'] as String,
+    title: m['title'] as String,
+    body: m['body'] as String,
+    audience: m['audience'] as String,
+    recipients: (m['recipients'] as num?)?.toInt() ?? 0,
+    delivered: (m['delivered'] as num?)?.toInt() ?? 0,
+    failed: (m['failed'] as num?)?.toInt() ?? 0,
+    createdAt: DateTime.parse(m['created_at'] as String),
+  );
+}
+
+class PushSendResult {
+  const PushSendResult({required this.recipients, required this.delivered, required this.failed, required this.pushConfigured});
+  final int recipients;
+  final int delivered;
+  final int failed;
+
+  /// False when Firebase isn't set up yet: the message reached the in-app list only.
+  final bool pushConfigured;
+}
+
+const pushAudiences = <String, String>{
+  'all': 'Everyone',
+  'free': 'Free plan users (no trial or Fast-Track)',
+  'plan': 'Trial and Fast-Track users',
+  'user': 'One user (by mobile number)',
+};
