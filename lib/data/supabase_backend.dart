@@ -1328,7 +1328,12 @@ class SupabaseBackend implements FinderBackend {
         'ACCOUNT_RESTRICTED' => AppException(AppErrorCode.accountRestricted, e.message),
         _ when e.code == '22023' => AppException(AppErrorCode.invalidInput, e.message),
         _ =>
-          e.code == '23514' && e.message.contains('clean')
+          e.code == '23514' && e.message.contains('tags_valid')
+              ? const AppException(
+                  AppErrorCode.invalidInput,
+                  'One of your interests or languages has a character we can’t save. Pick a different one.',
+                )
+              : e.code == '23514' && e.message.contains('clean')
               ? const AppException(AppErrorCode.contactInfo, 'Phone numbers, @handles and links are not allowed.')
               : e.code == '42501'
               ? const AppException(AppErrorCode.notConnected, 'You can’t do that with this person.')
