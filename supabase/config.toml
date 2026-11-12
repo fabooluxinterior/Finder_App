@@ -54,6 +54,10 @@ inactivity_timeout = "336h"
 [functions.push-send]
 verify_jwt = true
 
+# Called by the database (pg_net) with a shared secret header, not a user JWT.
+[functions.push-message]
+verify_jwt = false
+
 [functions.process-image]
 verify_jwt = true
 static_files = ["./functions/_shared/wasm/*.wasm"]

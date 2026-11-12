@@ -70,6 +70,7 @@ class ChatsScreen extends ConsumerWidget {
                   ),
                 ),
               ...connections.when(
+                skipLoadingOnReload: true,
                 loading: () => [const SliverToBoxAdapter(child: SizedBox.shrink())],
                 error: (e, _) => [SliverFillRemaining(hasScrollBody: false, child: Center(child: Text('$e')))],
                 data: (list) => list.isEmpty

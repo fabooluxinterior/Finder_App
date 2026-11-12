@@ -17,3 +17,10 @@ Cloud Messaging. Users can switch popups off in You → Popup notifications.
    secret `FCM_SERVICE_ACCOUNT`. Never commit it. The admin app shows only "Configured / Not configured".
 
 Without step 2 the app shows no popups; without step 3 sends are saved in-app only and the dashboard says so.
+
+## Chat message alerts (app closed)
+When a message is stored, a database trigger (pg_net) calls the `push-message` function, which sends
+"<first name>: Sent you a message" to the receiver's phones. Messages are end-to-end encrypted, so the server never
+sees the content. Needs the same Firebase setup as above plus two private settings (already set on the live
+project): `push_webhook_url` and `push_webhook_secret` in `app_private_settings`, and the function secret
+`PUSH_WEBHOOK_SECRET` (same value). With the app open, messages arrive live through realtime and no notification is shown.

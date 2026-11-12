@@ -238,6 +238,10 @@ abstract class FinderBackend {
   /// Fires when requests/connections change (realtime).
   Stream<void> socialChanges();
 
+  /// Fetches any messages waiting for this phone right now (used when the app
+  /// comes back to the foreground, as a safety net next to realtime).
+  Future<void> syncInbox();
+
   /// Chat access from the server: paid Fast-Track (RevenueCat webhook) or
   /// an active trial.
   Future<bool> serverPremium();

@@ -56,24 +56,36 @@ export async function fcmAccessToken(sa: ServiceAccount): Promise<string> {
   return (await res.json()).access_token as string;
 }
 
-export function buildMessage(token: string, title: string, body: string) {
+export interface MessageExtras {
+  kind?: string; // "announcement" (dashboard) or "message" (chat)
+  tag?: string; // same tag replaces the earlier notification (one per chat)
+}
+
+export function buildMessage(token: string, title: string, body: string, extras: MessageExtras = {}) {
   return {
     message: {
       token,
       notification: { title, body },
-      data: { kind: "announcement" },
-      android: { priority: "HIGH" },
+      data: { kind: extras.kind ?? "announcement" },
+      android: { priority: "HIGH", ...(extras.tag ? { notification: { tag: extras.tag } } : {}) },
     },
   };
 }
 
 export type SendResult = "ok" | "unregistered" | "failed";
 
-export async function sendFcm(sa: ServiceAccount, accessToken: string, token: string, title: string, body: string): Promise<SendResult> {
+export async function sendFcm(
+  sa: ServiceAccount,
+  accessToken: string,
+  token: string,
+  title: string,
+  body: string,
+  extras: MessageExtras = {},
+): Promise<SendResult> {
   const res = await fetch(`https://fcm.googleapis.com/v1/projects/${sa.project_id}/messages:send`, {
     method: "POST",
     headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
-    body: JSON.stringify(buildMessage(token, title, body)),
+    body: JSON.stringify(buildMessage(token, title, body, extras)),
   });
   if (res.ok) return "ok";
   // 404 UNREGISTERED / 400 INVALID_ARGUMENT for a dead token: remove it.

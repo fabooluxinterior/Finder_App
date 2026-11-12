@@ -39,3 +39,26 @@ Deno.test("message carries title and body as a notification (popup)", () => {
   assertEquals(m.message.notification, { title: "Hello", body: "World" });
   assertEquals(m.message.token, "tok");
 });
+
+import { firstName, isUuid, messageNotice, secretMatches } from "../push_message.ts";
+
+Deno.test("chat push: only the sender's first name, never content", () => {
+  assertEquals(messageNotice("Anil Krishna"), { title: "Anil", body: "Sent you a message" });
+  assertEquals(firstName(""), "Someone");
+  assertEquals(firstName(null), "Someone");
+  assertEquals(buildMessage("t", "A", "B", { kind: "message", tag: "chat-1" }).message.android, {
+    priority: "HIGH",
+    notification: { tag: "chat-1" },
+  });
+});
+
+Deno.test("chat push: shared secret is checked strictly", () => {
+  assert(secretMatches("abc123", "abc123"));
+  assert(!secretMatches("abc124", "abc123"));
+  assert(!secretMatches("abc", "abc123"));
+  assert(!secretMatches(null, "abc123"));
+  assert(!secretMatches("anything", undefined), "no configured secret means nobody is allowed");
+  assert(!secretMatches("", ""));
+  assert(isUuid("11111111-2222-3333-4444-555555555555"));
+  assert(!isUuid("x"));
+});

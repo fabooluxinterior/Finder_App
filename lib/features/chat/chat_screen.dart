@@ -292,6 +292,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         children: [
           Expanded(
             child: messages.when(
+              skipLoadingOnReload: true,
               loading: () => const SizedBox.shrink(),
               error: (e, _) => Center(child: Text('$e')),
               data: (list) => list.isEmpty
@@ -597,17 +598,26 @@ class _Bubble extends StatelessWidget {
 }
 
 /// End-to-end encrypted photo: downloaded and decrypted on this device.
-class _PhotoContent extends ConsumerWidget {
+class _PhotoContent extends ConsumerStatefulWidget {
   const _PhotoContent({required this.message, this.openable = true});
   final ChatMessage message;
   final bool openable;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<_PhotoContent> createState() => _PhotoContentState();
+}
+
+class _PhotoContentState extends ConsumerState<_PhotoContent> {
+  // Fetched and decrypted once per bubble, so rebuilds never reload or flash the photo.
+  late final Future<Uint8List> _future = ref.read(backendProvider).imageBytes(widget.message);
+
+  @override
+  Widget build(BuildContext context) {
+    final message = widget.message;
+    final openable = widget.openable;
     final c = context.fc;
     final img = message.image;
     final ratio = img != null && img.width > 0 && img.height > 0 ? img.width / img.height : 4 / 5;
-    final future = ref.read(backendProvider).imageBytes(message);
     return Semantics(
       image: true,
       label: 'Photo',
@@ -618,7 +628,7 @@ class _PhotoContent extends ConsumerWidget {
           child: AspectRatio(
             aspectRatio: ratio.clamp(0.6, 1.6),
             child: FutureBuilder(
-              future: future,
+              future: _future,
               builder: (context, s) {
                 if (s.hasError) {
                   return ColoredBox(

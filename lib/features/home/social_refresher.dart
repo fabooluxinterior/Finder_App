@@ -28,9 +28,18 @@ class SocialRefresher extends ConsumerStatefulWidget {
 
 class _SocialRefresherState extends ConsumerState<SocialRefresher> with WidgetsBindingObserver {
   Timer? _timer;
+  Timer? _inboxTimer;
   int _ticks = 0;
 
+  /// Fetch waiting messages now (realtime normally delivers them instantly).
+  void _syncInbox() {
+    try {
+      ref.read(backendProvider).syncInbox();
+    } catch (_) {}
+  }
+
   void _refresh() {
+    _syncInbox();
     ref.invalidate(incomingRequestsProvider);
     ref.invalidate(connectionsProvider);
   }
@@ -39,6 +48,8 @@ class _SocialRefresherState extends ConsumerState<SocialRefresher> with WidgetsB
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    // One small call every few seconds: a safety net behind realtime so messages never wait long.
+    _inboxTimer = Timer.periodic(const Duration(seconds: 6), (_) => _syncInbox());
     _timer = Timer.periodic(widget.interval, (_) {
       _ticks++;
       if (SocialRefresher.watches(widget.tab) || _ticks % 4 == 0) _refresh();
@@ -64,6 +75,7 @@ class _SocialRefresherState extends ConsumerState<SocialRefresher> with WidgetsB
   @override
   void dispose() {
     _timer?.cancel();
+    _inboxTimer?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }

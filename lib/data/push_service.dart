@@ -28,9 +28,12 @@ abstract class PushService {
 }
 
 class PushNotice {
-  const PushNotice(this.title, this.body);
+  const PushNotice(this.title, this.body, {this.kind = ''});
   final String title;
   final String body;
+
+  /// 'message' for chat messages (the open app already shows those live), 'announcement' for dashboard sends.
+  final String kind;
 }
 
 class NoopPush implements PushService {
@@ -101,7 +104,7 @@ class FirebasePush implements PushService {
   @override
   Stream<PushNotice> get foregroundMessages => FirebaseMessaging.onMessage
       .where((m) => m.notification != null)
-      .map((m) => PushNotice(m.notification!.title ?? '', m.notification!.body ?? ''));
+      .map((m) => PushNotice(m.notification!.title ?? '', m.notification!.body ?? '', kind: m.data['kind'] as String? ?? ''));
 
   @override
   Future<void> deleteToken() async {

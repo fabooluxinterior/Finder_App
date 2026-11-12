@@ -1027,6 +1027,9 @@ class DemoBackend implements FinderBackend {
   Stream<void> socialChanges() => _social.stream;
 
   @override
+  Future<void> syncInbox() async {}
+
+  @override
   Future<bool> serverPremium() async => _hasAccess;
 
   @override

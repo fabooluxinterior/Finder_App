@@ -621,6 +621,15 @@ class SupabaseBackend implements FinderBackend {
   });
 
   @override
+  Future<void> syncInbox() async {
+    if (currentUserId == null) return;
+    try {
+      await _ready();
+      await _drain();
+    } catch (_) {}
+  }
+
+  @override
   Stream<void> socialChanges() {
     final controller = StreamController<void>.broadcast();
     final me = currentUserId;

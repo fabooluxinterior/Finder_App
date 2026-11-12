@@ -11,6 +11,7 @@ import '../../core/feedback.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/push_service.dart';
+import '../notifications/push_prompt.dart';
 import '../../models/follow_request.dart';
 import '../../providers.dart';
 import '../chats/chats_screen.dart';
@@ -43,13 +44,15 @@ class _HomeShellState extends ConsumerState<HomeShell> {
     if (!push.available) return;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      ref.read(pushEnabledProvider.notifier).start();
+      askForPushOnce(context, ref);
       _tokenSub = push.tokenRefreshes.listen((t) async {
         if (await ref.read(pushEnabledProvider.future)) ref.read(backendProvider).registerPushToken(t).catchError((_) {});
       });
       // The system shows no popup while the app is open, so show it here.
       _pushSub = push.foregroundMessages.listen((m) {
         if (!mounted) return;
+        // Chat messages already appear live in the open app; only dashboard messages need a banner.
+        if (m.kind == 'message') return;
         ref.invalidate(notificationsProvider);
         Fx.instance.received();
         showSnack(context, m.body.isEmpty ? m.title : '${m.title}: ${m.body}', icon: PhosphorIconsFill.bell);
