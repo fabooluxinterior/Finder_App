@@ -7,7 +7,7 @@ import { admin, rateLimit, requireUser, securityEvent } from "../_shared/auth.ts
 import { handle, HttpError, json } from "../_shared/http.ts";
 import { RejectedImage, sanitizeImage } from "../_shared/image.ts";
 import { sealMedia } from "../_shared/media_crypto.ts";
-import { moderate } from "../_shared/moderation.ts";
+import { betaAutoApproveActive, moderate } from "../_shared/moderation.ts";
 
 const PATH = /^[0-9a-f-]{36}\/[0-9a-f-]{36}\.(jpg|png|webp)$/;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
@@ -23,8 +23,10 @@ Deno.serve((req) =>
     const kind = ["photo", "primary", "gallery", "selfie"].includes(body.kind) ? (body.kind as string) : null;
     const requestId = String(body.request_id ?? "");
     const replaces = body.replaces == null ? null : String(body.replaces);
-    if (!kind || !PATH.test(path) || !path.startsWith(`${user.id}/`) || (kind === "selfie" && !UUID.test(requestId))
-        || (replaces !== null && (kind !== "photo" || !UUID.test(replaces)))) {
+    if (
+      !kind || !PATH.test(path) || !path.startsWith(`${user.id}/`) || (kind === "selfie" && !UUID.test(requestId)) ||
+      (replaces !== null && (kind !== "photo" || !UUID.test(replaces)))
+    ) {
       await securityEvent(user.id, "upload_path_rejected", "warning", {});
       throw new HttpError(400, "bad_request", "Invalid upload.");
     }
@@ -46,13 +48,18 @@ Deno.serve((req) =>
     }
 
     let verdict = await moderate(clean.webp);
-    // Staff accounts are trusted with their own profile photos while no
-    // moderation provider is configured (they can approve photos anyway). It
-    // never overrides a provider's answer or an error, and verification
-    // selfies always go to review.
+    // With no moderation provider configured: staff accounts' own photos publish
+    // immediately (they can approve photos anyway), and during the time-limited
+    // closed-beta window (MODERATION_AUTO_APPROVE_UNTIL) everyone's do. It never
+    // overrides a provider's answer or error, and verification selfies always
+    // go to review.
     if (verdict.status === "pending" && verdict.labels.provider === "none" && kind !== "selfie") {
-      const { data: staff } = await admin.from("staff_roles").select("role").eq("user_id", user.id).maybeSingle();
-      if (staff) verdict = { status: "approved", labels: { provider: "staff_trusted" } };
+      if (betaAutoApproveActive((k) => Deno.env.get(k))) {
+        verdict = { status: "approved", labels: { provider: "beta_auto_approve" } };
+      } else {
+        const { data: staff } = await admin.from("staff_roles").select("role").eq("user_id", user.id).maybeSingle();
+        if (staff) verdict = { status: "approved", labels: { provider: "staff_trusted" } };
+      }
     }
     if (verdict.status === "rejected") {
       await securityEvent(user.id, "upload_blocked_by_moderation", "warning", {});
@@ -67,9 +74,19 @@ Deno.serve((req) =>
     if (upErr) throw upErr;
 
     const { error: insErr } = await admin.from("media_objects").insert({
-      id: mediaId, owner_id: user.id, kind, status: verdict.status, storage_path: storagePath,
-      wrapped_dek: sealed.wrappedDek, kek_id: sealed.kekId, nonce: sealed.nonce, sha256: sealed.sha256,
-      width: clean.width, height: clean.height, bytes: clean.webp.length, moderation: verdict.labels,
+      id: mediaId,
+      owner_id: user.id,
+      kind,
+      status: verdict.status,
+      storage_path: storagePath,
+      wrapped_dek: sealed.wrappedDek,
+      kek_id: sealed.kekId,
+      nonce: sealed.nonce,
+      sha256: sealed.sha256,
+      width: clean.width,
+      height: clean.height,
+      bytes: clean.webp.length,
+      moderation: verdict.labels,
       reviewed_at: verdict.status === "approved" ? new Date().toISOString() : null,
       replaces,
     });
@@ -81,7 +98,11 @@ Deno.serve((req) =>
     if (kind === "selfie") {
       // Verification selfies are never published: linked to the pending
       // request for staff review and purged 30 days after review.
-      const { error } = await admin.rpc("attach_verification_selfie", { p_user: user.id, p_request: requestId, p_media: mediaId });
+      const { error } = await admin.rpc("attach_verification_selfie", {
+        p_user: user.id,
+        p_request: requestId,
+        p_media: mediaId,
+      });
       if (error) {
         await admin.from("media_objects").update({ status: "deleted" }).eq("id", mediaId);
         throw new HttpError(409, "expired", "That verification expired. Start again.");

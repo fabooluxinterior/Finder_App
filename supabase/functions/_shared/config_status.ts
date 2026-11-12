@@ -55,6 +55,14 @@ export const SERVICES: ServiceSpec[] = [
       "Create an OpenAI API key (platform.openai.com); set OPENAI_API_KEY in Supabase → Edge Functions → Secrets. Without any moderation key every photo waits for manual review.",
   },
   {
+    service: "moderation_beta",
+    label: "Closed beta: photos auto-approved until the date (turn off before launch)",
+    required: false,
+    vars: ["MODERATION_AUTO_APPROVE_UNTIL"],
+    setup:
+      "MODERATION_AUTO_APPROVE_UNTIL=YYYY-MM-DD approves every photo without a check until that day, only while no moderation provider is set. Remove it (or let it expire) before public launch and use the OpenAI key instead.",
+  },
+  {
     service: "moderation_google",
     label: "Image moderation (Google Vision, alternative)",
     required: false,

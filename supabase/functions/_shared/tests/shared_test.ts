@@ -16,7 +16,7 @@ import {
   SpotifyRateLimited,
   topArtists,
 } from "../spotify.ts";
-import { decide, decideOpenAI, moderate } from "../moderation.ts";
+import { betaAutoApproveActive, decide, decideOpenAI, moderate } from "../moderation.ts";
 
 const dir = new URL(".", import.meta.url);
 const key = () => btoa(String.fromCharCode(...crypto.getRandomValues(new Uint8Array(32))));
@@ -89,6 +89,18 @@ Deno.test("moderation (OpenAI scores): safe passes, doubtful goes to a person, e
   assertEquals(decideOpenAI({ sexual: 0.93 }), "rejected");
   assertEquals(decideOpenAI({ "sexual/minors": 0.5 }), "rejected");
   assertEquals(decideOpenAI({}), "approved");
+});
+
+Deno.test("moderation: the closed-beta auto-approve expires by itself", () => {
+  const env = (v?: string) => (k: string) => (k === "MODERATION_AUTO_APPROVE_UNTIL" ? v : undefined);
+  const d = (s: string) => new Date(s);
+  assertEquals(betaAutoApproveActive(env(undefined), d("2026-11-12T10:00:00Z")), false, "off unless set");
+  assertEquals(betaAutoApproveActive(env("2026-11-26"), d("2026-11-12T10:00:00Z")), true);
+  assertEquals(betaAutoApproveActive(env("2026-11-26"), d("2026-11-26T23:00:00Z")), true, "through the end of that day");
+  assertEquals(betaAutoApproveActive(env("2026-11-26"), d("2026-11-27T00:00:01Z")), false, "expired");
+  for (const bad of ["", "soon", "2026-13-45x", "26-11-2026"]) {
+    assertEquals(betaAutoApproveActive(env(bad), d("2026-11-12T10:00:00Z")), false, bad);
+  }
 });
 
 Deno.test("moderation (provider choice, failures, secrecy)", async () => {

@@ -86,6 +86,19 @@ async function googleVision(image: Uint8Array, key: string, f: typeof fetch): Pr
   return { status: decide(labels), labels: { provider: "google", ...labels } };
 }
 
+/**
+ * Closed-beta switch: with no moderation provider set, photos are approved
+ * straight away until the date in MODERATION_AUTO_APPROVE_UNTIL (YYYY-MM-DD,
+ * end of that day, UTC). It expires by itself, so it can't be left on by
+ * accident; a configured provider always takes over from it.
+ */
+export function betaAutoApproveActive(env: Env, now: Date = new Date()): boolean {
+  const v = (env("MODERATION_AUTO_APPROVE_UNTIL") ?? "").trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(v)) return false;
+  const end = Date.parse(`${v}T23:59:59Z`);
+  return Number.isFinite(end) && now.getTime() <= end;
+}
+
 export async function moderate(
   image: Uint8Array,
   env: Env = (k) => Deno.env.get(k),
