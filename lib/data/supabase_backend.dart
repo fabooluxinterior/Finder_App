@@ -22,11 +22,13 @@ import '../security/e2ee_engine.dart';
 import '../security/message_vault.dart';
 import '../security/secure_kv.dart';
 import 'backend.dart';
+import 'spotify_direct.dart';
 import 'supabase_key_directory.dart';
 
 class SupabaseBackend implements FinderBackend {
-  SupabaseBackend(this._db, {required SecureKv kv})
+  SupabaseBackend(this._db, {required SecureKv kv, SpotifyDirect? spotify})
     : _kv = kv,
+      _spotify = spotify ?? (SpotifyDirect.configured ? SpotifyDirect(clientId: SpotifyDirect.envClientId) : null),
       _vault = MessageVault(kv),
       _engine = E2eeEngine(
         directory: SupabaseKeyDirectory(_db),
@@ -43,6 +45,7 @@ class SupabaseBackend implements FinderBackend {
 
   final SupabaseClient _db;
   final SecureKv _kv;
+  final SpotifyDirect? _spotify;
   final MessageVault _vault;
   final E2eeEngine _engine;
   static const _uuid = Uuid();
@@ -421,8 +424,52 @@ class SupabaseBackend implements FinderBackend {
     );
   });
 
+  /// Tokens stay on this phone (secure storage), one set per signed-in user.
+  String get _spotifyKey => 'vouby_spotify_tokens_$_me';
+
+  Future<void> _saveTokens(SpotifyTokens t) =>
+      _kv.write(_spotifyKey, jsonEncode({'a': t.access, 'r': t.refresh, 'e': t.expiresAt.toIso8601String(), 's': t.scope}));
+
+  Future<SpotifyTokens?> _loadTokens() async {
+    try {
+      final raw = await _kv.read(_spotifyKey);
+      if (raw == null) return null;
+      final m = jsonDecode(raw) as Map<String, dynamic>;
+      return SpotifyTokens(
+        access: m['a'] as String,
+        refresh: m['r'] as String,
+        expiresAt: DateTime.parse(m['e'] as String),
+        scope: m['s'] as String,
+      );
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<void> _importSpotify(SpotifyDirect sp, SpotifyTokens tokens) async {
+    final data = await sp.importAll(tokens.access);
+    await _db.rpc(
+      'store_my_music',
+      params: {
+        'p_artists': [for (final a in data.artists) a.toJson()],
+        'p_tracks': [for (final t in data.tracks) t.toJson()],
+        'p_recent': data.recent == null ? null : [for (final t in data.recent!) t.toJson()],
+        'p_scopes': tokens.scope,
+      },
+    );
+  }
+
+  /// With a Spotify app ID in the build: the phone signs in to Spotify itself (PKCE, no server secret).
+  /// Otherwise the older server flow.
   @override
   Future<Uri> musicAuthorizeUrl() => _guard(() async {
+    final sp = _spotify;
+    if (sp != null) {
+      final tokens = await sp.connect();
+      await _saveTokens(tokens);
+      await _importSpotify(sp, tokens);
+      return Uri.parse('vouby-demo://music-connected');
+    }
     try {
       final res = await _db.functions.invoke('music-connect', body: const {});
       return Uri.parse((res.data as Map)['url'] as String);
@@ -436,6 +483,27 @@ class SupabaseBackend implements FinderBackend {
 
   @override
   Future<MusicSyncResult> syncMusic({bool force = false}) => _guard(() async {
+    final sp = _spotify;
+    final tokens0 = sp == null ? null : await _loadTokens();
+    if (sp != null && tokens0 != null) {
+      final state = await musicState();
+      if (!state.connected) return MusicSyncResult.disconnected;
+      final synced = state.syncedAt;
+      if (!force && synced != null && DateTime.now().difference(synced) < const Duration(hours: 1)) {
+        return MusicSyncResult.cached;
+      }
+      try {
+        var tokens = tokens0;
+        if (tokens.expired) {
+          tokens = await sp.refresh(tokens);
+          await _saveTokens(tokens);
+        }
+        await _importSpotify(sp, tokens);
+        return MusicSyncResult.synced;
+      } on SpotifyReauthRequired {
+        return MusicSyncResult.reauthRequired;
+      }
+    }
     try {
       final res = await _db.functions.invoke('music-sync', body: {'action': 'sync', 'force': force});
       return switch ((res.data as Map)['status']) {
@@ -459,7 +527,8 @@ class SupabaseBackend implements FinderBackend {
 
   @override
   Future<void> disconnectMusic() => _guard(() async {
-    await _db.functions.invoke('music-sync', body: {'action': 'disconnect'});
+    await _kv.delete(_spotifyKey);
+    await _db.rpc('disconnect_music');
   });
 
   /// Upload to quarantine, then the server validates, strips metadata,

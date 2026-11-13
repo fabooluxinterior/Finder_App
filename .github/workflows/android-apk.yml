@@ -184,14 +184,18 @@ jobs:
           cp build/app/outputs/flutter-apk/*armeabi*demo*release.apk out/finder-demo-armv7.apk
 
       # Live APK: built only when the repository has Supabase secrets configured.
+      # SPOTIFY_CLIENT_ID is the public app ID: the phone signs in to Spotify itself (PKCE), no server secret.
       - name: Build live APK
         if: ${{ env.SUPABASE_URL != '' }}
+        env:
+          SPOTIFY_CLIENT_ID: ${{ vars.SPOTIFY_CLIENT_ID || '3315a3d3e8c349689a8c5f00dad3cc2e' }}
         run: |
           flutter build apk --release --flavor prod --target-platform android-arm64 --obfuscate --split-debug-info=build/symbols \
             --build-number="$GITHUB_RUN_NUMBER" --dart-define=BUILD_NUMBER="$GITHUB_RUN_NUMBER" \
             --dart-define=SUPABASE_URL="$SUPABASE_URL" \
             --dart-define=SUPABASE_ANON_KEY="$SUPABASE_ANON_KEY" \
             --dart-define=REVENUECAT_ANDROID_KEY="$REVENUECAT_ANDROID_KEY" \
+            --dart-define=SPOTIFY_CLIENT_ID="$SPOTIFY_CLIENT_ID" \
             --dart-define=FIREBASE_API_KEY="$FIREBASE_API_KEY" \
             --dart-define=FIREBASE_APP_ID="$FIREBASE_APP_ID" \
             --dart-define=FIREBASE_SENDER_ID="$FIREBASE_SENDER_ID" \
