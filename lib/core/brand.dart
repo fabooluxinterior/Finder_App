@@ -286,10 +286,20 @@ class VerifiedTick extends StatelessWidget {
   const VerifiedTick({super.key, this.size = 20});
   final double size;
 
-  static final _seal = parseSvgPath(
-    'M12 1.5l2.6 1.9 3.2-.1 1 3 2.6 1.9-1 3.1 1 3.1-2.6 1.9-1 3-3.2-.1L12 22.5l-2.6-1.9-3.2.1-1-3-2.6-1.9 1-3.1-1-3.1 2.6-1.9 1-3 3.2.1z',
-  );
-  static final _tick = parseSvgPath('M8 12.2l2.7 2.7L16.2 9.4');
+  /// A smooth 8-lobe rosette (the familiar verified badge), built once on the 24 px grid.
+  static final _seal = () {
+    const n = 8, r0 = 10.4, amp = 0.065, steps = 160;
+    final path = Path();
+    for (var i = 0; i <= steps; i++) {
+      final a = i / steps * math.pi * 2;
+      final r = r0 * (1 + amp * math.cos(n * a));
+      final x = 12 + r * math.cos(a - math.pi / 2);
+      final y = 12 + r * math.sin(a - math.pi / 2);
+      i == 0 ? path.moveTo(x, y) : path.lineTo(x, y);
+    }
+    return path..close();
+  }();
+  static final _tick = parseSvgPath('M7.6 12.4l3 3 5.9-6.1');
 
   @override
   Widget build(BuildContext context) => Semantics(

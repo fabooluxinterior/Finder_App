@@ -899,8 +899,15 @@ class DemoBackend implements FinderBackend {
     await _latency();
     final now = DateTime.now();
     final myCity = _me?.city.toLowerCase();
+    // Same rule as the server: only who your Discovery preferences allow (genders; empty = everyone) and the age range.
+    final me = _me;
+    final wantGenders = me?.prefGenders ?? const <String>[];
+    final minAge = me?.prefAgeMin ?? 18;
+    final maxAge = me?.prefAgeMax ?? 99;
     final list = _people.values.where((s) {
       if (_hiddenPendingReview.contains(s.profile.id)) return false;
+      if (wantGenders.isNotEmpty && !wantGenders.contains(s.profile.gender)) return false;
+      if (s.profile.age < minAge || s.profile.age > maxAge) return false;
       final mine = _swipes[(meId, s.profile.id)];
       if (mine != null &&
           !(mine.action == 'pass' && now.difference(mine.createdAt) > const Duration(days: AppConfig.passHideDays))) {

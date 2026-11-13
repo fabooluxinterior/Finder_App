@@ -63,18 +63,19 @@ Future<void> _settle(WidgetTester t, [int ms = 600]) async {
 void main() {
   setUp(() => TestWidgetsFlutterBinding.ensureInitialized());
 
-  testWidgets('You: followers and following counts, private note, tiles and Blocked open their screens', (t) async {
+  testWidgets('You: People and Blocked open their screens; no duplicate followers cards, settings icon or Bio card', (t) async {
     await t.binding.setSurfaceSize(const Size(400, 1000));
     addTearDown(() => t.binding.setSurfaceSize(null));
-    final (b, all) = (await t.runAsync(_world))!;
+    final (b, _) = (await t.runAsync(_world))!;
     await t.pumpWidget(_app(b, const MyProfileScreen()));
     await _settle(t);
-    expect(find.text('Only you can see these numbers and lists'), findsOneWidget);
-    final followers = all.where((c) => c.followsMe).length;
-    final following = all.where((c) => c.iFollow).length;
-    expect(find.text('$followers'), findsWidgets);
-    expect(find.text('$following'), findsWidgets);
-    await t.tap(find.text('Followers').first);
+    // Removed: the two followers cards, the settings icon at the top right and the Bio card.
+    expect(find.text('Only you can see these numbers and lists'), findsNothing);
+    expect(find.bySemanticsLabel('Privacy & security'), findsNothing);
+    expect(find.text('Bio'), findsNothing);
+    // One Edit, in the profile card.
+    expect(find.text('Edit'), findsOneWidget);
+    await t.tap(find.text('People').first);
     await _settle(t);
     expect(find.byType(FollowListsScreen), findsOneWidget);
     await t.pageBack();
@@ -83,6 +84,21 @@ void main() {
     await _settle(t);
     expect(find.byType(BlockedUsersScreen), findsOneWidget);
     expect(find.text('You haven’t blocked anyone.'), findsOneWidget);
+  });
+
+  test('Discovery preferences: Women shows only women, Men only men, both or Everyone show all', () async {
+    final (b, _) = await _world();
+    Future<Set<String?>> shown(List<String> g) async {
+      await b.updateProfile(ProfilePatch({ProfilePatch.prefGenders: g}));
+      return (await b.fetchFeed()).map((p) => p.gender).toSet();
+    }
+
+    expect(await shown(['woman']), {'woman'});
+    expect(await shown(['man']), {'man'});
+    final both = await shown(['woman', 'man']);
+    expect(both.containsAll({'woman', 'man'}), isTrue);
+    final everyone = await shown([]);
+    expect(everyone.containsAll({'woman', 'man'}), isTrue);
   });
 
   testWidgets('Followers and Following are separate lists with a switch', (t) async {

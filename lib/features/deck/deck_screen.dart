@@ -139,6 +139,8 @@ class _DeckScreenState extends ConsumerState<DeckScreen> {
   Widget build(BuildContext context) {
     final c = context.fc;
     final feed = ref.watch(feedProvider);
+    // New Discovery preferences: start the deck again so it shows only who the new choices allow.
+    ref.listen<int>(discoveryEpochProvider, (_, _) => _reload());
     // Someone you just connected with never stays in the deck.
     ref.listen<AsyncValue<List<Connection>>>(connectionsProvider, (prev, next) {
       final ids = next.value?.map((x) => x.profile.id).toSet() ?? const <String>{};

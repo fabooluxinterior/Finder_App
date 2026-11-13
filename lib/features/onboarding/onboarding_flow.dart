@@ -347,7 +347,7 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Icon(icon, color: c.accent, size: 24),
+              icon == PhosphorIconsFill.sealCheck ? const VerifiedTick(size: 26) : Icon(icon, color: c.accent, size: 24),
               const SizedBox(width: 14),
               Expanded(
                 child: Column(

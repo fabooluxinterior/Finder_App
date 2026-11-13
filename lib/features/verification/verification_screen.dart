@@ -3,6 +3,7 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/brand.dart';
 import '../../core/config.dart';
 import '../../core/errors.dart';
 import '../../core/feedback.dart';
@@ -77,8 +78,7 @@ class _VerificationScreenState extends ConsumerState<VerificationScreen> {
     Widget body;
     if (status == VerificationStatus.approved) {
       body = _Message(
-        icon: PhosphorIconsFill.sealCheck,
-        iconColor: const Color(0xFF2E7CF6),
+        leading: const VerifiedTick(size: 56),
         title: 'You’re verified',
         text: 'Your profile shows the blue Verified badge.',
       );
@@ -104,7 +104,7 @@ class _VerificationScreenState extends ConsumerState<VerificationScreen> {
                 style: t.bodySmall?.copyWith(color: c.ink),
               ),
             ),
-          Icon(PhosphorIconsFill.sealCheck, size: 48, color: const Color(0xFF2E7CF6)),
+          const VerifiedTick(size: 52),
           const SizedBox(height: 16),
           Text('Get the Verified badge', style: t.headlineSmall),
           const SizedBox(height: 8),
@@ -188,11 +188,11 @@ class _VerificationScreenState extends ConsumerState<VerificationScreen> {
 }
 
 class _Message extends StatelessWidget {
-  const _Message({required this.icon, required this.title, required this.text, this.iconColor});
-  final IconData icon;
+  const _Message({this.icon, this.leading, required this.title, required this.text});
+  final IconData? icon;
+  final Widget? leading;
   final String title;
   final String text;
-  final Color? iconColor;
 
   @override
   Widget build(BuildContext context) {
@@ -201,7 +201,7 @@ class _Message extends StatelessWidget {
       padding: const EdgeInsets.only(top: 60),
       child: Column(
         children: [
-          Icon(icon, size: 52, color: iconColor ?? context.fc.ink),
+          leading ?? Icon(icon, size: 52, color: context.fc.ink),
           const SizedBox(height: 16),
           Text(title, style: t.headlineSmall),
           const SizedBox(height: 8),

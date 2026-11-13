@@ -95,6 +95,16 @@ final paymentsModeProvider = FutureProvider<String>((ref) async {
 
 bool isPremium(WidgetRef ref) => ref.watch(premiumProvider).value ?? false;
 
+/// Bumped when Discovery preferences are saved, so the Discover deck starts over with the new rules
+/// (the deck keeps its own list of cards while you swipe, so a refetch alone would not change it).
+class DiscoveryEpoch extends Notifier<int> {
+  @override
+  int build() => 0;
+  void bump() => state++;
+}
+
+final discoveryEpochProvider = NotifierProvider<DiscoveryEpoch, int>(DiscoveryEpoch.new);
+
 final feedProvider = FutureProvider<List<PublicProfile>>((ref) async {
   ref.watch(authUserProvider);
   return ref.watch(backendProvider).fetchFeed();

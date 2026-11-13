@@ -73,18 +73,7 @@ class _MyProfileScreenState extends ConsumerState<MyProfileScreen> {
           children: [
             Padding(
               padding: const EdgeInsets.only(top: 8),
-              child: Row(
-                children: [
-                  Expanded(child: Text('You', style: t.headlineMedium)),
-                  RoundButton(
-                    icon: Icons.tune,
-                    iconWidget: VIcon(VIcons.settings, size: 22, color: c.ink),
-                    size: 44,
-                    semanticLabel: 'Privacy & security',
-                    onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SecurityCenterScreen())),
-                  ),
-                ],
-              ),
+              child: Text('You', style: t.headlineMedium),
             ),
             const SizedBox(height: 14),
             _ProfileCard(
@@ -93,10 +82,7 @@ class _MyProfileScreenState extends ConsumerState<MyProfileScreen> {
               onEdit: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ProfileEditorScreen())),
             ),
             const SizedBox(height: 10),
-            const _FollowTiles(),
-            const SizedBox(height: 10),
             _QuickActions(
-              onEdit: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ProfileEditorScreen())),
               onPeople: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const FollowListsScreen())),
               onBlocked: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const BlockedUsersScreen())),
               onPlan: () => showPaywall(context),
@@ -158,37 +144,11 @@ class _MyProfileScreenState extends ConsumerState<MyProfileScreen> {
             ),
             const Padding(padding: EdgeInsets.fromLTRB(4, 6, 4, 0), child: ProfileUpdateStatusRow()),
             const Padding(padding: EdgeInsets.only(top: 10), child: TrialStatusRow()),
-            if (me.bio.isNotEmpty) ...[
-              const SizedBox(height: 14),
-              Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: c.surface,
-                  borderRadius: BorderRadius.circular(24),
-                  border: Border.all(color: c.hair),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Bio',
-                      style: TextStyle(fontSize: 14, height: 20 / 14, color: c.muted),
-                    ),
-                    const SizedBox(height: 6),
-                    Text(
-                      me.bio,
-                      style: TextStyle(fontSize: 17, height: 24 / 17, color: c.ink),
-                    ),
-                  ],
-                ),
-              ),
-            ],
             const SizedBox(height: 12),
             _Card(
               children: [
                 _Row(
-                  icon: PhosphorIconsFill.sealCheck,
-                  iconColor: me.isVerified ? const Color(0xFF2E7CF6) : null,
+                  leading: Opacity(opacity: me.isVerified ? 1 : 0.55, child: const VerifiedTick(size: 24)),
                   title: me.isVerified ? 'You’re verified' : 'Get verified',
                   subtitle: me.isVerified ? 'Your profile shows the Verified badge' : 'A quick selfie earns the blue badge',
                   onTap: () => Navigator.push(
@@ -374,13 +334,13 @@ class _Card extends StatelessWidget {
 }
 
 class _Row extends StatelessWidget {
-  const _Row({required this.icon, required this.title, this.subtitle, this.trailing, this.onTap, this.iconColor});
-  final IconData icon;
+  const _Row({this.icon, this.leading, required this.title, this.subtitle, this.trailing, this.onTap});
+  final IconData? icon;
+  final Widget? leading;
   final String title;
   final String? subtitle;
   final Widget? trailing;
   final VoidCallback? onTap;
-  final Color? iconColor;
 
   @override
   Widget build(BuildContext context) {
@@ -390,7 +350,7 @@ class _Row extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(16, 14, 14, 14),
       child: Row(
         children: [
-          Icon(icon, size: 22, color: iconColor ?? c.ink2),
+          leading ?? Icon(icon, size: 22, color: c.ink2),
           const SizedBox(width: 18),
           Expanded(
             child: Column(
@@ -537,84 +497,8 @@ class _RingPainter extends CustomPainter {
   bool shouldRepaint(_RingPainter old) => old.progress != progress || old.color != color || old.track != track;
 }
 
-/// Followers and Following, each with its own count. Visible only to you.
-class _FollowTiles extends ConsumerWidget {
-  const _FollowTiles();
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final c = context.fc;
-    final all = ref.watch(connectionsProvider).value ?? const [];
-    final followers = all.where((x) => x.followsMe).length;
-    final following = all.where((x) => x.iFollow).length;
-    Widget tile(String label, int n, FollowTab tab) => Expanded(
-      child: Pressable(
-        scale: 0.98,
-        semanticLabel: '$n $label',
-        onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => FollowListsScreen(initial: tab))),
-        child: Container(
-          padding: const EdgeInsets.fromLTRB(16, 14, 12, 14),
-          decoration: BoxDecoration(
-            color: c.surface,
-            borderRadius: BorderRadius.circular(22),
-            border: Border.all(color: c.hair),
-          ),
-          child: Row(
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      '$n',
-                      style: TextStyle(
-                        fontSize: 26,
-                        height: 30 / 26,
-                        fontWeight: FontWeight.w700,
-                        letterSpacing: -0.5,
-                        color: c.ink,
-                      ),
-                    ),
-                    Text(label, style: TextStyle(fontSize: 14, color: c.muted)),
-                  ],
-                ),
-              ),
-              Icon(PhosphorIconsBold.caretRight, size: 15, color: c.muted),
-            ],
-          ),
-        ),
-      ),
-    );
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            tile('Followers', followers, FollowTab.followers),
-            const SizedBox(width: 10),
-            tile('Following', following, FollowTab.following),
-          ],
-        ),
-        Padding(
-          padding: const EdgeInsets.fromLTRB(2, 8, 2, 0),
-          child: Row(
-            children: [
-              Icon(PhosphorIconsFill.lockSimple, size: 12, color: c.muted),
-              const SizedBox(width: 6),
-              Expanded(
-                child: Text('Only you can see these numbers and lists', style: TextStyle(fontSize: 12, color: c.muted)),
-              ),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-}
-
 class _QuickActions extends StatelessWidget {
-  const _QuickActions({required this.onEdit, required this.onPeople, required this.onBlocked, required this.onPlan});
-  final VoidCallback onEdit;
+  const _QuickActions({required this.onPeople, required this.onBlocked, required this.onPlan});
   final VoidCallback onPeople;
   final VoidCallback onBlocked;
   final VoidCallback onPlan;
@@ -650,8 +534,6 @@ class _QuickActions extends StatelessWidget {
     );
     return Row(
       children: [
-        item(Icons.edit_outlined, 'Edit', onEdit),
-        const SizedBox(width: 8),
         item(Icons.group_outlined, 'People', onPeople),
         const SizedBox(width: 8),
         item(PhosphorIconsRegular.prohibit, 'Blocked', onBlocked),

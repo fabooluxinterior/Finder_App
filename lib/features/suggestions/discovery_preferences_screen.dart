@@ -39,6 +39,7 @@ class _DiscoveryPreferencesScreenState extends ConsumerState<DiscoveryPreference
           );
       ref.invalidate(myProfileProvider);
       ref.invalidate(feedProvider);
+      ref.read(discoveryEpochProvider.notifier).bump();
       if (mounted) Navigator.pop(context);
     } on AppException catch (e) {
       if (mounted) showSnack(context, e.message, icon: PhosphorIconsFill.warningCircle);
