@@ -147,7 +147,12 @@ class SpotifyDirect {
     }
     if (res.statusCode == 400 && res.body.contains('invalid_grant')) throw const _BadGrant();
     if (res.statusCode != 200) {
-      throw AppException(AppErrorCode.unknown, 'Spotify sign-in failed (${res.statusCode}).');
+      var why = '';
+      try {
+        final j = jsonDecode(res.body) as Map<String, dynamic>;
+        why = '${j['error'] ?? ''}${j['error_description'] != null ? ': ${j['error_description']}' : ''}';
+      } catch (_) {}
+      throw AppException(AppErrorCode.unknown, 'Spotify sign-in failed (${res.statusCode}${why.isEmpty ? '' : ', $why'}).');
     }
     final j = jsonDecode(res.body) as Map<String, dynamic>;
     return SpotifyTokens(

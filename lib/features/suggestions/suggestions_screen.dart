@@ -151,6 +151,8 @@ class _SuggestionsScreenState extends ConsumerState<SuggestionsScreen> {
     final t = Theme.of(context).textTheme;
     final bottomBar = MediaQuery.paddingOf(context).bottom;
     final status = _status;
+    // New Discovery preferences: reload so nobody who no longer fits stays on screen.
+    ref.listen<int>(discoveryEpochProvider, (_, _) => _load());
     // Someone you connect with (from anywhere) disappears from Suggestions.
     ref.listen<AsyncValue<List<Connection>>>(connectionsProvider, (prev, next) {
       final ids = next.value?.map((x) => x.profile.id).toSet() ?? const <String>{};
