@@ -870,6 +870,39 @@ class DemoBackend implements FinderBackend {
   }
 
   @override
+  Future<MusicSearchResult> searchMusic(String query) async {
+    await _latency();
+    final q = query.trim().toLowerCase();
+    if (q.length < 2) return const MusicSearchResult();
+    return MusicSearchResult(
+      artists: [
+        for (final a in _demoArtists)
+          if (a.name.toLowerCase().contains(q)) a,
+      ],
+      tracks: [
+        for (final t in demoTopTracks())
+          if (t.name.toLowerCase().contains(q) || t.artistLine.toLowerCase().contains(q)) t,
+      ],
+    );
+  }
+
+  @override
+  Future<void> saveMusicPicks({required List<MusicArtist> artists, required List<MusicTrack> tracks}) async {
+    await _latency();
+    _music = MusicState(
+      status: MusicStatus.active,
+      artists: artists.take(10).toList(),
+      syncedAt: DateTime.now(),
+      topTracks: [
+        for (final (i, t) in tracks.take(10).indexed)
+          MusicTrack(id: t.id, name: t.name, artists: t.artists, image: t.image, rank: i + 1),
+      ],
+      recentTracks: const [],
+    );
+    _publishMusic();
+  }
+
+  @override
   Future<void> setArtistVisibility(String artistId, {required bool visible}) async {
     if (!_music.artists.any((a) => a.id == artistId)) throw const AppException(AppErrorCode.unknown, 'Artist not found');
     _music = _music.copyWith(artists: [for (final a in _music.artists) a.id == artistId ? a.copyWith(visible: visible) : a]);

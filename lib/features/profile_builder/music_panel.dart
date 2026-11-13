@@ -11,6 +11,7 @@ import '../../core/widgets.dart';
 import '../../data/backend.dart';
 import '../../models/profile.dart';
 import '../../providers.dart';
+import 'music_picker_sheet.dart';
 
 const spotifyGreen = Color(0xFF1ED760);
 
@@ -211,6 +212,13 @@ class _MusicPanelState extends ConsumerState<MusicPanel> with WidgetsBindingObse
                 child: TextButton(onPressed: _connect, child: const Text('Reconnect to show recently played')),
               ),
           ],
+          Align(
+            alignment: Alignment.centerLeft,
+            child: TextButton(
+              onPressed: _pick,
+              child: Text(music.connected ? 'Edit my picks' : 'Or pick favorites without logging in'),
+            ),
+          ),
           if (reauth) ...[
             const SizedBox(height: 12),
             PillButton(label: 'Reconnect Spotify', height: 44, onTap: _connect),
@@ -227,6 +235,16 @@ class _MusicPanelState extends ConsumerState<MusicPanel> with WidgetsBindingObse
         ],
       ),
     );
+  }
+
+  Future<void> _pick() async {
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      builder: (_) => const MusicPickerSheet(),
+    );
+    if (mounted) _reload();
   }
 
   Future<void> _setSection(String section, bool visible) async {

@@ -39,6 +39,13 @@ class ProfilePatch {
   static const prefGenders = 'pref_genders';
 }
 
+/// Catalogue search results for "pick your favorites" (no Spotify login needed).
+class MusicSearchResult {
+  const MusicSearchResult({this.artists = const [], this.tracks = const []});
+  final List<MusicArtist> artists;
+  final List<MusicTrack> tracks;
+}
+
 enum MusicSyncResult { synced, cached, reauthRequired, disconnected }
 
 /// Everything the UI needs from the server. Implemented by
@@ -130,6 +137,12 @@ abstract class FinderBackend {
   /// Show or hide a whole section on the profile: 'top_tracks' or 'recent'.
   Future<void> setMusicSectionVisibility(String section, {required bool visible});
   Future<void> disconnectMusic();
+
+  /// Search artists and songs without logging in to Spotify.
+  Future<MusicSearchResult> searchMusic(String query);
+
+  /// Saves hand-picked favorites (replaces the stored lists). The server looks them up again by id.
+  Future<void> saveMusicPicks({required List<MusicArtist> artists, required List<MusicTrack> tracks});
 
   Future<List<PublicProfile>> fetchFeed();
 

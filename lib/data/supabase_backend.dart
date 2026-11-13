@@ -518,6 +518,42 @@ class SupabaseBackend implements FinderBackend {
   });
 
   @override
+  Future<MusicSearchResult> searchMusic(String query) => _guard(() async {
+    try {
+      final res = await _db.functions.invoke('music-pick', body: {'action': 'search', 'q': query});
+      final m = res.data as Map;
+      return MusicSearchResult(
+        artists: [for (final e in (m['artists'] as List? ?? const [])) MusicArtist.fromJson((e as Map).cast<String, dynamic>())],
+        tracks: [for (final e in (m['tracks'] as List? ?? const [])) MusicTrack.fromJson((e as Map).cast<String, dynamic>())],
+      );
+    } on FunctionException catch (e) {
+      throw AppException(
+        e.status == 429 ? AppErrorCode.rateLimited : AppErrorCode.unknown,
+        e.status == 503 ? 'Music search isn’t available right now.' : 'Couldn’t search. Try again.',
+      );
+    }
+  });
+
+  @override
+  Future<void> saveMusicPicks({required List<MusicArtist> artists, required List<MusicTrack> tracks}) => _guard(() async {
+    try {
+      await _db.functions.invoke(
+        'music-pick',
+        body: {
+          'action': 'save',
+          'artist_ids': [for (final a in artists) a.id],
+          'track_ids': [for (final t in tracks) t.id],
+        },
+      );
+    } on FunctionException catch (e) {
+      throw AppException(
+        e.status == 429 ? AppErrorCode.rateLimited : AppErrorCode.unknown,
+        'Couldn’t save your picks. Try again.',
+      );
+    }
+  });
+
+  @override
   Future<void> setArtistVisibility(String artistId, {required bool visible}) =>
       _guard(() => _db.rpc('set_music_artist_visibility', params: {'p_artist_id': artistId, 'p_visible': visible}));
 

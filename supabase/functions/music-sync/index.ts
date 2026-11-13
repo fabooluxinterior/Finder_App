@@ -28,9 +28,9 @@ Deno.serve((req) =>
     const { data: acct } = await admin.from("music_accounts")
       .select("refresh_token_enc, kek_id, status, synced_at").eq("user_id", user.id).maybeSingle();
     if (!acct) return json(req, { status: "disconnected" });
-    if (acct.status === "reauth_required" || !acct.refresh_token_enc || !acct.kek_id) {
-      return json(req, { status: "reauth_required" });
-    }
+    if (acct.status === "reauth_required") return json(req, { status: "reauth_required" });
+    // No server-held token: picked by hand, or connected from the phone. Nothing to refresh here.
+    if (!acct.refresh_token_enc || !acct.kek_id) return json(req, { status: "cached" });
     const age = acct.synced_at ? Date.now() - new Date(acct.synced_at).getTime() : Infinity;
     if (age < FRESH_MS && body.force !== true) return json(req, { status: "cached" });
 
