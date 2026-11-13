@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'api.dart';
 import 'pages/data_migration.dart';
 import 'pages/integrations.dart';
+import 'pages/moderation.dart';
 import 'pages/notifications.dart';
 import 'pages/safety.dart';
 import 'ui.dart';
@@ -16,12 +17,18 @@ class _Dest {
   final Widget Function(AdminApi api) build;
 }
 
-final _dests = <_Dest>[
-  _Dest('Overview', Icons.shield_outlined, 'Safety', false, (a) => SecurityPage(api: a)),
-  _Dest('Reports', Icons.flag_outlined, 'Safety', false, (a) => ReportsPage(api: a)),
-  _Dest('Photo review', Icons.image_outlined, 'Safety', false, (a) => MediaReviewPage(api: a)),
-  _Dest('Verification', Icons.verified_outlined, 'Safety', false, (a) => VerificationPage(api: a)),
-  _Dest('Notifications', Icons.notifications_outlined, 'Messaging', true, (a) => NotificationsPage(api: a)),
+/// Built per session: some pages need to jump to others and know the role.
+List<_Dest> _destinations(bool isAdmin, void Function(String) go) => [
+  _Dest('Overview', Icons.space_dashboard_outlined, 'Dashboard', false, (a) => OverviewPage(api: a, onGo: go)),
+  _Dest('Reports', Icons.flag_outlined, 'Moderation', false, (a) => ReportsQueuePage(api: a, isAdmin: isAdmin)),
+  _Dest('Users', Icons.people_outline, 'Moderation', false, (a) => UsersPage(api: a, isAdmin: isAdmin)),
+  _Dest('Suspended accounts', Icons.pause_circle_outline, 'Moderation', false, (a) => SuspendedPage(api: a, isAdmin: isAdmin)),
+  _Dest('Photo review', Icons.image_outlined, 'Review', false, (a) => MediaReviewPage(api: a)),
+  _Dest('Verification', Icons.verified_outlined, 'Review', false, (a) => VerificationPage(api: a)),
+  _Dest('Security events', Icons.shield_outlined, 'Review', false, (a) => SecurityPage(api: a)),
+  _Dest('Audit log', Icons.history, 'Admin', false, (a) => AuditPage(api: a)),
+  _Dest('Staff', Icons.badge_outlined, 'Admin', true, (a) => StaffPage(api: a)),
+  _Dest('Notifications', Icons.notifications_outlined, 'Admin', true, (a) => NotificationsPage(api: a)),
   _Dest('Database & Data Migration', Icons.storage_outlined, 'Settings', true, (a) => DataMigrationPage(api: a)),
   _Dest('Integrations & credentials', Icons.key_outlined, 'Settings', true, (a) => IntegrationsPage(api: a)),
 ];
@@ -41,9 +48,14 @@ class _AdminShellState extends State<AdminShell> {
   int _i = 0;
 
   List<_Dest> get _visible => [
-    for (final d in _dests)
+    for (final d in _destinations(widget.isAdmin, _go))
       if (widget.isAdmin || !d.adminOnly) d,
   ];
+
+  void _go(String label) {
+    final i = _visible.indexWhere((d) => d.label == label);
+    if (i >= 0) setState(() => _i = i);
+  }
 
   Widget _nav(BuildContext context, {required bool inDrawer}) {
     final items = _visible;
@@ -51,9 +63,30 @@ class _AdminShellState extends State<AdminShell> {
     return ListView(
       padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 10),
       children: [
-        const Padding(
-          padding: EdgeInsets.fromLTRB(12, 4, 12, 16),
-          child: Text('Vouby admin', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700)),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(12, 4, 12, 16),
+          child: Row(
+            children: [
+              Container(
+                width: 32,
+                height: 32,
+                decoration: BoxDecoration(color: accent, borderRadius: BorderRadius.circular(10)),
+                alignment: Alignment.center,
+                child: const Text(
+                  'V',
+                  style: TextStyle(fontWeight: FontWeight.w800, color: Colors.white),
+                ),
+              ),
+              const SizedBox(width: 10),
+              const Flexible(
+                child: Text(
+                  'Vouby admin',
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700, letterSpacing: -0.3),
+                ),
+              ),
+            ],
+          ),
         ),
         for (final (i, d) in items.indexed) ...[
           if (d.group != group) ...[

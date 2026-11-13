@@ -248,24 +248,6 @@ abstract class FinderBackend {
   Future<void> deleteAccount();
 
   // Staff (moderator / admin); every call is authorised server-side.
-  Future<String?> staffRole();
-  Future<Map<String, dynamic>> securityOverview();
-  Future<List<ReportSummary>> openReports();
-  Future<Map<String, dynamic>> openReportEvidence(String reportId, String accessReason);
-  Future<void> resolveReport(String reportId, {required bool actioned, required String resolution});
-  Future<List<PendingMedia>> pendingMedia();
-  Future<void> reviewMedia(String mediaId, {required bool approve});
-  Future<List<VerificationItem>> verificationQueue();
-  Future<void> reviewVerification(String requestId, {required bool approve});
-  Future<List<StaffReport>> staffReports({String status = 'open'});
-  Future<void> decideReport(String reportId, ModDecision decision, {required String note, int? days});
-  Future<Map<String, dynamic>> userModerationHistory(String userId);
-  Future<List<EvidenceItem>> reportEvidenceFiles(String reportId);
-
-  /// Short-lived signed URL for one evidence file or ticket screenshot (logged).
-  Future<String> staffFileUrl({required String kind, required String id, String reason});
-  Future<List<SupportTicket>> staffTickets({String status = 'open'});
-  Future<void> setTicketStatus(String ticketId, TicketStatus status, {String? note});
 
   /// Fires when requests/connections change (realtime).
   Stream<void> socialChanges();

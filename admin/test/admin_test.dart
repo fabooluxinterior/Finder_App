@@ -6,6 +6,7 @@ import 'package:vouby_admin/demo_api.dart';
 import 'package:vouby_admin/generated/migrations.g.dart';
 import 'package:vouby_admin/main.dart';
 import 'package:vouby_admin/models.dart';
+import 'package:vouby_admin/models_mod.dart';
 
 Future<void> _settle(WidgetTester t) async {
   for (var i = 0; i < 8; i++) {
@@ -66,7 +67,8 @@ void main() {
     await t.enterText(find.byType(TextField), '654321');
     await t.tap(find.text('Verify'));
     await _settle(t);
-    expect(find.text('Safety overview'), findsOneWidget);
+    expect(find.text('Overview'), findsWidgets);
+    expect(find.text('Open reports'), findsOneWidget);
 
     await t.tap(find.text('Database & Data Migration'));
     await _settle(t);
@@ -92,5 +94,50 @@ void main() {
     final r = await api.sendPush(title: 'Hi', body: 'There', audience: 'plan');
     expect(r.pushConfigured, isTrue);
     expect((await api.pushCampaigns()).single.title, 'Hi');
+  });
+
+  test(
+    'dashboard: suspend, list in Suspended accounts, unsuspend; notes are required; removal needs an admin to cancel',
+    () async {
+      final api = DemoAdminApi();
+      expect((await api.restricted(status: 'suspended')).map((r) => r.name), ['Rahul Nair']);
+
+      await expectLater(api.applyAction('u0', 'suspended', note: ''), throwsA(isA<AdminException>()));
+      expect(await api.applyAction('u0', 'suspended', note: 'Harassment in chats', days: 7), AccountStatus.suspended);
+      expect((await api.restricted(status: 'suspended')).map((r) => r.name), containsAll(['Asha Menon', 'Rahul Nair']));
+      expect((await api.overview()).n('suspended'), greaterThanOrEqualTo(3));
+
+      await expectLater(api.unsuspend('u0', note: ''), throwsA(isA<AdminException>()));
+      expect(await api.unsuspend('u0', note: 'Appeal accepted'), AccountStatus.active);
+      expect((await api.restricted(status: 'suspended')).map((r) => r.name), ['Rahul Nair']);
+
+      expect(await api.applyAction('u2', 'remove', note: 'Removal requested'), AccountStatus.removalPending);
+      await expectLater(api.unsuspend('u2', note: 'try'), throwsA(isA<AdminException>()));
+      expect(await api.applyAction('u2', 'cancel_removal', note: 'Changed their mind'), AccountStatus.active);
+
+      expect((await api.auditLog()).map((a) => a.action), containsAll(['user_suspended', 'user_unsuspend', 'user_remove']));
+      expect((await api.searchUsers(query: 'meera')).single.name, 'Meera Pillai');
+    },
+  );
+
+  testWidgets('dashboard: Suspended accounts page lists the account and Unsuspend restores it', (t) async {
+    t.view.physicalSize = const Size(1400, 1000);
+    t.view.devicePixelRatio = 1;
+    addTearDown(t.view.reset);
+    final api = DemoAdminApi();
+    await api.verifyPhoneCode('9188774739', '123456');
+    await api.verifyAuthenticator('654321');
+    await t.pumpWidget(AdminApp(api: api));
+    await _settle(t);
+    await t.tap(find.text('Suspended accounts').first);
+    await _settle(t);
+    expect(find.text('Rahul Nair'), findsOneWidget);
+    await t.tap(find.widgetWithText(FilledButton, 'Unsuspend').first);
+    await _settle(t);
+    await t.enterText(find.byType(TextField).last, 'Appeal accepted');
+    await t.tap(find.widgetWithText(FilledButton, 'Unsuspend').last);
+    await _settle(t);
+    expect(find.text('Rahul Nair'), findsNothing);
+    expect((await api.restricted(status: 'suspended')), isEmpty);
   });
 }

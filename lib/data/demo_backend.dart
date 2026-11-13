@@ -1242,23 +1242,6 @@ class DemoBackend implements FinderBackend {
   @override
   Future<List<SupportTicket>> myTickets() async => List.unmodifiable(_tickets);
 
-  @override
-  Future<List<SupportTicket>> staffTickets({String status = 'open'}) async =>
-      _tickets.where((t) => status == 'all' || (status == 'open' ? t.status.open : t.status.wire == status)).toList();
-
-  @override
-  Future<void> setTicketStatus(String ticketId, TicketStatus status, {String? note}) async {
-    final i = _tickets.indexWhere((t) => t.id == ticketId);
-    if (i < 0) throw const AppException(AppErrorCode.unknown, 'Ticket not found');
-    _tickets[i] = _tickets[i].copyWith(status: status, updatedAt: DateTime.now());
-    _notify(
-      'ticket_${status.wire}',
-      'Ticket ${_tickets[i].ticketNo}: ${status.label}',
-      note ?? 'Your support request was updated.',
-    );
-    _persist();
-  }
-
   void setPremium(bool value) {
     premium = value;
     _persist();
@@ -1560,12 +1543,6 @@ class DemoBackend implements FinderBackend {
     });
   }
 
-  @override
-  Future<List<VerificationItem>> verificationQueue() async => const [];
-
-  @override
-  Future<void> reviewVerification(String requestId, {required bool approve}) async {}
-
   final _demoSessionStart = DateTime.now();
 
   @override
@@ -1646,78 +1623,6 @@ class DemoBackend implements FinderBackend {
   /// Demo builds made with --dart-define=DEMO_STAFF=true show the staff
   /// dashboard with the demo's own reports and tickets.
   static const staffPreview = bool.fromEnvironment('DEMO_STAFF');
-
-  @override
-  Future<String?> staffRole() async => staffPreview ? 'admin' : null;
-
-  @override
-  Future<Map<String, dynamic>> securityOverview() async =>
-      throw const AppException(AppErrorCode.unknown, 'Not available in demo');
-
-  @override
-  Future<List<ReportSummary>> openReports() async => const [];
-
-  @override
-  Future<Map<String, dynamic>> openReportEvidence(String reportId, String accessReason) async => const {};
-
-  @override
-  Future<void> resolveReport(String reportId, {required bool actioned, required String resolution}) async {}
-
-  @override
-  Future<List<PendingMedia>> pendingMedia() async => const [];
-
-  @override
-  Future<void> reviewMedia(String mediaId, {required bool approve}) async {}
-
-  @override
-  Future<List<StaffReport>> staffReports({String status = 'open'}) async =>
-      _reports.where((r) => status == 'all' || r.status == status || (status == 'open' && r.status == 'reviewing')).toList();
-
-  @override
-  Future<void> decideReport(String reportId, ModDecision decision, {required String note, int? days}) async {
-    if (note.trim().isEmpty && decision != ModDecision.review) {
-      throw const AppException(AppErrorCode.invalidInput, 'Add a note explaining the decision');
-    }
-    final i = _reports.indexWhere((r) => r.id == reportId);
-    if (i < 0) throw const AppException(AppErrorCode.unknown, 'Report not found');
-    final r = _reports[i];
-    _reports[i] = StaffReport(
-      id: r.id,
-      reportNo: r.reportNo,
-      reporterId: r.reporterId,
-      reportedId: r.reportedId,
-      reason: r.reason,
-      details: r.details,
-      contentRef: r.contentRef,
-      hasEvidence: r.hasEvidence,
-      evidenceFiles: r.evidenceFiles,
-      reportCount: r.reportCount,
-      reporterFalseReports: r.reporterFalseReports,
-      createdAt: r.createdAt,
-      status: switch (decision) {
-        ModDecision.review => 'reviewing',
-        ModDecision.falseReport || ModDecision.dismissed => 'dismissed',
-        _ => 'actioned',
-      },
-      decision: decision,
-    );
-  }
-
-  @override
-  Future<Map<String, dynamic>> userModerationHistory(String userId) async => {
-    'reports_against': _reports.where((r) => r.reportedId == userId).length,
-    'reports_upheld': _reports.where((r) => r.reportedId == userId && r.status == 'actioned').length,
-    'false_reports_made': _reports.where((r) => r.reporterId == userId && r.decision == ModDecision.falseReport).length,
-    'restrictions': const [],
-    'actions': const [],
-  };
-
-  @override
-  Future<List<EvidenceItem>> reportEvidenceFiles(String reportId) async => const [];
-
-  @override
-  Future<String> staffFileUrl({required String kind, required String id, String reason = 'review'}) async =>
-      throw const AppException(AppErrorCode.unknown, 'Evidence files aren’t stored in the demo');
 
   // ------------------------------------------------------------- helpers ----
 

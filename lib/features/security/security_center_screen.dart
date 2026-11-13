@@ -12,19 +12,10 @@ import '../../core/errors.dart';
 import '../../core/widgets.dart';
 import '../../models/security.dart';
 import '../../providers.dart';
-import '../admin/admin_dashboard_screen.dart';
 import 'mfa_screens.dart';
 
 final _sessionsProvider = FutureProvider.autoDispose<List<SessionInfo>>((ref) => ref.watch(backendProvider).sessions());
 final _devicesProvider = FutureProvider.autoDispose<List<DeviceInfo>>((ref) => ref.watch(backendProvider).devices());
-final staffRoleProvider = FutureProvider<String?>((ref) async {
-  ref.watch(authUserProvider);
-  try {
-    return await ref.watch(backendProvider).staffRole();
-  } catch (_) {
-    return null;
-  }
-});
 
 class SecurityCenterScreen extends ConsumerWidget {
   const SecurityCenterScreen({super.key});
@@ -49,7 +40,6 @@ class SecurityCenterScreen extends ConsumerWidget {
     final mfa = ref.watch(mfaStateProvider);
     final sessions = ref.watch(_sessionsProvider);
     final devices = ref.watch(_devicesProvider);
-    final staff = ref.watch(staffRoleProvider).value;
     final fmt = DateFormat('d MMM, h:mm a');
 
     return Scaffold(
@@ -171,15 +161,6 @@ class SecurityCenterScreen extends ConsumerWidget {
             subtitle: const Text('See who you blocked and unblock them'),
             onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const BlockedUsersScreen())),
           ),
-          if (staff != null) ...[
-            const Divider(),
-            ListTile(
-              leading: const Icon(Icons.admin_panel_settings_outlined),
-              title: const Text('Safety & security dashboard'),
-              subtitle: Text('Staff role: $staff'),
-              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AdminDashboardScreen())),
-            ),
-          ],
           const Divider(),
           ListTile(
             leading: const Icon(Icons.delete_forever_outlined, color: Colors.red),

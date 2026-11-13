@@ -1,6 +1,7 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'models.dart';
+import 'models_mod.dart';
 
 /// Everything the admin web app reads or does. Every call is authorised by the
 /// database (staff role + MFA session); the app holds no secrets.
@@ -43,6 +44,23 @@ abstract class AdminApi {
   Future<List<VerificationQueueItem>> verificationQueue();
   Future<void> reviewVerification(String requestId, {required bool approve});
   Map<String, String> get mediaHeaders;
+
+  // Dashboard: overview, reports, users, restricted accounts, audit, staff
+  Future<Overview> overview();
+  Future<List<ReportRow>> reports({String status = 'open'});
+
+  /// A decision on a report. [restriction]: warning, restricted, suspended, banned. [days]: null = no end date.
+  Future<void> decideReport(String reportId, {required String decision, required String note, String? restriction, int? days});
+  Future<List<UserRow>> searchUsers({String? query, String? status, int offset = 0});
+  Future<UserDetail> userDetail(String id);
+
+  /// warning, restricted, suspended, banned, deactivate, reactivate, remove, cancel_removal. Returns the new status.
+  Future<AccountStatus> applyAction(String userId, String action, {required String note, int? days});
+  Future<AccountStatus> unsuspend(String userId, {required String note});
+  Future<List<RestrictedRow>> restricted({String? status});
+  Future<List<AuditRow>> auditLog({int offset = 0});
+  Future<List<StaffRow>> staff();
+  Future<void> setStaff(String email, String? role);
 
   // Messaging → Notifications (admins only)
   Future<PushSendResult> sendPush({required String title, required String body, required String audience, String? phone});
@@ -202,6 +220,71 @@ class SupabaseAdminApi extends AdminApi {
     final rows = await _db.rpc('mod_list_push_campaigns') as List;
     return [for (final r in rows) PushCampaign.fromJson((r as Map).cast<String, dynamic>())];
   });
+
+  @override
+  Future<Overview> overview() => _guard(() async => Overview((await _db.rpc('mod_overview') as Map).cast<String, dynamic>()));
+
+  List<Map<String, dynamic>> _rows(Object? v) => [for (final r in (v as List)) (r as Map).cast<String, dynamic>()];
+
+  @override
+  Future<List<ReportRow>> reports({String status = 'open'}) => _guard(() async {
+    final rows = _rows(await _db.rpc('mod_list_reports_v2', params: {'p_status': status}));
+    return [for (final r in rows) ReportRow.fromJson(r)];
+  });
+
+  @override
+  Future<void> decideReport(String reportId, {required String decision, required String note, String? restriction, int? days}) =>
+      _guard(
+        () => _db.rpc(
+          'mod_decide_report',
+          params: {'p_report': reportId, 'p_decision': decision, 'p_note': note, 'p_restriction': restriction, 'p_days': days},
+        ),
+      );
+
+  @override
+  Future<List<UserRow>> searchUsers({String? query, String? status, int offset = 0}) => _guard(() async {
+    final rows = _rows(
+      await _db.rpc('mod_user_search', params: {'p_q': query, 'p_status': status, 'p_limit': 30, 'p_offset': offset}),
+    );
+    return [for (final r in rows) UserRow.fromJson(r)];
+  });
+
+  @override
+  Future<UserDetail> userDetail(String id) =>
+      _guard(() async => UserDetail((await _db.rpc('mod_user_detail', params: {'p_user': id}) as Map).cast<String, dynamic>()));
+
+  @override
+  Future<AccountStatus> applyAction(String userId, String action, {required String note, int? days}) => _guard(
+    () async => AccountStatus.parse(
+      await _db.rpc('mod_apply_action', params: {'p_user': userId, 'p_action': action, 'p_note': note, 'p_days': days})
+          as String?,
+    ),
+  );
+
+  @override
+  Future<AccountStatus> unsuspend(String userId, {required String note}) => _guard(
+    () async => AccountStatus.parse(await _db.rpc('mod_unsuspend_user', params: {'p_user': userId, 'p_note': note}) as String?),
+  );
+
+  @override
+  Future<List<RestrictedRow>> restricted({String? status}) => _guard(() async {
+    final rows = _rows(await _db.rpc('mod_list_restricted', params: {'p_kind': status}));
+    return [for (final r in rows) RestrictedRow.fromJson(r)];
+  });
+
+  @override
+  Future<List<AuditRow>> auditLog({int offset = 0}) => _guard(() async {
+    final rows = _rows(await _db.rpc('mod_audit_log', params: {'p_limit': 50, 'p_offset': offset}));
+    return [for (final r in rows) AuditRow.fromJson(r)];
+  });
+
+  @override
+  Future<List<StaffRow>> staff() =>
+      _guard(() async => [for (final r in _rows(await _db.rpc('admin_list_staff'))) StaffRow.fromJson(r)]);
+
+  @override
+  Future<void> setStaff(String email, String? role) =>
+      _guard(() => _db.rpc('admin_set_staff', params: {'p_email': email, 'p_role': role}));
 
   @override
   Future<Map<String, dynamic>> securityOverview() =>

@@ -110,10 +110,6 @@ void main() {
       expect(t.status, TicketStatus.newTicket);
       expect((await b.myTickets()).single.id, t.id);
 
-      await b.setTicketStatus(t.id, TicketStatus.waitingForUser, note: 'Which phone do you use?');
-      expect((await b.myTickets()).single.status, TicketStatus.waitingForUser);
-      expect((await b.notifications()).first.body, 'Which phone do you use?');
-
       for (var i = 0; i < 4; i++) {
         await b.submitSupportTicket(category: SupportCategory.other, subject: 'Ticket $i', description: 'Testing the limit');
       }
@@ -137,7 +133,7 @@ void main() {
       await expectLater(b.sendImage(stranger, photo, width: 1, height: 1), throwsA(isA<AppException>()));
     });
 
-    test('report with selected evidence gets a number; decisions need a note', () async {
+    test('report with selected evidence gets a number', () async {
       final b = await _newUser();
       await b.completeOnboarding();
       final peer = (await b.connections()).first.profile.id;
@@ -154,11 +150,6 @@ void main() {
         block: false,
       );
       expect(no, matches(RegExp(r'^R-[2-9A-Z]{6}$')));
-      final r = (await b.staffReports()).single;
-      expect((r.reason, r.contentRef, r.hasEvidence), (ReportReason.impersonation, 'msg:1', true));
-      await expectLater(b.decideReport(r.id, ModDecision.suspended, note: ''), throwsA(isA<AppException>()));
-      await b.decideReport(r.id, ModDecision.falseReport, note: 'Photos are their own');
-      expect((await b.staffReports(status: 'dismissed')).single.decision, ModDecision.falseReport);
     });
 
     test('report categories match the server list', () {

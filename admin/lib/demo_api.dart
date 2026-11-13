@@ -3,6 +3,7 @@ import 'dart:async';
 import 'api.dart';
 import 'generated/migrations.g.dart';
 import 'models.dart';
+import 'models_mod.dart';
 
 /// Sample data for previewing the admin app without a backend
 /// (--dart-define=ADMIN_DEMO=true). Shown with a "Sample data" banner.
@@ -175,6 +176,235 @@ class DemoAdminApi extends AdminApi {
         'ALLOWED_ORIGINS',
       ], 'supabase secrets set ALLOWED_ORIGINS=https://your-admin-host'),
     ];
+  }
+
+  // ------------------------------------------------ dashboard sample data --
+  static const _people = [
+    ('Asha Menon', 27, 'Kochi', 'woman'),
+    ('Rahul Nair', 29, 'Kozhikode', 'man'),
+    ('Meera Pillai', 25, 'Thrissur', 'woman'),
+    ('Arjun Das', 31, 'Kochi', 'man'),
+    ('Nisha Joseph', 26, 'Kannur', 'woman'),
+    ('Vishnu Raj', 28, 'Palakkad', 'man'),
+  ];
+  late final Map<String, AccountStatus> _status = {
+    for (var i = 0; i < _people.length; i++)
+      'u$i': const [
+        AccountStatus.active,
+        AccountStatus.suspended,
+        AccountStatus.active,
+        AccountStatus.restricted,
+        AccountStatus.active,
+        AccountStatus.deactivated,
+      ][i],
+  };
+  final _reasons = <String, String>{'u1': 'Harassment in chats', 'u3': 'Spam links', 'u5': 'Requested by the user'};
+  final _reportState = <String, String>{};
+  final _audit = <AuditRow>[];
+  final _staff = <StaffRow>[
+    const StaffRow(userId: 's1', email: 'admin@vouby.example', role: 'admin'),
+    const StaffRow(userId: 's2', email: 'mod@vouby.example', role: 'moderator'),
+  ];
+
+  void _log(String action, String target, String? reason) => _audit.insert(
+    0,
+    AuditRow(at: DateTime.now(), actor: 'admin@vouby.example', action: action, target: 'user $target', reason: reason),
+  );
+
+  @override
+  Future<Overview> overview() async => Overview({
+    'open_reports': _reports().where((r) => r.status == 'open').length,
+    'suspended': _status.values.where((s) => s == AccountStatus.suspended || s == AccountStatus.deactivated).length,
+    'restricted': _status.values.where((s) => s == AccountStatus.restricted).length,
+    'banned': _status.values.where((s) => s == AccountStatus.banned).length,
+    'removal_pending': _status.values.where((s) => s == AccountStatus.removalPending).length,
+    'open_tickets': 2,
+    'users_total': 1284,
+    'users_today': 17,
+    'actions_today': _audit.length,
+  });
+
+  List<ReportRow> _reports() => [
+    for (final (i, r) in const ['spam_or_scam', 'harassment', 'fake_profile'].indexed)
+      ReportRow(
+        id: 'r$i',
+        reportNo: 'RP-00${i + 1}',
+        reporterId: 'u${(i + 2) % 6}',
+        reportedId:
+            'u${i == 0
+                ? 3
+                : i == 1
+                ? 1
+                : 4}',
+        reason: r,
+        details: i == 1 ? 'Kept sending unwanted messages after I said no.' : 'Looks fake.',
+        evidenceFiles: i == 1 ? 2 : 0,
+        hasEvidence: i == 1,
+        reportCount: i + 1,
+        reporterFalseReports: i == 2 ? 2 : 0,
+        createdAt: DateTime.now().subtract(Duration(hours: 3 * (i + 1))),
+        status: _reportState['r$i'] ?? 'open',
+        decision: _reportState['r$i'],
+      ),
+  ];
+
+  @override
+  Future<List<ReportRow>> reports({String status = 'open'}) async => [
+    for (final r in _reports())
+      if (status == 'all' || (status == 'open' ? r.status == 'open' : r.status != 'open')) r,
+  ];
+
+  @override
+  Future<void> decideReport(
+    String reportId, {
+    required String decision,
+    required String note,
+    String? restriction,
+    int? days,
+  }) async {
+    if (note.trim().length < 3 && decision != 'review') throw const AdminException('Add a note explaining the decision');
+    final r = _reports().firstWhere((x) => x.id == reportId);
+    _reportState[reportId] = decision == 'review' ? 'open' : 'actioned';
+    if (restriction != null && restriction != 'warning') {
+      _status[r.reportedId] = AccountStatus.parse(restriction);
+      _reasons[r.reportedId] = note;
+    }
+    _log('report_$decision', r.reportedId, note);
+  }
+
+  UserRow _row(String id) {
+    final i = int.parse(id.substring(1));
+    final p = _people[i];
+    return UserRow(
+      id: id,
+      name: p.$1,
+      age: p.$2,
+      city: p.$3,
+      gender: p.$4,
+      verified: i.isEven,
+      createdAt: DateTime.now().subtract(Duration(days: 3 + i * 9)),
+      status: _status[id]!,
+      reportsAgainst: i == 1 ? 3 : (i == 3 ? 1 : 0),
+    );
+  }
+
+  @override
+  Future<List<UserRow>> searchUsers({String? query, String? status, int offset = 0}) async {
+    final q = (query ?? '').trim().toLowerCase();
+    return [
+      for (final id in _status.keys)
+        if ((q.isEmpty || _row(id).name.toLowerCase().contains(q) || id == q) &&
+            (status == null || status == 'all' || _row(id).status.name == status.replaceAll('_pending', 'Pending')))
+          _row(id),
+    ];
+  }
+
+  @override
+  Future<UserDetail> userDetail(String id) async {
+    final r = _row(id);
+    return UserDetail({
+      'id': id,
+      'full_name': r.name,
+      'age': r.age,
+      'city': r.city,
+      'gender': r.gender,
+      'bio': 'Filter coffee and long walks by the sea.',
+      'is_verified': r.verified,
+      'created_at': r.createdAt.toIso8601String(),
+      'photo_count': 4,
+      'email': '${r.name.split(' ').first.toLowerCase()}@example.com',
+      'phone': '+91 98•••• ${1000 + r.age!}',
+      'status': switch (r.status) {
+        AccountStatus.removalPending => 'removal_pending',
+        _ => r.status.name,
+      },
+      'history': {
+        'reports_against': r.reportsAgainst,
+        'reports_upheld': r.reportsAgainst > 1 ? 1 : 0,
+        'reports_made': 0,
+        'false_reports_made': 0,
+        'restrictions': [
+          if (r.status.isLimited)
+            {
+              'kind': r.status.name,
+              'reason': _reasons[id] ?? 'Reviewed by staff',
+              'created_at': DateTime.now().toIso8601String(),
+            },
+        ],
+        'actions': [
+          for (final a in _audit.where((a) => a.target.endsWith(id)))
+            {'decision': a.action, 'note': a.reason, 'created_at': a.at.toIso8601String()},
+        ],
+      },
+      'reports': [
+        for (final x in _reports())
+          if (x.reportedId == id)
+            {
+              'id': x.id,
+              'report_no': x.reportNo,
+              'reason': x.reason,
+              'status': x.status,
+              'created_at': x.createdAt.toIso8601String(),
+            },
+      ],
+    });
+  }
+
+  @override
+  Future<AccountStatus> applyAction(String userId, String action, {required String note, int? days}) async {
+    if (note.trim().length < 3) throw const AdminException('Add a note explaining the action');
+    _status[userId] = switch (action) {
+      'warning' => _status[userId]!,
+      'restricted' => AccountStatus.restricted,
+      'suspended' => AccountStatus.suspended,
+      'banned' => AccountStatus.banned,
+      'deactivate' => AccountStatus.deactivated,
+      'remove' => AccountStatus.removalPending,
+      _ => AccountStatus.active,
+    };
+    if (action != 'reactivate' && action != 'cancel_removal') _reasons[userId] = note;
+    _log('user_$action', userId, note);
+    return _status[userId]!;
+  }
+
+  @override
+  Future<AccountStatus> unsuspend(String userId, {required String note}) async {
+    if (note.trim().length < 3) throw const AdminException('Add a note explaining the action');
+    if (_status[userId] == AccountStatus.removalPending) {
+      throw const AdminException('Removal is pending: an admin must cancel it first');
+    }
+    _status[userId] = AccountStatus.active;
+    _log('user_unsuspend', userId, note);
+    return AccountStatus.active;
+  }
+
+  @override
+  Future<List<RestrictedRow>> restricted({String? status}) async => [
+    for (final e in _status.entries)
+      if (e.value.isLimited && (status == null || status == 'all' || e.value.name == status))
+        RestrictedRow(
+          userId: e.key,
+          name: _row(e.key).name,
+          status: e.value,
+          reason: _reasons[e.key],
+          since: DateTime.now().subtract(const Duration(days: 2)),
+          until: e.value == AccountStatus.suspended ? DateTime.now().add(const Duration(days: 5)) : null,
+          by: 'mod@vouby.example',
+          reportNo: e.key == 'u1' ? 'RP-002' : null,
+          removalDue: e.value == AccountStatus.removalPending ? DateTime.now().add(const Duration(days: 30)) : null,
+        ),
+  ];
+
+  @override
+  Future<List<AuditRow>> auditLog({int offset = 0}) async => _audit;
+
+  @override
+  Future<List<StaffRow>> staff() async => _staff;
+
+  @override
+  Future<void> setStaff(String email, String? role) async {
+    _staff.removeWhere((s) => s.email == email);
+    if (role != null) _staff.add(StaffRow(userId: email, email: email, role: role));
   }
 
   @override
