@@ -1,0 +1,95 @@
+# Supabase project configuration (used by `supabase start` locally and as the
+# reference for the hosted dashboard; mirror these in Settings for production).
+project_id = "finder"
+
+[api]
+max_rows = 200
+
+[db]
+major_version = 15
+
+[auth]
+site_url = "https://finder.example"
+additional_redirect_urls = []
+# Short-lived access tokens; refresh tokens rotate on every use and a reused
+# (stolen) refresh token revokes the whole session family.
+jwt_expiry = 900
+enable_refresh_token_rotation = true
+refresh_token_reuse_interval = 10
+enable_signup = true
+# OTP-only sign-in: no passwords are stored, so there is nothing to hash.
+enable_anonymous_sign_ins = false
+
+[auth.rate_limit]
+email_sent = 10          # per hour
+sms_sent = 20            # per hour
+token_verifications = 30 # per 5 minutes per IP (OTP brute-force guard)
+sign_in_sign_ups = 30    # per 5 minutes per IP
+token_refresh = 150      # per 5 minutes per IP
+
+[auth.email]
+enable_signup = true
+otp_length = 6
+otp_expiry = 600
+max_frequency = "60s"
+
+[auth.sms]
+enable_signup = true
+max_frequency = "60s"
+otp_length = 6
+otp_expiry = 600
+
+[auth.mfa]
+max_enrolled_factors = 4
+
+[auth.mfa.totp]
+enroll_enabled = true
+verify_enabled = true
+
+[auth.sessions]
+# Paid plans: end sessions after 30 days regardless, or 14 days idle.
+timebox = "720h"
+inactivity_timeout = "336h"
+
+[functions.push-send]
+verify_jwt = true
+
+# Called by the database (pg_net) with a shared secret header, not a user JWT.
+[functions.push-message]
+verify_jwt = false
+
+[functions.process-image]
+verify_jwt = true
+static_files = ["./functions/_shared/wasm/*.wasm"]
+
+[functions.media]
+verify_jwt = true
+
+[functions.delete-account]
+verify_jwt = true
+
+[functions.media-maintenance]
+verify_jwt = true
+
+[functions.revenuecat-webhook]
+verify_jwt = false
+
+[functions.photo-remove]
+verify_jwt = true
+
+[functions.music-connect]
+verify_jwt = true
+
+# Spotify redirects the browser here without a Supabase JWT; the one-time
+# `state` row (10-minute life) authenticates the request instead.
+[functions.music-callback]
+verify_jwt = false
+
+[functions.music-sync]
+verify_jwt = true
+
+# Called by Supabase Auth (Send SMS hook) with a Standard Webhooks signature,
+# not a user JWT: the signature is the authentication.
+[functions.send-sms]
+verify_jwt = false
+

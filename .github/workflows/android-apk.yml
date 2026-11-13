@@ -1,0 +1,241 @@
+name: Android APK
+
+on:
+  push:
+    branches: ['**']
+    paths-ignore: ['**.md']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  security-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports: ['5432:5432']
+        options: --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+
+      # Data preservation: new migrations must be additive (CLAUDE.md).
+      - name: Migration guard
+        run: |
+          python3 tool/check_migrations.py
+          python3 tool/gen_admin_manifest.py
+          git diff --exit-code admin/lib/generated || { echo "Run tool/gen_admin_manifest.py and commit."; exit 1; }
+
+      - name: Rust crypto core tests
+        working-directory: rust
+        run: cargo test --locked
+
+      # Deno from the npm registry (pinned). The GitHub release download used
+      # by setup-deno kept failing with HTTP 504.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install Deno
+        run: |
+          for i in 1 2 3; do npm install -g deno@2.5.6 && break; sleep 10; done
+          deno --version
+      - name: Edge function tests
+        working-directory: supabase/functions
+        run: |
+          deno test --allow-read --allow-env _shared/tests/
+          for f in process-image media delete-account media-maintenance revenuecat-webhook photo-remove music-connect music-callback music-sync admin-config-status support-notify evidence-url send-sms; do deno check $f/index.ts; done
+
+      # Includes the upgrade-preservation suite: seeded data must survive
+      # every new migration unchanged.
+      - name: Database RLS / attack-scenario tests
+        env:
+          PGURL: postgres://postgres:postgres@localhost:5432/postgres
+        run: supabase/tests/run.sh
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: 3.47.9
+          cache: true
+      - name: Flutter analyze + tests (E2EE engine against the native library)
+        run: |
+          (cd rust && cargo build --locked)
+          flutter pub get
+          flutter analyze
+          flutter test
+
+  # Separate admin web app (admin/). Built with public values only; a sample-
+  # data preview build is always produced, a live build when the Supabase
+  # URL/anon key secrets exist.
+  admin-web:
+    needs: security-tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      # Public identifiers (safe in builds); a repository secret overrides them.
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL || 'https://smwqghjyicpjulrnkcqp.supabase.co' }}
+      SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNtd3FnaGp5aWNwanVscm5rY3FwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTQ0MDk1OTcsImV4cCI6MjEwOTk4NTU5N30.TbQ878BIk59dZiqcbxA-yVAa2-f4RUKREQ6SzSUSN9k' }}
+    defaults:
+      run:
+        working-directory: admin
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: 3.47.9
+          cache: true
+      - run: flutter pub get
+      - run: flutter analyze
+      - run: flutter test
+      - name: Build preview (sample data)
+        run: |
+          flutter build web --release --no-web-resources-cdn --pwa-strategy=none --dart-define=ADMIN_DEMO=true
+          mv build/web ../admin-web-preview
+      - name: Build live
+        if: ${{ env.SUPABASE_URL != '' }}
+        run: |
+          flutter build web --release --no-web-resources-cdn --pwa-strategy=none \
+            --dart-define=SUPABASE_URL="$SUPABASE_URL" --dart-define=SUPABASE_ANON_KEY="$SUPABASE_ANON_KEY"
+          mv build/web ../admin-web-live
+      - uses: actions/upload-artifact@v4
+        with:
+          name: vouby-admin-web
+          path: |
+            admin-web-preview
+            admin-web-live
+          if-no-files-found: warn
+
+  build:
+    needs: security-tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: write   # publishes the live APK as a GitHub Release (signed builds only)
+    env:
+      # Permanent release signing key (repository secrets; see docs/UPDATING.md).
+      KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+      KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+      # Public identifiers (safe in builds); a repository secret overrides them.
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL || 'https://smwqghjyicpjulrnkcqp.supabase.co' }}
+      SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNtd3FnaGp5aWNwanVscm5rY3FwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTQ0MDk1OTcsImV4cCI6MjEwOTk4NTU5N30.TbQ878BIk59dZiqcbxA-yVAa2-f4RUKREQ6SzSUSN9k' }}
+      REVENUECAT_ANDROID_KEY: ${{ secrets.REVENUECAT_ANDROID_KEY }}
+      # Firebase (phone popups): public identifiers only (safe in builds). Secrets override these defaults.
+      FIREBASE_API_KEY: ${{ secrets.FIREBASE_API_KEY || 'AIzaSyA1sXyUpSW6CloPrRCY5iQh08Sp3FKLohk' }}
+      FIREBASE_APP_ID: ${{ secrets.FIREBASE_APP_ID || '1:582986878237:android:9eba259201420d56f5e5f4' }}
+      FIREBASE_SENDER_ID: ${{ secrets.FIREBASE_SENDER_ID || '582986878237' }}
+      FIREBASE_PROJECT_ID: ${{ secrets.FIREBASE_PROJECT_ID || 'test-44e9a' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: 3.47.9
+          cache: true
+
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            rust/target
+          key: cargo-android-${{ hashFiles('rust/Cargo.lock') }}
+
+      - run: flutter pub get
+
+      - name: Prepare release signing key
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+        run: |
+          if [ -n "$KEYSTORE_BASE64" ]; then
+            echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.jks"
+            echo "KEYSTORE_FILE=$RUNNER_TEMP/release.jks" >> "$GITHUB_ENV"
+            echo "Signing with the permanent release key."
+          else
+            echo "No signing key secret: builds are signed with a temporary debug key and can't update an installed app."
+          fi
+
+      # Demo APK (`demo` flavor): offline sample data, no secrets needed.
+      # The `prod` flavor never contains demo code or assets/demo/.
+      # SPOTIFY_CLIENT_ID turns on real Spotify sign-in (PKCE) in the demo.
+      # It's the app's public client ID (shipped inside every APK anyway), not
+      # a secret; the client secret is never used by the app. A repository
+      # variable SPOTIFY_CLIENT_ID overrides the default below.
+      - name: Build demo APK
+        env:
+          SPOTIFY_CLIENT_ID: ${{ vars.SPOTIFY_CLIENT_ID || '3315a3d3e8c349689a8c5f00dad3cc2e' }}
+        run: |
+          flutter build apk --release --flavor demo --dart-define=DEMO=true --build-number="$GITHUB_RUN_NUMBER" \
+            --dart-define=SPOTIFY_CLIENT_ID="$SPOTIFY_CLIENT_ID" \
+            --split-per-abi --target-platform android-arm64,android-arm
+          mkdir -p out
+          ls build/app/outputs/flutter-apk/
+          cp build/app/outputs/flutter-apk/*arm64*demo*release.apk out/finder-demo-arm64.apk
+          cp build/app/outputs/flutter-apk/*armeabi*demo*release.apk out/finder-demo-armv7.apk
+
+      # Live APK: built only when the repository has Supabase secrets configured.
+      # SPOTIFY_CLIENT_ID is the public app ID: the phone signs in to Spotify itself (PKCE), no server secret.
+      - name: Build live APK
+        if: ${{ env.SUPABASE_URL != '' }}
+        env:
+          SPOTIFY_CLIENT_ID: ${{ vars.SPOTIFY_CLIENT_ID || '3315a3d3e8c349689a8c5f00dad3cc2e' }}
+        run: |
+          flutter build apk --release --flavor prod --target-platform android-arm64 --obfuscate --split-debug-info=build/symbols \
+            --build-number="$GITHUB_RUN_NUMBER" --dart-define=BUILD_NUMBER="$GITHUB_RUN_NUMBER" \
+            --dart-define=SUPABASE_URL="$SUPABASE_URL" \
+            --dart-define=SUPABASE_ANON_KEY="$SUPABASE_ANON_KEY" \
+            --dart-define=REVENUECAT_ANDROID_KEY="$REVENUECAT_ANDROID_KEY" \
+            --dart-define=SPOTIFY_CLIENT_ID="$SPOTIFY_CLIENT_ID" \
+            --dart-define=FIREBASE_API_KEY="$FIREBASE_API_KEY" \
+            --dart-define=FIREBASE_APP_ID="$FIREBASE_APP_ID" \
+            --dart-define=FIREBASE_SENDER_ID="$FIREBASE_SENDER_ID" \
+            --dart-define=FIREBASE_PROJECT_ID="$FIREBASE_PROJECT_ID"
+          cp build/app/outputs/flutter-apk/*prod*release.apk out/finder-live-arm64.apk
+
+      # Publishes the live APK where the app (and you) can download it directly:
+      # https://github.com/<repo>/releases/latest/download/finder-live-arm64.apk
+      # Only for builds signed with the permanent key (a debug-signed APK would
+      # make later updates fail). Keeps the newest 5 releases.
+      - name: Publish release
+        if: ${{ github.event_name != 'pull_request' && env.KEYSTORE_FILE != '' && hashFiles('out/finder-live-arm64.apk') != '' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # An older, delayed run must never take over the "latest" link from a newer build.
+          latest_tag="$(gh release view --json tagName --jq .tagName 2>/dev/null || true)"
+          # Users are only told about an update when the app itself changed. A push that touched only the
+          # server, the admin site, docs or tests does not create a release (a hand-started run always does).
+          if [ "$GITHUB_EVENT_NAME" = "push" ] && [ -n "$latest_tag" ]; then
+            prev_sha="$(gh release view "$latest_tag" --json targetCommitish --jq .targetCommitish 2>/dev/null || true)"
+            if [ -n "$prev_sha" ] && git fetch --quiet --depth=300 origin "$prev_sha" 2>/dev/null; then
+              if [ -z "$(git diff --name-only "$prev_sha" "$GITHUB_SHA" -- lib android pubspec.yaml pubspec.lock rust_builder rust assets web 2>/dev/null)" ]; then
+                echo "No app changes since $latest_tag: not publishing a new release."
+                exit 0
+              fi
+            fi
+          fi
+          latest_num="${latest_tag#build-}"
+          flag="--latest"
+          if [[ "$latest_num" =~ ^[0-9]+$ ]] && [ "$latest_num" -gt "$GITHUB_RUN_NUMBER" ]; then flag="--latest=false"; fi
+          gh release create "build-$GITHUB_RUN_NUMBER" out/finder-live-arm64.apk --target "$GITHUB_SHA" \
+            --title "Vouby build $GITHUB_RUN_NUMBER" "$flag" \
+            --notes "Live app, build $GITHUB_RUN_NUMBER. Install it over the current app to update; your account and the chats on the phone are kept."
+          gh release list --limit 100 --json tagName --jq '.[5:][].tagName' | while read -r old; do
+            gh release delete "$old" --cleanup-tag --yes
+          done
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: finder-apk
+          path: out/*.apk
+          retention-days: 14
