@@ -8,6 +8,7 @@ import 'package:uuid/uuid.dart';
 import '../core/config.dart';
 import '../core/errors.dart';
 import '../core/media_auth.dart';
+import '../core/media_cache.dart';
 import '../models/access.dart';
 import '../models/follow_request.dart';
 import '../models/message.dart';
@@ -37,6 +38,7 @@ class SupabaseBackend implements FinderBackend {
         label: kIsWeb ? 'Web browser' : (defaultTargetPlatform == TargetPlatform.iOS ? 'iPhone' : 'Android phone'),
       ) {
     MediaAuth.baseUrl = '${AppConfig.supabaseUrl}/functions/v1/media/';
+    MediaAuth.scope = () => _db.auth.currentUser?.id;
     MediaAuth.headers = () => {
       'Authorization': 'Bearer ${_db.auth.currentSession?.accessToken ?? ''}',
       'apikey': AppConfig.supabaseAnonKey,
@@ -115,7 +117,9 @@ class SupabaseBackend implements FinderBackend {
       /* MFA-gated or offline: the device can still be removed later from another session */
     }
     await _stopInbox();
+    final scope = _db.auth.currentUser?.id;
     await _db.auth.signOut();
+    await MediaDiskCache.instance.clear(scope); // photos stored for this account leave the device with it
     await _engine.wipe();
     await _kv.deleteAll();
     _readyFor = null;
@@ -1389,6 +1393,7 @@ class SupabaseBackend implements FinderBackend {
       );
     }
     await _stopInbox();
+    await MediaDiskCache.instance.clear(_db.auth.currentUser?.id);
     await _engine.wipe();
     await _kv.deleteAll();
     await _db.auth.signOut(scope: SignOutScope.local);

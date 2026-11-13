@@ -7,6 +7,7 @@ import 'brand.dart';
 import '../data/memory_images.dart';
 import 'feedback.dart';
 import 'media_auth.dart';
+import 'media_cache.dart';
 import 'theme.dart';
 
 /// Displays network URLs (authorised media function), bundled demo assets or
@@ -46,6 +47,8 @@ class ProfilePhoto extends StatelessWidget {
     if (u == null || u.isEmpty || MemoryImages.isMemory(u)) return null;
     final ImageProvider base = u.startsWith('asset:')
         ? AssetImage(u.substring(6))
+        : MediaAuth.isMediaUrl(u) && CachedMediaImage.supported
+        ? CachedMediaImage(u)
         : NetworkImage(u, headers: MediaAuth.isMediaUrl(u) ? MediaAuth.headers?.call() : null);
     return ResizeImage(base, width: width, policy: ResizeImagePolicy.fit);
   }
