@@ -6,6 +6,7 @@ import 'package:finder_app/data/backend.dart';
 import 'package:finder_app/data/demo_backend.dart';
 import 'package:finder_app/features/chat/media_editor_screen.dart';
 import 'package:finder_app/features/chat/scheduled_provider.dart';
+import 'package:finder_app/models/message.dart';
 import 'package:finder_app/models/scheduled_message.dart';
 import 'package:finder_app/providers.dart';
 import 'package:finder_app/security/secure_kv.dart';
@@ -188,7 +189,7 @@ class _Flaky extends DemoBackend {
   @override
   Stream<String?> authChanges() => _inner.authChanges();
   @override
-  Future<void> sendText(String peerId, String text) async {
+  Future<void> sendText(String peerId, String text, {ReplyRef? replyTo}) async {
     calls++;
     final e = error;
     if (e != null) throw e;

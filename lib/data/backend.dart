@@ -160,7 +160,7 @@ abstract class FinderBackend {
   bool get isEndToEndEncrypted;
 
   Stream<List<ChatMessage>> watchMessages(String peerId);
-  Future<void> sendText(String peerId, String text);
+  Future<void> sendText(String peerId, String text, {ReplyRef? replyTo});
 
   /// Disappearing messages for this chat (24 hours, 7 days, 1 month, or off).
   Future<Disappearing> disappearing(String peerId);

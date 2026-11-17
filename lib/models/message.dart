@@ -249,8 +249,12 @@ class SecurePayload {
     this.image,
     this.editTarget,
     this.deleteTarget,
+    this.reply,
   });
   final String clientId;
+
+  /// The message this one answers (older apps ignore it and show the plain text).
+  final ReplyRef? reply;
   final DateTime sentAt;
   final String? text;
   final VoiceRef? voice;
@@ -284,6 +288,7 @@ class SecurePayload {
         if (image != null) 'image': image!.toJson(),
         if (editTarget != null) 'edit': {'t': editTarget, 'text': text},
         if (deleteTarget != null) 'del': deleteTarget,
+        if (reply != null) 'rp': reply!.toJson(),
       }),
     ),
   );
@@ -297,6 +302,7 @@ class SecurePayload {
       sentAt: DateTime.parse(j['ts'] as String),
       editTarget: edit?['t'] as String?,
       deleteTarget: j['del'] as String?,
+      reply: j['rp'] == null ? null : ReplyRef.fromJson((j['rp'] as Map).cast<String, dynamic>()),
       text: edit != null
           ? edit['text'] as String?
           : j['del'] != null

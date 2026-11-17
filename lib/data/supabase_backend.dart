@@ -227,6 +227,7 @@ class SupabaseBackend implements FinderBackend {
               image: p.image,
               isRead: m['is_read'] as bool? ?? false,
               createdAt: createdAt,
+              replyTo: p.reply,
             );
           } catch (_) {
             msg = ChatMessage(
@@ -1090,6 +1091,7 @@ class SupabaseBackend implements FinderBackend {
         image: payload.image,
         isRead: false,
         createdAt: payload.sentAt,
+        replyTo: payload.reply,
       ),
     );
     _threads[peerId]?.add(list);
@@ -1165,8 +1167,8 @@ class SupabaseBackend implements FinderBackend {
   }
 
   @override
-  Future<void> sendText(String peerId, String text) =>
-      _sendPayload(peerId, SecurePayload(clientId: _uuid.v4(), sentAt: DateTime.now(), text: text));
+  Future<void> sendText(String peerId, String text, {ReplyRef? replyTo}) =>
+      _sendPayload(peerId, SecurePayload(clientId: _uuid.v4(), sentAt: DateTime.now(), text: text, reply: replyTo));
 
   @override
   Future<void> sendVoice(String peerId, Uint8List aacBytes, {String? localPath, Duration duration = Duration.zero}) =>

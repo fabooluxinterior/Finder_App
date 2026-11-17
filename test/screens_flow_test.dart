@@ -212,6 +212,89 @@ void main() {
     expect(find.textContaining('Messages disappear after 7 days'), findsWidgets);
   });
 
+  testWidgets('Chat: reply from the message menu shows a preview bar, the quote in the sent bubble, and Message info', (t) async {
+    await t.binding.setSurfaceSize(const Size(400, 900));
+    addTearDown(() => t.binding.setSurfaceSize(null));
+    final (b, all) = (await t.runAsync(_world))!;
+    final peer = all.firstWhere((c) => c.hasChat).profile;
+    await t.runAsync(() => b.sendText(peer.id, 'Original question'));
+    await t.pumpWidget(_app(b, ChatScreen(peer: peer)));
+    await _settle(t, 800);
+    await t.longPress(find.text('Original question'));
+    await _settle(t);
+    await t.tap(find.text('Reply'));
+    await _settle(t);
+    expect(find.textContaining('Replying to'), findsOneWidget);
+    await t.enterText(find.byType(TextField), 'My answer');
+    await t.pump();
+    await t.tap(find.bySemanticsLabel('Send'));
+    await _settle(t, 800);
+    expect(find.textContaining('Replying to'), findsNothing, reason: 'the bar closes after sending');
+    expect(find.text('My answer'), findsOneWidget);
+    expect(find.text('Original question'), findsNWidgets(2), reason: 'the original and its quote inside the reply');
+    // Message info on the sent reply.
+    await t.longPress(find.text('My answer'));
+    await _settle(t);
+    await t.tap(find.text('Message info'));
+    await _settle(t);
+    expect(find.text('Sent'), findsOneWidget);
+    expect(find.text('Delivered'), findsOneWidget);
+    expect(find.text('Read'), findsOneWidget);
+  });
+
+  testWidgets('Chat: swiping a message to the left starts a reply; the latest-messages arrow shows when scrolled up', (t) async {
+    await t.binding.setSurfaceSize(const Size(400, 700));
+    addTearDown(() => t.binding.setSurfaceSize(null));
+    final (b, all) = (await t.runAsync(_world))!;
+    final peer = all.firstWhere((c) => c.hasChat).profile;
+    await t.runAsync(() async {
+      for (var i = 0; i < 40; i++) {
+        await b.sendText(peer.id, 'Message number $i');
+      }
+    });
+    await t.pumpWidget(_app(b, ChatScreen(peer: peer)));
+    await _settle(t, 800);
+    expect(find.byTooltip('Latest messages'), findsOneWidget);
+    expect(
+      t
+          .widget<AnimatedOpacity>(
+            find.ancestor(of: find.byTooltip('Latest messages'), matching: find.byType(AnimatedOpacity)).last,
+          )
+          .opacity,
+      0,
+    );
+    await t.drag(find.byType(ListView).first, const Offset(0, 900));
+    await t.pump(const Duration(milliseconds: 500));
+    expect(
+      t
+          .widget<AnimatedOpacity>(
+            find.ancestor(of: find.byTooltip('Latest messages'), matching: find.byType(AnimatedOpacity)).last,
+          )
+          .opacity,
+      1,
+    );
+    await t.tap(find.byTooltip('Latest messages'));
+    await t.pump(); // the scroll animation starts on the first frame
+    await t.pump(const Duration(seconds: 1));
+    await t.pump(const Duration(milliseconds: 400));
+    expect(
+      t
+          .widget<AnimatedOpacity>(
+            find.ancestor(of: find.byTooltip('Latest messages'), matching: find.byType(AnimatedOpacity)).last,
+          )
+          .opacity,
+      0,
+    );
+    final g = await t.startGesture(t.getCenter(find.text('Message number 39')));
+    for (var i = 0; i < 8; i++) {
+      await g.moveBy(const Offset(-15, 0));
+      await t.pump(const Duration(milliseconds: 16));
+    }
+    await g.up();
+    await _settle(t);
+    expect(find.textContaining('Replying to'), findsOneWidget);
+  });
+
   testWidgets('Chat: edit a sent message ("edited" tag) and delete it for everyone ("Message deleted")', (t) async {
     await t.binding.setSurfaceSize(const Size(400, 900));
     addTearDown(() => t.binding.setSurfaceSize(null));

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 import 'dart:typed_data';
 import 'dart:ui';
 
@@ -50,6 +51,137 @@ class ChatScreen extends ConsumerStatefulWidget {
 
 class _ChatScreenState extends ConsumerState<ChatScreen> {
   bool _emojiOpen = false;
+
+  // ------------------------------------------------------------ replies ----
+  ChatMessage? _replying;
+  String? _highlightId;
+  Timer? _highlightTimer;
+  final _keys = <String, GlobalKey>{};
+  List<ChatMessage> _shown = const [];
+
+  static String _previewOf(ChatMessage m) {
+    if (m.deleted) return 'Message deleted';
+    if (m.isImage) return 'Photo';
+    if (m.isVoice) return 'Voice message';
+    final t = (m.content ?? '').replaceAll(RegExp(r'\s+'), ' ').trim();
+    return t.length > 120 ? '${t.substring(0, 117)}...' : t;
+  }
+
+  void _startReply(ChatMessage m) {
+    if (m.deleted || m.scheduledFor != null) return;
+    Fx.instance.tap();
+    setState(() {
+      _replying = m;
+      _editing = null;
+    });
+  }
+
+  ReplyRef? _replyRef() {
+    final m = _replying;
+    if (m == null) return null;
+    return ReplyRef(
+      messageId: m.id,
+      senderId: m.senderId,
+      preview: _previewOf(m),
+      kind: m.isImage ? 'photo' : (m.isVoice ? 'voice' : 'text'),
+    );
+  }
+
+  /// Scrolls to the quoted message (loading it first if it is far away) and highlights it for about a second.
+  Future<void> _jumpTo(String id) async {
+    final index = _shown.indexWhere((m) => m.id == id);
+    if (index < 0) {
+      showSnack(context, 'The original message isn’t available.', icon: Icons.info_outline);
+      return;
+    }
+    if (!_scroll.hasClients) return;
+    Future<bool> visibleNow() async {
+      final ctx = _keys[id]?.currentContext;
+      if (ctx == null) return false;
+      await Scrollable.ensureVisible(
+        ctx,
+        alignment: 0.5,
+        duration: Motion.of(context, const Duration(milliseconds: 320)),
+        curve: Curves.easeOutCubic,
+      );
+      return true;
+    }
+
+    if (!await visibleNow()) {
+      // Not built yet (far away in a long chat): move close using the average message height, then settle on it.
+      final perItem = _scroll.position.maxScrollExtent / math.max(1, _shown.length);
+      final fromNewest = _shown.length - 1 - index;
+      var target = (fromNewest * perItem).clamp(0.0, _scroll.position.maxScrollExtent);
+      for (var i = 0; i < 8; i++) {
+        if (!mounted) return;
+        final d = Motion.of(context, const Duration(milliseconds: 220));
+        await _scroll.animateTo(target, duration: d, curve: Curves.easeOutCubic);
+        await WidgetsBinding.instance.endOfFrame;
+        if (!mounted) return;
+        if (await visibleNow()) break;
+        target = (target + (i.isEven ? 1 : -1) * perItem * (i + 1)).clamp(0.0, _scroll.position.maxScrollExtent);
+      }
+    }
+    if (!mounted) return;
+    _highlightTimer?.cancel();
+    setState(() => _highlightId = id);
+    _highlightTimer = Timer(const Duration(seconds: 1), () {
+      if (mounted) setState(() => _highlightId = null);
+    });
+  }
+
+  Future<void> _messageInfo(ChatMessage m) async {
+    final c = context.fc;
+    await showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: c.surface,
+      showDragHandle: true,
+      builder: (ctx) => Consumer(
+        builder: (ctx, ref, _) {
+          // Live: the times fill in as the other person's phone reports them.
+          final cur =
+              (ref.watch(messagesProvider(widget.peer.id)).value ?? const <ChatMessage>[])
+                  .where((x) => x.id == m.id)
+                  .firstOrNull ??
+              m;
+          final f = DateFormat('d MMM, h:mm:ss a');
+          Widget row(String label, DateTime? at, {String pending = 'Pending', bool blue = false}) => ListTile(
+            dense: true,
+            leading: Icon(
+              at != null ? PhosphorIconsBold.checks : Icons.schedule,
+              size: 20,
+              color: at != null && blue ? readTickBlue : c.ink2,
+            ),
+            title: Text(label),
+            trailing: Text(at == null ? pending : f.format(at), style: TextStyle(color: at == null ? c.muted : c.ink)),
+          );
+          final readAt = cur.readAt ?? (cur.isRead ? cur.deliveredAt : null);
+          return SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.only(left: 4, bottom: 8),
+                    child: Text(
+                      'Message info',
+                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600, color: c.ink),
+                    ),
+                  ),
+                  row('Sent', cur.createdAt),
+                  row('Delivered', cur.deliveredAt ?? (cur.isRead ? readAt : null)),
+                  row('Read', cur.readAt ?? (cur.isRead ? DateTime.fromMillisecondsSinceEpoch(0) : null), blue: true),
+                  if (cur.isVoice) row('Listened', cur.listenedAt, pending: 'Not played yet', blue: true),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
 
   // ------------------------------------------------ jump to the latest message ----
   bool _showLatest = false;
@@ -284,6 +416,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     _typingIdle?.cancel();
     _presenceTimer?.cancel();
     _disTimer?.cancel();
+    _highlightTimer?.cancel();
     // _mine only leaves idle while sharing is on (see _setMine), so no provider read is needed here.
     if (_mine != PeerState.idle) _backend.sendPeerState(id, PeerState.idle);
     _text.removeListener(_onTextChanged);
@@ -536,7 +669,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         }
         if (mounted) setState(() => _editing = null);
       } else {
-        await ref.read(backendProvider).sendText(widget.peer.id, text);
+        await ref.read(backendProvider).sendText(widget.peer.id, text, replyTo: _replyRef());
+        if (mounted) setState(() => _replying = null);
         Fx.instance.sent();
         _scrollToLatest();
       }
@@ -638,7 +772,10 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   }
 
   void _startEdit(ChatMessage m) {
-    setState(() => _editing = m);
+    setState(() {
+      _editing = m;
+      _replying = null;
+    });
     _text.text = m.content ?? '';
     _text.selection = TextSelection.collapsed(offset: _text.text.length);
   }
@@ -704,6 +841,17 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
+            ListTile(
+              leading: Icon(Icons.reply_rounded, color: c.ink2),
+              title: const Text('Reply'),
+              onTap: () => Navigator.pop(ctx, 'reply'),
+            ),
+            if (mine)
+              ListTile(
+                leading: Icon(Icons.info_outline, color: c.ink2),
+                title: const Text('Message info'),
+                onTap: () => Navigator.pop(ctx, 'info'),
+              ),
             if (canEdit)
               ListTile(
                 leading: Icon(Icons.edit_outlined, color: c.ink2),
@@ -728,6 +876,10 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     );
     if (!mounted) return;
     switch (choice) {
+      case 'reply':
+        _startReply(m);
+      case 'info':
+        await _messageInfo(m);
       case 'edit':
         _startEdit(m);
       case 'delete':
@@ -767,6 +919,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     });
 
     final thread = visibleMessages.value ?? const <ChatMessage>[];
+    _shown = thread;
     if (_initialIds == null && messages.hasValue) _initialIds = thread.map((m) => m.id).toSet();
     // ref.listen only fires on changes, so messages that were already waiting are marked read here.
     if (messages.hasValue) WidgetsBinding.instance.addPostFrameCallback((_) => mounted ? _markReadIfNeeded(thread, me) : null);
@@ -945,18 +1098,34 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                                 child: AnimatedContainer(
                                   duration: Motion.of(context, Motion.fast),
                                   decoration: BoxDecoration(
-                                    color: picked ? c.accent.withValues(alpha: 0.16) : Colors.transparent,
+                                    color: picked
+                                        ? c.accent.withValues(alpha: 0.16)
+                                        : (_highlightId == m.id ? c.accent.withValues(alpha: 0.24) : Colors.transparent),
                                     borderRadius: BorderRadius.circular(16),
                                   ),
-                                  child: _Bubble(message: m, mine: mine, tail: tail, selecting: _selected.isNotEmpty),
+                                  child: _Bubble(
+                                    message: m,
+                                    mine: mine,
+                                    tail: tail,
+                                    selecting: _selected.isNotEmpty,
+                                    meId: me ?? '',
+                                    peerName: widget.peer.firstName,
+                                    onQuoteTap: (id) => _jumpTo(id),
+                                  ),
                                 ),
                               );
+                              final swipable = _SwipeToReply(
+                                enabled: m.scheduledFor == null && !m.deleted && _selected.isEmpty,
+                                onReply: () => _startReply(m),
+                                child: bubble,
+                              );
                               return Column(
+                                key: _keys.putIfAbsent(m.id, GlobalKey.new),
                                 children: [
                                   if (showDay) _DayChip(m.createdAt),
                                   _initialIds?.contains(m.id) ?? true
-                                      ? bubble
-                                      : _Arrive(key: ValueKey(m.id), mine: mine, child: bubble),
+                                      ? swipable
+                                      : _Arrive(key: ValueKey(m.id), mine: mine, child: swipable),
                                 ],
                               );
                             },
@@ -1040,6 +1209,12 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                                 ),
                               ],
                             ),
+                          ),
+                        if (_replying != null)
+                          _ReplyBar(
+                            name: _replying!.senderId == me ? 'You' : widget.peer.firstName,
+                            preview: _previewOf(_replying!),
+                            onClose: () => setState(() => _replying = null),
                           ),
                         _Composer(
                           controller: _text,
@@ -1247,7 +1422,18 @@ bool isSingleEmoji(String? text) {
 }
 
 class _Bubble extends StatelessWidget {
-  const _Bubble({required this.message, required this.mine, required this.tail, this.selecting = false});
+  const _Bubble({
+    required this.message,
+    required this.mine,
+    required this.tail,
+    this.selecting = false,
+    this.meId = '',
+    this.peerName = '',
+    this.onQuoteTap,
+  });
+  final String meId;
+  final String peerName;
+  final ValueChanged<String>? onQuoteTap;
   final ChatMessage message;
   final bool mine;
   final bool tail;
@@ -1312,6 +1498,13 @@ class _Bubble extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.end,
             mainAxisSize: MainAxisSize.min,
             children: [
+              if (message.replyTo != null)
+                _Quote(
+                  reply: message.replyTo!,
+                  name: message.replyTo!.senderId == meId ? 'You' : peerName,
+                  mine: mine,
+                  onTap: onQuoteTap == null ? null : () => onQuoteTap!(message.replyTo!.messageId),
+                ),
               if (message.isImage)
                 _PhotoContent(message: message, openable: !selecting)
               else if (message.isVoice)
@@ -1564,6 +1757,172 @@ class _ThreadIntro extends StatelessWidget {
                   : 'Say hi. Screenshots are blocked in this chat.',
               textAlign: TextAlign.center,
               style: t.bodyMedium?.copyWith(color: c.muted),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Drag a message to the left to reply to it (it springs back; vertical scrolling is not affected).
+class _SwipeToReply extends StatefulWidget {
+  const _SwipeToReply({required this.child, required this.onReply, required this.enabled});
+  final Widget child;
+  final VoidCallback onReply;
+  final bool enabled;
+
+  @override
+  State<_SwipeToReply> createState() => _SwipeToReplyState();
+}
+
+class _SwipeToReplyState extends State<_SwipeToReply> {
+  static const _trigger = 56.0;
+  double _dx = 0;
+  bool _fired = false;
+  bool _dragging = false;
+
+  void _reset() => setState(() {
+    _dx = 0;
+    _fired = false;
+    _dragging = false;
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    if (!widget.enabled) return widget.child;
+    final c = context.fc;
+    return GestureDetector(
+      behavior: HitTestBehavior.translucent,
+      onHorizontalDragStart: (_) => setState(() => _dragging = true),
+      onHorizontalDragUpdate: (d) {
+        setState(() => _dx = (_dx + d.delta.dx).clamp(-84.0, 0.0));
+        if (_dx <= -_trigger && !_fired) {
+          _fired = true;
+          Fx.instance.tap();
+        }
+      },
+      onHorizontalDragEnd: (_) {
+        if (_fired) widget.onReply();
+        _reset();
+      },
+      onHorizontalDragCancel: _reset,
+      child: Stack(
+        alignment: Alignment.centerRight,
+        children: [
+          Positioned(
+            right: 10,
+            child: Opacity(
+              opacity: (-_dx / _trigger).clamp(0.0, 1.0),
+              child: Icon(Icons.reply_rounded, size: 22, color: _fired ? c.accent : c.muted),
+            ),
+          ),
+          TweenAnimationBuilder<double>(
+            tween: Tween(end: _dx),
+            duration: _dragging ? Duration.zero : Motion.of(context, const Duration(milliseconds: 180)),
+            curve: Curves.easeOutCubic,
+            builder: (_, v, child) => Transform.translate(offset: Offset(v, 0), child: child),
+            child: widget.child,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// "Replying to ..." above the message box.
+class _ReplyBar extends StatelessWidget {
+  const _ReplyBar({required this.name, required this.preview, required this.onClose});
+  final String name;
+  final String preview;
+  final VoidCallback onClose;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.fc;
+    return Container(
+      margin: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+      padding: const EdgeInsets.fromLTRB(12, 8, 4, 8),
+      decoration: BoxDecoration(
+        color: c.surface,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: c.hair),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 3,
+            height: 34,
+            decoration: BoxDecoration(color: c.accent, borderRadius: BorderRadius.circular(2)),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Replying to $name',
+                  style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: c.accent),
+                ),
+                Text(
+                  preview,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(fontSize: 13.5, color: c.ink3),
+                ),
+              ],
+            ),
+          ),
+          IconButton(
+            onPressed: onClose,
+            tooltip: 'Cancel reply',
+            icon: Icon(PhosphorIconsRegular.x, size: 18, color: c.muted),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// The quoted original inside a reply bubble. Tap to jump to it.
+class _Quote extends StatelessWidget {
+  const _Quote({required this.reply, required this.name, required this.mine, this.onTap});
+  final ReplyRef reply;
+  final String name;
+  final bool mine;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.fc;
+    final fg = mine ? c.paper : c.ink;
+    final label = reply.preview.isEmpty
+        ? (reply.kind == 'photo' ? 'Photo' : (reply.kind == 'voice' ? 'Voice message' : 'Message'))
+        : reply.preview;
+    return GestureDetector(
+      onTap: onTap,
+      behavior: HitTestBehavior.opaque,
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 6),
+        padding: const EdgeInsets.fromLTRB(10, 6, 10, 6),
+        decoration: BoxDecoration(
+          color: (mine ? c.paper : c.ink).withValues(alpha: 0.10),
+          borderRadius: BorderRadius.circular(12),
+          border: Border(left: BorderSide(color: mine ? c.paper.withValues(alpha: 0.8) : c.accent, width: 3)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              name,
+              style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: mine ? c.paper : c.accent),
+            ),
+            Text(
+              label,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(fontSize: 13.5, height: 1.3, color: fg.withValues(alpha: 0.85)),
             ),
           ],
         ),

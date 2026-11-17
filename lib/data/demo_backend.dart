@@ -1352,12 +1352,27 @@ class DemoBackend implements FinderBackend {
       _connected(meId, peerId) ? DateTime.now().subtract(Duration(minutes: peerId.hashCode.abs() % 3 == 0 ? 0 : 47)) : null;
 
   @override
-  Future<void> sendText(String peerId, String text) async {
+  Future<void> sendText(String peerId, String text, {ReplyRef? replyTo}) async {
     if (!_hasAccess) throw const AppException(AppErrorCode.subscriptionRequired, 'Messaging is part of Fast-Track');
     if (!_connected(meId, peerId)) {
       throw const AppException(AppErrorCode.notConnected, 'Chat unlocks once the follow request is accepted.');
     }
-    _push(peerId, _msg(meId, peerId, content: text));
+    final m = _msg(meId, peerId, content: text);
+    _push(
+      peerId,
+      replyTo == null
+          ? m
+          : ChatMessage(
+              id: m.id,
+              senderId: m.senderId,
+              receiverId: m.receiverId,
+              content: m.content,
+              isRead: false,
+              createdAt: m.createdAt,
+              deliveredAt: m.deliveredAt,
+              replyTo: replyTo,
+            ),
+    );
     _scheduleReply(peerId);
   }
 
