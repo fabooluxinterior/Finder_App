@@ -9,9 +9,12 @@ import 'schedule_picker.dart';
 
 /// What the editor hands back: the finished picture and, when "send later" was used, when to send it.
 class EditedMedia {
-  const EditedMedia(this.bytes, {this.sendAt});
+  const EditedMedia(this.bytes, {this.sendAt, this.once = false});
   final Uint8List bytes;
   final DateTime? sendAt;
+
+  /// "View once": the other person can open it a single time.
+  final bool once;
 }
 
 class _Stroke {
@@ -59,6 +62,7 @@ class _MediaEditorScreenState extends State<MediaEditorScreen> {
   _Stroke? _current;
   Rect _crop = const Rect.fromLTWH(0.05, 0.05, 0.9, 0.9);
   bool _busy = false;
+  bool _once = false;
   String? _error;
 
   @override
@@ -217,7 +221,7 @@ class _MediaEditorScreenState extends State<MediaEditorScreen> {
     setState(() => _busy = true);
     try {
       final bytes = await _render();
-      if (mounted) Navigator.pop(context, EditedMedia(bytes, sendAt: at));
+      if (mounted) Navigator.pop(context, EditedMedia(bytes, sendAt: at, once: _once));
     } catch (_) {
       if (mounted) setState(() => _busy = false);
     }
@@ -379,10 +383,20 @@ class _MediaEditorScreenState extends State<MediaEditorScreen> {
                     )
                   : Row(
                       children: [
-                        const Expanded(
-                          child: Text(
-                            'Tap Text or Pencil to mark up the picture.',
-                            style: TextStyle(color: Colors.white54, fontSize: 13),
+                        Expanded(
+                          child: Align(
+                            alignment: Alignment.centerLeft,
+                            child: FilterChip(
+                              avatar: Icon(Icons.filter_1_rounded, size: 18, color: _once ? Colors.white : Colors.white70),
+                              label: const Text('View once'),
+                              selected: _once,
+                              showCheckmark: false,
+                              selectedColor: const Color(0xFF0F5E50),
+                              backgroundColor: Colors.white12,
+                              labelStyle: const TextStyle(color: Colors.white),
+                              side: BorderSide.none,
+                              onSelected: (v) => setState(() => _once = v),
+                            ),
                           ),
                         ),
                         GestureDetector(

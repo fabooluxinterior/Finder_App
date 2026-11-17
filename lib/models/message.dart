@@ -38,6 +38,7 @@ class ImageRef {
     required this.sha256,
     required this.width,
     required this.height,
+    this.once = false,
   });
   final String path;
   final Uint8List key;
@@ -46,6 +47,9 @@ class ImageRef {
   final int width;
   final int height;
 
+  /// "View once": the other person can open it a single time.
+  final bool once;
+
   Map<String, Object> toJson() => {
     'path': path,
     'key': base64Encode(key),
@@ -53,6 +57,7 @@ class ImageRef {
     'sha256': base64Encode(sha256),
     'w': width,
     'h': height,
+    if (once) 'o': true,
   };
 
   factory ImageRef.fromJson(Map<String, dynamic> j) => ImageRef(
@@ -62,6 +67,7 @@ class ImageRef {
     sha256: base64Decode(j['sha256'] as String),
     width: (j['w'] as num?)?.toInt() ?? 0,
     height: (j['h'] as num?)?.toInt() ?? 0,
+    once: j['o'] == true,
   );
 }
 
@@ -86,6 +92,8 @@ class ChatMessage {
     this.readAt,
     this.listenedAt,
     this.replyTo,
+    this.viewOnce = false,
+    this.viewed = false,
   });
 
   /// Server message id (or a client id until confirmed).
@@ -119,6 +127,24 @@ class ChatMessage {
   /// The message this one answers (a snapshot, so it still reads well if the original is gone).
   final ReplyRef? replyTo;
 
+  /// A "view once" photo, and whether it has been opened (after that its key is gone from this phone).
+  final bool viewOnce;
+  final bool viewed;
+
+  /// The photo was opened once and is no longer available.
+  ChatMessage asViewed() => ChatMessage(
+    id: id,
+    senderId: senderId,
+    receiverId: receiverId,
+    content: null,
+    isRead: true,
+    createdAt: createdAt,
+    deliveredAt: deliveredAt,
+    readAt: readAt ?? DateTime.now(),
+    viewOnce: true,
+    viewed: true,
+  );
+
   /// What a sender sees under their own message: sent, delivered or read.
   ReceiptStatus get receipt =>
       (isRead || readAt != null) ? ReceiptStatus.read : (deliveredAt != null ? ReceiptStatus.delivered : ReceiptStatus.sent);
@@ -142,6 +168,8 @@ class ChatMessage {
     readAt: readAt ?? this.readAt,
     listenedAt: listenedAt ?? this.listenedAt,
     replyTo: replyTo,
+    viewOnce: viewOnce,
+    viewed: viewed,
   );
 
   /// The same message with new text, marked "edited".
@@ -186,6 +214,8 @@ class ChatMessage {
     if (readAt != null) 'rd': readAt!.toUtc().toIso8601String(),
     if (listenedAt != null) 'ls': listenedAt!.toUtc().toIso8601String(),
     if (replyTo != null) 'rp': replyTo!.toJson(),
+    if (viewOnce) 'vo': true,
+    if (viewed) 'vw': true,
   };
 
   factory ChatMessage.fromJson(Map<String, dynamic> j) => ChatMessage(
@@ -203,6 +233,8 @@ class ChatMessage {
     readAt: _t(j['rd']),
     listenedAt: _t(j['ls']),
     replyTo: j['rp'] == null ? null : ReplyRef.fromJson((j['rp'] as Map).cast<String, dynamic>()),
+    viewOnce: j['vo'] == true,
+    viewed: j['vw'] == true,
   );
 
   static DateTime? _t(Object? v) => v == null ? null : DateTime.tryParse(v as String)?.toLocal();

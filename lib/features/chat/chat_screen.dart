@@ -632,7 +632,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       // Any image type: resized and compressed on the device, then encrypted.
       final img = await ImageOptimizer.optimizeForChat(edited.bytes);
       _setMine(PeerState.photo);
-      await ref.read(backendProvider).sendImage(widget.peer.id, img.bytes, width: img.width, height: img.height);
+      await ref
+          .read(backendProvider)
+          .sendImage(widget.peer.id, img.bytes, width: img.width, height: img.height, once: edited.once);
       Fx.instance.sent();
       _scrollToLatest();
     } catch (e) {
@@ -1310,8 +1312,8 @@ class _Bubble extends StatelessWidget {
   Widget build(BuildContext context) {
     final c = context.fc;
     final time = DateFormat('h:mm a').format(message.createdAt);
-    final fg = mine ? c.paper : c.ink;
-    final meta = mine ? c.paper.withValues(alpha: 0.6) : c.muted;
+    final fg = mine ? c.onSent : c.ink;
+    final meta = mine ? c.onSent.withValues(alpha: 0.7) : c.muted;
     if (message.deleted) {
       // Nothing of the original is kept: a dim line in its place.
       return Align(
@@ -1350,7 +1352,7 @@ class _Bubble extends StatelessWidget {
           margin: EdgeInsets.only(top: 3, bottom: tail ? 7 : 2),
           padding: message.isImage ? const EdgeInsets.fromLTRB(4, 4, 10, 6) : const EdgeInsets.fromLTRB(15, 11, 13, 8),
           decoration: BoxDecoration(
-            color: mine ? c.accent : c.surface,
+            color: mine ? c.sentBubble : c.surface,
             border: mine ? null : Border.all(color: c.hair),
             borderRadius: BorderRadius.only(
               topLeft: const Radius.circular(22),
@@ -1370,7 +1372,15 @@ class _Bubble extends StatelessWidget {
                   mine: mine,
                   onTap: onQuoteTap == null ? null : () => onQuoteTap!(message.replyTo!.messageId),
                 ),
-              if (message.isImage)
+              if (message.viewOnce)
+                _OnceTile(
+                  message: message,
+                  mine: mine,
+                  peerId: mine ? message.receiverId : message.senderId,
+                  color: fg,
+                  openable: !selecting,
+                )
+              else if (message.isImage)
                 _PhotoContent(message: message, openable: !selecting)
               else if (message.isVoice)
                 VoiceBubble(message: message, color: fg)
@@ -1489,14 +1499,30 @@ class _PhotoContentState extends ConsumerState<_PhotoContent> {
 }
 
 class _PhotoViewer extends StatelessWidget {
-  const _PhotoViewer({required this.bytes});
+  const _PhotoViewer({required this.bytes, this.once = false});
   final Uint8List bytes;
+  final bool once;
 
   @override
   Widget build(BuildContext context) => Scaffold(
     backgroundColor: Colors.black,
-    appBar: AppBar(backgroundColor: Colors.black, foregroundColor: Colors.white),
-    body: Center(child: InteractiveViewer(maxScale: 4, child: Image.memory(bytes))),
+    appBar: AppBar(
+      backgroundColor: Colors.black,
+      foregroundColor: Colors.white,
+      title: once ? const Text('View once', style: TextStyle(fontSize: 16)) : null,
+    ),
+    body: Column(
+      children: [
+        Expanded(
+          child: Center(child: InteractiveViewer(maxScale: 4, child: Image.memory(bytes))),
+        ),
+        if (once)
+          const Padding(
+            padding: EdgeInsets.only(bottom: 24),
+            child: Text('This photo disappears when you close it.', style: TextStyle(color: Colors.white70)),
+          ),
+      ],
+    ),
   );
 }
 
@@ -1756,7 +1782,7 @@ class _Quote extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final c = context.fc;
-    final fg = mine ? c.paper : c.ink;
+    final fg = mine ? c.onSent : c.ink;
     final label = reply.preview.isEmpty
         ? (reply.kind == 'photo' ? 'Photo' : (reply.kind == 'voice' ? 'Voice message' : 'Message'))
         : reply.preview;
@@ -1767,9 +1793,9 @@ class _Quote extends StatelessWidget {
         margin: const EdgeInsets.only(bottom: 6),
         padding: const EdgeInsets.fromLTRB(10, 6, 10, 6),
         decoration: BoxDecoration(
-          color: (mine ? c.paper : c.ink).withValues(alpha: 0.10),
+          color: (mine ? c.onSent : c.ink).withValues(alpha: 0.12),
           borderRadius: BorderRadius.circular(12),
-          border: Border(left: BorderSide(color: mine ? c.paper.withValues(alpha: 0.8) : c.accent, width: 3)),
+          border: Border(left: BorderSide(color: mine ? c.onSent.withValues(alpha: 0.8) : c.accent, width: 3)),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -1777,7 +1803,7 @@ class _Quote extends StatelessWidget {
           children: [
             Text(
               name,
-              style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: mine ? c.paper : c.accent),
+              style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: mine ? c.onSent : c.accent),
             ),
             Text(
               label,
@@ -1786,6 +1812,98 @@ class _Quote extends StatelessWidget {
               style: TextStyle(fontSize: 13.5, height: 1.3, color: fg.withValues(alpha: 0.85)),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+/// A "view once" photo: the receiver can open it a single time; the sender sees whether it was opened.
+class _OnceTile extends ConsumerStatefulWidget {
+  const _OnceTile({required this.message, required this.mine, required this.peerId, required this.color, this.openable = true});
+  final ChatMessage message;
+  final bool mine;
+  final String peerId;
+  final Color color;
+  final bool openable;
+
+  @override
+  ConsumerState<_OnceTile> createState() => _OnceTileState();
+}
+
+class _OnceTileState extends ConsumerState<_OnceTile> {
+  bool _opening = false;
+
+  Future<void> _open() async {
+    final m = widget.message;
+    if (_opening || widget.mine || m.viewed || (m.image == null && m.localImageUrl == null)) return;
+    setState(() => _opening = true);
+    try {
+      final backend = ref.read(backendProvider);
+      final bytes = await backend.imageBytes(m);
+      if (!mounted) return;
+      await Navigator.push(
+        context,
+        PageRouteBuilder<void>(
+          opaque: true,
+          pageBuilder: (_, _, _) => _PhotoViewer(bytes: bytes, once: true),
+          transitionsBuilder: (_, a, _, child) => FadeTransition(opacity: a, child: child),
+        ),
+      );
+      // Closed: the photo is gone from this phone.
+      await backend.markPhotoViewed(widget.peerId, m.id);
+    } catch (_) {
+      if (mounted) showSnack(context, 'Couldn’t open the photo. Try again.', icon: PhosphorIconsFill.warningCircle);
+    } finally {
+      if (mounted) setState(() => _opening = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final m = widget.message;
+    final color = widget.color;
+    final String title;
+    final String sub;
+    final IconData icon;
+    if (m.viewed) {
+      title = 'Photo';
+      sub = 'Opened';
+      icon = Icons.check_circle_outline_rounded;
+    } else if (widget.mine) {
+      title = 'Photo · View once';
+      sub = m.listenedAt != null ? 'Opened' : 'Not opened yet';
+      icon = Icons.filter_1_rounded;
+    } else {
+      title = 'Photo · View once';
+      sub = _opening ? 'Opening…' : 'Tap to view';
+      icon = Icons.filter_1_rounded;
+    }
+    return Semantics(
+      button: !widget.mine && !m.viewed,
+      label: '$title, $sub',
+      child: GestureDetector(
+        onTap: widget.openable ? _open : null,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(8, 6, 8, 2),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, size: 26, color: color),
+              const SizedBox(width: 10),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    title,
+                    style: TextStyle(fontSize: 15.5, fontWeight: FontWeight.w600, color: color),
+                  ),
+                  Text(sub, style: TextStyle(fontSize: 13, color: color.withValues(alpha: 0.75))),
+                ],
+              ),
+            ],
+          ),
         ),
       ),
     );

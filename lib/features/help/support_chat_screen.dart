@@ -482,7 +482,7 @@ class _Bubble extends StatelessWidget {
           margin: const EdgeInsets.symmetric(vertical: 4),
           padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 11),
           decoration: BoxDecoration(
-            color: mine ? c.accent : c.surface,
+            color: mine ? c.sentBubble : c.surface,
             border: mine ? null : Border.all(color: c.hair),
             borderRadius: BorderRadius.only(
               topLeft: const Radius.circular(20),
@@ -491,7 +491,7 @@ class _Bubble extends StatelessWidget {
               bottomRight: Radius.circular(mine ? 6 : 20),
             ),
           ),
-          child: Text(line.text, style: TextStyle(fontSize: 15.5, height: 1.4, color: mine ? c.paper : c.ink)),
+          child: Text(line.text, style: TextStyle(fontSize: 15.5, height: 1.4, color: mine ? c.onSent : c.ink)),
         ),
       ),
     );

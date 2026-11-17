@@ -5,8 +5,12 @@ import 'package:finder_app/core/feedback.dart';
 import 'package:finder_app/data/backend.dart';
 import 'package:finder_app/data/demo_backend.dart';
 import 'package:finder_app/features/chat/chat_screen.dart' show isSingleEmoji;
+import 'package:finder_app/core/theme.dart';
 import 'package:finder_app/models/message.dart';
+import 'package:flutter/painting.dart';
 import 'package:flutter_test/flutter_test.dart';
+
+const readTickBlueForTest = Color(0xFF4FC3F7);
 
 Uint8List _bytes(int n) => Uint8List.fromList(List.filled(n, 7));
 
@@ -191,5 +195,67 @@ void main() {
       expect(isSingleEmoji(e), isFalse, reason: e);
     }
     expect(isSingleEmoji(null), isFalse);
+  });
+
+  group('view once and bubble colours', () {
+    test('your own bubbles are readable and not orange, in both themes', () {
+      double contrast(Color a, Color b) {
+        final la = a.computeLuminance(), lb = b.computeLuminance();
+        final hi = la > lb ? la : lb, lo = la > lb ? lb : la;
+        return (hi + 0.05) / (lo + 0.05);
+      }
+
+      for (final c in [FinderColors.dark, FinderColors.light]) {
+        expect(c.sentBubble, isNot(c.accent));
+        expect(contrast(c.sentBubble, c.onSent), greaterThan(7), reason: 'text on your bubble');
+        expect(
+          contrast(c.sentBubble, readTickBlueForTest),
+          greaterThan(2.5),
+          reason: 'blue ticks stay visible on dark bubble',
+          skip: c == FinderColors.light,
+        );
+        expect(c.sentBubble.r, lessThan(0.9 * 1), reason: 'not the coral/orange family');
+        expect(c.sentBubble.g >= c.sentBubble.r, isTrue, reason: 'green-leaning, never red-dominant');
+      }
+    });
+
+    test('a view-once photo round-trips, and opening it removes the photo from this phone', () async {
+      final ref = ImageRef(
+        path: 'p',
+        key: Uint8List(32),
+        nonce: Uint8List(12),
+        sha256: Uint8List(32),
+        width: 10,
+        height: 10,
+        once: true,
+      );
+      expect(ImageRef.fromJson(ref.toJson()).once, isTrue);
+      final m = ChatMessage(
+        id: 'x',
+        senderId: 'a',
+        receiverId: 'b',
+        content: null,
+        image: ref,
+        isRead: false,
+        createdAt: DateTime(2026),
+        viewOnce: true,
+      );
+      final back = ChatMessage.fromJson(m.toJson());
+      expect((back.viewOnce, back.viewed, back.image?.once), (true, false, true));
+      final opened = ChatMessage.fromJson(m.asViewed().toJson());
+      expect((opened.viewOnce, opened.viewed, opened.image, opened.content), (true, true, null, null));
+    });
+
+    test('demo: send once, then opening wipes it', () async {
+      final (b, peer) = await _chat();
+      await b.sendImage(peer, _bytes(500), width: 10, height: 10, once: true);
+      var list = await b.watchMessages(peer).first;
+      final sent = list.lastWhere((m) => m.isImage);
+      expect(sent.viewOnce, isTrue);
+      await b.markPhotoViewed(peer, sent.id);
+      list = await b.watchMessages(peer).first;
+      final after = list.firstWhere((m) => m.id == sent.id);
+      expect((after.viewed, after.isImage), (true, false));
+    });
   });
 }

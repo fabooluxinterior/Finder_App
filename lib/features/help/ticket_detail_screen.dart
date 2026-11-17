@@ -242,7 +242,7 @@ class _TicketDetailScreenState extends ConsumerState<TicketDetailScreen> {
                               margin: const EdgeInsets.symmetric(vertical: 4),
                               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                               decoration: BoxDecoration(
-                                color: m.fromStaff ? c.surface : c.accent,
+                                color: m.fromStaff ? c.surface : c.sentBubble,
                                 border: m.fromStaff ? Border.all(color: c.hair) : null,
                                 borderRadius: BorderRadius.circular(18),
                               ),
@@ -255,13 +255,16 @@ class _TicketDetailScreenState extends ConsumerState<TicketDetailScreen> {
                                       'Vouby team',
                                       style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: c.accent),
                                     ),
-                                  Text(m.body, style: TextStyle(fontSize: 15, height: 1.4, color: m.fromStaff ? c.ink : c.paper)),
+                                  Text(
+                                    m.body,
+                                    style: TextStyle(fontSize: 15, height: 1.4, color: m.fromStaff ? c.ink : c.onSent),
+                                  ),
                                   const SizedBox(height: 3),
                                   Text(
                                     fmt.format(m.createdAt),
                                     style: TextStyle(
                                       fontSize: 11,
-                                      color: (m.fromStaff ? c.muted : c.paper.withValues(alpha: 0.7)),
+                                      color: (m.fromStaff ? c.muted : c.onSent.withValues(alpha: 0.7)),
                                     ),
                                   ),
                                 ],

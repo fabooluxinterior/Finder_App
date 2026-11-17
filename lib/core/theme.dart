@@ -55,6 +55,10 @@ class FinderColors extends ThemeExtension<FinderColors> {
   /// Dividers between rows and above the tab bar (quieter than [hair]).
   Color get line => const Color(0xFF1C1C1F);
 
+  /// Your own chat bubbles: a deep green with white text (readable, and not the orange used for actions).
+  Color get sentBubble => paper.computeLuminance() < 0.5 ? const Color(0xFF0F5E50) : const Color(0xFFD3F0E6);
+  Color get onSent => paper.computeLuminance() < 0.5 ? Colors.white : const Color(0xFF0B2A24);
+
   /// Secondary copy on surfaces.
   Color get ink3 => const Color(0xFFA1A1AA);
 

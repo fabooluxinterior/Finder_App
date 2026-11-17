@@ -307,7 +307,7 @@ class _VoiceBubbleState extends ConsumerState<VoiceBubble> {
                                       width: 2,
                                       height: 6.0 + ((seed.codeUnitAt(i % seed.length) * (i + 3)) % 20),
                                       decoration: BoxDecoration(
-                                        color: (i / _candles) < progress ? fc.accent : ink.withValues(alpha: 0.3),
+                                        color: (i / _candles) < progress ? ink : ink.withValues(alpha: 0.3),
                                         borderRadius: BorderRadius.circular(2),
                                       ),
                                     ),
@@ -320,7 +320,7 @@ class _VoiceBubbleState extends ConsumerState<VoiceBubble> {
                                   bottom: 2,
                                   child: Container(
                                     width: 1.5,
-                                    decoration: BoxDecoration(color: fc.accent, borderRadius: BorderRadius.circular(2)),
+                                    decoration: BoxDecoration(color: ink, borderRadius: BorderRadius.circular(2)),
                                   ),
                                 ),
                             ],

@@ -230,6 +230,7 @@ class SupabaseBackend implements FinderBackend {
               isRead: m['is_read'] as bool? ?? false,
               createdAt: createdAt,
               replyTo: p.reply,
+              viewOnce: p.image?.once ?? false,
             );
           } catch (_) {
             msg = ChatMessage(
@@ -1286,6 +1287,7 @@ class SupabaseBackend implements FinderBackend {
         isRead: false,
         createdAt: payload.sentAt,
         replyTo: payload.reply,
+        viewOnce: payload.image?.once ?? false,
       ),
     );
     _threads[peerId]?.add(list);
@@ -1405,25 +1407,46 @@ class SupabaseBackend implements FinderBackend {
   });
 
   @override
-  Future<void> sendImage(String peerId, Uint8List webp, {required int width, required int height}) => _guard(() async {
-    final me = _me;
-    final clientId = _uuid.v4();
-    final path = '${_pairKey(me, peerId)}/$clientId.bin';
-    final sealed = await E2eeEngine.sealAttachment(webp, 'image:$path');
-    await _db.storage
-        .from('chat_images')
-        .uploadBinary(path, sealed.ciphertext, fileOptions: const FileOptions(contentType: 'application/octet-stream'));
-    await _sendPayload(
-      peerId,
-      SecurePayload(
-        clientId: clientId,
-        sentAt: DateTime.now(),
-        image: ImageRef(path: path, key: sealed.key, nonce: sealed.nonce, sha256: sealed.sha256, width: width, height: height),
-      ),
-    );
-  });
+  Future<void> sendImage(String peerId, Uint8List webp, {required int width, required int height, bool once = false}) =>
+      _guard(() async {
+        final me = _me;
+        final clientId = _uuid.v4();
+        final path = '${_pairKey(me, peerId)}/$clientId.bin';
+        final sealed = await E2eeEngine.sealAttachment(webp, 'image:$path');
+        await _db.storage
+            .from('chat_images')
+            .uploadBinary(path, sealed.ciphertext, fileOptions: const FileOptions(contentType: 'application/octet-stream'));
+        await _sendPayload(
+          peerId,
+          SecurePayload(
+            clientId: clientId,
+            sentAt: DateTime.now(),
+            image: ImageRef(
+              path: path,
+              key: sealed.key,
+              nonce: sealed.nonce,
+              sha256: sealed.sha256,
+              width: width,
+              height: height,
+              once: once,
+            ),
+          ),
+        );
+      });
 
   final _imageCache = <String, Uint8List>{};
+
+  @override
+  Future<void> markPhotoViewed(String peerId, String messageId) async {
+    final me = _me;
+    final target = (await _vault.load(me, peerId)).where((m) => m.id == messageId).firstOrNull;
+    final path = target?.image?.path;
+    if (path != null) _imageCache.remove(path);
+    final list = await _vault.update(me, peerId, (m) => m.id == messageId && m.senderId != me ? m.asViewed() : m);
+    _threads[peerId]?.add(list);
+    _social.add(null);
+    await markListened(messageId); // the sender sees "Opened"
+  }
 
   @override
   Future<Uint8List> imageBytes(ChatMessage message) => _guard(() async {

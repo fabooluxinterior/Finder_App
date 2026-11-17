@@ -1569,7 +1569,7 @@ class DemoBackend implements FinderBackend {
   }
 
   @override
-  Future<void> sendImage(String peerId, Uint8List webp, {required int width, required int height}) async {
+  Future<void> sendImage(String peerId, Uint8List webp, {required int width, required int height, bool once = false}) async {
     if (!_hasAccess) throw const AppException(AppErrorCode.subscriptionRequired, 'Messaging is part of Fast-Track');
     if (!_connected(meId, peerId)) {
       throw const AppException(AppErrorCode.notConnected, 'Chat unlocks once the follow request is accepted.');
@@ -1586,6 +1586,7 @@ class DemoBackend implements FinderBackend {
         isRead: false,
         createdAt: DateTime.now(),
         deliveredAt: DateTime.now(),
+        viewOnce: once,
       ),
     );
     _scheduleReply(peerId);
@@ -1601,6 +1602,16 @@ class DemoBackend implements FinderBackend {
 
   @override
   Future<void> markListened(String messageId) async {}
+
+  @override
+  Future<void> markPhotoViewed(String peerId, String messageId) async {
+    final t = _threads[peerId];
+    if (t == null) return;
+    final i = t.indexWhere((m) => m.id == messageId);
+    if (i < 0) return;
+    t[i] = t[i].asViewed();
+    _threadCtl[peerId]?.add(List.unmodifiable(t));
+  }
 
   @override
   Future<void> markThreadRead(String peerId) async {
