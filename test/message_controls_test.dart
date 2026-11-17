@@ -4,6 +4,7 @@ import 'package:finder_app/core/errors.dart';
 import 'package:finder_app/core/feedback.dart';
 import 'package:finder_app/data/backend.dart';
 import 'package:finder_app/data/demo_backend.dart';
+import 'package:finder_app/features/chat/chat_screen.dart' show isSingleEmoji;
 import 'package:finder_app/models/message.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -140,5 +141,55 @@ void main() {
       await b.setDisappearing(peer, 0);
       expect((await b.disappearing(peer)).on, isFalse);
     });
+  });
+
+  group('receipts and emoji', () {
+    test('one grey tick = sent, two grey = delivered, two blue = read', () {
+      final t = DateTime(2026, 11, 17, 12);
+      ChatMessage m({DateTime? d, DateTime? r, bool read = false}) => ChatMessage(
+        id: 'x',
+        senderId: 'a',
+        receiverId: 'b',
+        content: 'hi',
+        isRead: read,
+        createdAt: t,
+        deliveredAt: d,
+        readAt: r,
+      );
+      expect(m().receipt, ReceiptStatus.sent);
+      expect(m(d: t).receipt, ReceiptStatus.delivered);
+      expect(m(d: t, r: t).receipt, ReceiptStatus.read);
+      expect(m(read: true).receipt, ReceiptStatus.read, reason: 'older apps only set is_read');
+    });
+
+    test('receipt times survive the on-device copy', () {
+      final t = DateTime.utc(2026, 11, 17, 12);
+      final m = ChatMessage(
+        id: 'x',
+        senderId: 'a',
+        receiverId: 'b',
+        content: 'hi',
+        isRead: true,
+        createdAt: t,
+        deliveredAt: t.add(const Duration(seconds: 2)),
+        readAt: t.add(const Duration(minutes: 5)),
+        listenedAt: t.add(const Duration(minutes: 6)),
+      );
+      final back = ChatMessage.fromJson(m.toJson());
+      expect(
+        (back.deliveredAt, back.readAt, back.listenedAt),
+        (m.deliveredAt!.toLocal(), m.readAt!.toLocal(), m.listenedAt!.toLocal()),
+      );
+    });
+  });
+
+  test('only a single emoji on its own is shown larger', () {
+    for (final e in ['😀', '❤️', '👍🏽', '🇮🇳', '👨‍👩‍👧', '🙏']) {
+      expect(isSingleEmoji(e), isTrue, reason: e);
+    }
+    for (final e in ['😀😀', 'hi 😀', 'a', '', '1', '😀 ok']) {
+      expect(isSingleEmoji(e), isFalse, reason: e);
+    }
+    expect(isSingleEmoji(null), isFalse);
   });
 }

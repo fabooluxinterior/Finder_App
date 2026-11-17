@@ -188,7 +188,7 @@ void main() {
     await t.pumpWidget(_app(b, ChatScreen(peer: peer)));
     await _settle(t, 800);
     final emoji = find.byTooltip('Emoji');
-    final photo = find.byTooltip('Send a photo');
+    final photo = find.byTooltip('Attach');
     expect(emoji, findsOneWidget);
     expect(photo, findsOneWidget);
     expect(t.getCenter(emoji).dx, lessThan(t.getCenter(find.byType(TextField)).dx), reason: 'emoji on the left of the bar');

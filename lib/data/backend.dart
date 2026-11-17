@@ -170,6 +170,9 @@ abstract class FinderBackend {
   Future<void> purgeExpired(String peerId);
   Future<void> sendVoice(String peerId, Uint8List aacBytes, {String? localPath, Duration duration});
   Future<void> markThreadRead(String peerId);
+
+  /// A received voice note was played (the sender sees it in Message info).
+  Future<void> markListened(String messageId);
   Future<VoicePlayback> voicePlayback(ChatMessage message);
 
   /// Changes the text of a message you sent. The other person's copy is updated and marked "edited".

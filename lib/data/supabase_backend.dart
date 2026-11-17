@@ -191,6 +191,7 @@ class SupabaseBackend implements FinderBackend {
             .limit(100);
         if (rows.isEmpty) return;
         final acked = <String>[];
+        final delivered = <String>[];
         final touched = <String>{};
         for (final r in rows) {
           final m = r['messages'] as Map<String, dynamic>;
@@ -241,8 +242,15 @@ class SupabaseBackend implements FinderBackend {
           _threads[peer]?.add(list);
           touched.add(peer);
           acked.add(r['message_id'] as String);
+          if (sender != me) delivered.add(r['message_id'] as String);
         }
         await _db.rpc('ack_envelopes', params: {'p_device': _engine.deviceId, 'p_message_ids': acked});
+        // Tell the sender it arrived (the server stamps the time). Best effort: never blocks receiving.
+        if (delivered.isNotEmpty) {
+          try {
+            await _db.rpc('mark_delivered', params: {'p_message_ids': delivered});
+          } catch (_) {}
+        }
         _social.add(null);
         if (rows.length == 100) unawaited(_drain());
       })
@@ -259,13 +267,57 @@ class SupabaseBackend implements FinderBackend {
     });
   }
 
+  static DateTime? _ts(Object? v) => v == null ? null : DateTime.tryParse(v as String)?.toLocal();
+
+  /// The other person's phone reported delivery, reading or playing: update our copy (and the sender's ticks).
   Future<void> _onReadReceipt(Map<String, dynamic> row) async {
-    if (row['is_read'] != true) return;
+    final delivered = _ts(row['delivered_at']), read = _ts(row['read_at']), listened = _ts(row['listened_at']);
+    final isRead = row['is_read'] == true;
+    if (!isRead && delivered == null && listened == null) return;
     final me = _me;
     final peer = row['receiver_id'] as String;
     final id = row['id'] as String;
-    final list = await _vault.update(me, peer, (m) => m.id == id ? m.copyWith(isRead: true) : m);
+    final list = await _vault.update(
+      me,
+      peer,
+      (m) => m.id == id ? m.copyWith(isRead: isRead || m.isRead, deliveredAt: delivered, readAt: read, listenedAt: listened) : m,
+    );
     _threads[peer]?.add(list);
+  }
+
+  /// Catches up on receipts missed while this phone was offline (the live feed only covers the time it was open).
+  Future<void> _syncReceipts(String peerId) async {
+    try {
+      final me = _me;
+      final rows = await _db
+          .from('messages')
+          .select('id, is_read, delivered_at, read_at, listened_at')
+          .eq('sender_id', me)
+          .eq('receiver_id', peerId)
+          .eq('kind', 0)
+          .order('created_at', ascending: false)
+          .limit(500);
+      if (rows.isEmpty) return;
+      final byId = {for (final r in rows) r['id'] as String: r};
+      final list = await _vault.update(me, peerId, (m) {
+        final r = byId[m.id];
+        if (r == null || m.senderId != me) return m;
+        final isRead = r['is_read'] == true;
+        final d = _ts(r['delivered_at']), rd = _ts(r['read_at']), ls = _ts(r['listened_at']);
+        if (m.isRead == isRead && m.deliveredAt == d && m.readAt == rd && m.listenedAt == ls) return m;
+        return m.copyWith(isRead: isRead || m.isRead, deliveredAt: d, readAt: rd, listenedAt: ls);
+      });
+      _threads[peerId]?.add(list);
+    } catch (_) {
+      /* offline: the next open tries again */
+    }
+  }
+
+  @override
+  Future<void> markListened(String messageId) async {
+    try {
+      await _db.rpc('mark_listened', params: {'p_message_id': messageId});
+    } catch (_) {}
   }
 
   // ------------------------------------------------------------- profile ----
@@ -1003,6 +1055,7 @@ class SupabaseBackend implements FinderBackend {
           await _ready();
           listener.add(await _vault.load(_me, peerId));
           await _drain();
+          unawaited(_syncReceipts(peerId));
         } catch (e) {
           listener.addError(_map(e));
         }

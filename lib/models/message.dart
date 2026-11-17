@@ -83,6 +83,10 @@ class ChatMessage {
     this.edited = false,
     this.deleted = false,
     this.scheduledFor,
+    this.deliveredAt,
+    this.readAt,
+    this.listenedAt,
+    this.replyTo,
   });
 
   /// Server message id (or a client id until confirmed).
@@ -111,9 +115,21 @@ class ChatMessage {
   /// Only on the sender's own screen: this message is waiting to be sent at this time.
   final DateTime? scheduledFor;
 
+  /// Server times: when it reached the other person's device, when it was read and, for a voice note, played.
+  final DateTime? deliveredAt;
+  final DateTime? readAt;
+  final DateTime? listenedAt;
+
+  /// The message this one answers (a snapshot, so it still reads well if the original is gone).
+  final ReplyRef? replyTo;
+
+  /// What a sender sees under their own message: sent, delivered or read.
+  ReceiptStatus get receipt =>
+      (isRead || readAt != null) ? ReceiptStatus.read : (deliveredAt != null ? ReceiptStatus.delivered : ReceiptStatus.sent);
+
   bool get isVoice => voice != null || localAudioPath != null;
 
-  ChatMessage copyWith({String? id, bool? isRead}) => ChatMessage(
+  ChatMessage copyWith({String? id, bool? isRead, DateTime? deliveredAt, DateTime? readAt, DateTime? listenedAt}) => ChatMessage(
     id: id ?? this.id,
     senderId: senderId,
     receiverId: receiverId,
@@ -126,6 +142,11 @@ class ChatMessage {
     createdAt: createdAt,
     edited: edited,
     deleted: deleted,
+    scheduledFor: scheduledFor,
+    deliveredAt: deliveredAt ?? this.deliveredAt,
+    readAt: readAt ?? this.readAt,
+    listenedAt: listenedAt ?? this.listenedAt,
+    replyTo: replyTo,
   );
 
   /// The same message with new text, marked "edited".
@@ -137,6 +158,9 @@ class ChatMessage {
     isRead: isRead,
     createdAt: createdAt,
     edited: true,
+    deliveredAt: deliveredAt,
+    readAt: readAt,
+    replyTo: replyTo,
   );
 
   /// Deleted for everyone: the content, voice note and photo reference are dropped.
@@ -148,6 +172,8 @@ class ChatMessage {
     isRead: isRead,
     createdAt: createdAt,
     deleted: true,
+    deliveredAt: deliveredAt,
+    readAt: readAt,
   );
 
   Map<String, Object?> toJson() => {
@@ -161,6 +187,10 @@ class ChatMessage {
     'at': createdAt.toUtc().toIso8601String(),
     if (edited) 'ed': true,
     if (deleted) 'del': true,
+    if (deliveredAt != null) 'dl': deliveredAt!.toUtc().toIso8601String(),
+    if (readAt != null) 'rd': readAt!.toUtc().toIso8601String(),
+    if (listenedAt != null) 'ls': listenedAt!.toUtc().toIso8601String(),
+    if (replyTo != null) 'rp': replyTo!.toJson(),
   };
 
   factory ChatMessage.fromJson(Map<String, dynamic> j) => ChatMessage(
@@ -174,6 +204,36 @@ class ChatMessage {
     createdAt: DateTime.parse(j['at'] as String).toLocal(),
     edited: j['ed'] as bool? ?? false,
     deleted: j['del'] as bool? ?? false,
+    deliveredAt: _t(j['dl']),
+    readAt: _t(j['rd']),
+    listenedAt: _t(j['ls']),
+    replyTo: j['rp'] == null ? null : ReplyRef.fromJson((j['rp'] as Map).cast<String, dynamic>()),
+  );
+
+  static DateTime? _t(Object? v) => v == null ? null : DateTime.tryParse(v as String)?.toLocal();
+}
+
+enum ReceiptStatus { sent, delivered, read }
+
+/// A quoted message: which one it was (server id), who wrote it and a short snapshot of what it said.
+class ReplyRef {
+  const ReplyRef({required this.messageId, required this.senderId, required this.preview, this.kind = 'text'});
+  final String messageId;
+  final String senderId;
+
+  /// Up to 120 characters of the original text, or a label such as "Photo" or "Voice message".
+  final String preview;
+
+  /// text, photo or voice.
+  final String kind;
+
+  Map<String, Object?> toJson() => {'id': messageId, 's': senderId, 'p': preview, if (kind != 'text') 'k': kind};
+
+  factory ReplyRef.fromJson(Map<String, dynamic> j) => ReplyRef(
+    messageId: j['id'] as String,
+    senderId: j['s'] as String,
+    preview: (j['p'] as String?) ?? '',
+    kind: (j['k'] as String?) ?? 'text',
   );
 }
 

@@ -51,6 +51,42 @@ class ChatScreen extends ConsumerStatefulWidget {
 class _ChatScreenState extends ConsumerState<ChatScreen> {
   bool _emojiOpen = false;
 
+  // ------------------------------------------------ jump to the latest message ----
+  bool _showLatest = false;
+
+  void _onScrolled() {
+    if (!_scroll.hasClients) return;
+    final away = _scroll.offset > 320; // the list is reversed: 0 is the newest message
+    if (away != _showLatest) setState(() => _showLatest = away);
+  }
+
+  Widget _latestButton(FinderColors c) => Positioned(
+    left: 0,
+    right: 0,
+    bottom: 2,
+    child: IgnorePointer(
+      ignoring: !_showLatest,
+      child: AnimatedOpacity(
+        opacity: _showLatest ? 1 : 0,
+        duration: Motion.of(context, Motion.fast),
+        child: Center(
+          child: IconButton(
+            tooltip: 'Latest messages',
+            visualDensity: VisualDensity.compact,
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(minWidth: 44, minHeight: 36),
+            onPressed: () {
+              if (_scroll.hasClients) {
+                _scroll.animateTo(0, duration: Motion.of(context, const Duration(milliseconds: 260)), curve: Curves.easeOutCubic);
+              }
+            },
+            icon: Icon(Icons.keyboard_arrow_down_rounded, size: 30, color: c.ink2),
+          ),
+        ),
+      ),
+    ),
+  );
+
   // ------------------------------------------------ disappearing messages ----
   Disappearing _dis = Disappearing.off;
   Timer? _disTimer;
@@ -163,6 +199,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     _openChat = ref.read(openChatProvider.notifier);
     _backend = ref.read(backendProvider);
     _text.addListener(_onTextChanged);
+    _scroll.addListener(_onScrolled);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) _openChat.open(widget.peer.id);
     });
@@ -251,6 +288,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     if (_mine != PeerState.idle) _backend.sendPeerState(id, PeerState.idle);
     _text.removeListener(_onTextChanged);
     _text.dispose();
+    _scroll.removeListener(_onScrolled);
     _scroll.dispose();
     _recorder.dispose();
     super.dispose();
@@ -857,69 +895,76 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       body: Column(
         children: [
           Expanded(
-            child: messages.when(
-              skipLoadingOnReload: true,
-              loading: () => const SizedBox.shrink(),
-              error: (e, _) => Center(child: Text('$e')),
-              data: (list) => list.isEmpty
-                  ? ListView(
-                      padding: const EdgeInsets.all(16),
-                      children: [
-                        _ThreadIntro(peer: widget.peer, encrypted: backend.isEndToEndEncrypted),
-                        ?intro,
-                      ],
-                    )
-                  : ListView.builder(
-                      controller: _scroll,
-                      reverse: true,
-                      padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-                      itemCount: list.length + 1,
-                      itemBuilder: (_, i) {
-                        if (i == list.length) {
-                          return Column(
+            child: Stack(
+              children: [
+                Positioned.fill(
+                  child: messages.when(
+                    skipLoadingOnReload: true,
+                    loading: () => const SizedBox.shrink(),
+                    error: (e, _) => Center(child: Text('$e')),
+                    data: (list) => list.isEmpty
+                        ? ListView(
+                            padding: const EdgeInsets.all(16),
                             children: [
-                              _PrivacyPill(encrypted: backend.isEndToEndEncrypted),
-                              if (intro != null) Padding(padding: const EdgeInsets.only(top: 8), child: intro),
+                              _ThreadIntro(peer: widget.peer, encrypted: backend.isEndToEndEncrypted),
+                              ?intro,
                             ],
-                          );
-                        }
-                        final m = list[list.length - 1 - i];
-                        final older = i + 1 < list.length ? list[list.length - 2 - i] : null;
-                        final newer = i > 0 ? list[list.length - i] : null;
-                        final showDay = older == null || !DateUtils.isSameDay(older.createdAt, m.createdAt);
-                        final mine = m.senderId == me;
-                        // Group consecutive bubbles from the same sender.
-                        final tail = newer == null || newer.senderId != m.senderId;
-                        final picked = _selected.contains(m.id);
-                        final bubble = GestureDetector(
-                          behavior: HitTestBehavior.translucent,
-                          onLongPress: m.scheduledFor != null
-                              ? () => _scheduledActions(m.id.substring(6))
-                              : () => _selected.isEmpty ? _messageActions(m, mine) : _toggle(m),
-                          onTap: m.scheduledFor != null
-                              ? () => _scheduledActions(m.id.substring(6))
-                              : _selected.isEmpty
-                              ? null
-                              : () => _toggle(m),
-                          child: AnimatedContainer(
-                            duration: Motion.of(context, Motion.fast),
-                            decoration: BoxDecoration(
-                              color: picked ? c.accent.withValues(alpha: 0.16) : Colors.transparent,
-                              borderRadius: BorderRadius.circular(16),
-                            ),
-                            child: _Bubble(message: m, mine: mine, tail: tail, selecting: _selected.isNotEmpty),
+                          )
+                        : ListView.builder(
+                            controller: _scroll,
+                            reverse: true,
+                            padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+                            itemCount: list.length + 1,
+                            itemBuilder: (_, i) {
+                              if (i == list.length) {
+                                return Column(
+                                  children: [
+                                    _PrivacyPill(encrypted: backend.isEndToEndEncrypted),
+                                    if (intro != null) Padding(padding: const EdgeInsets.only(top: 8), child: intro),
+                                  ],
+                                );
+                              }
+                              final m = list[list.length - 1 - i];
+                              final older = i + 1 < list.length ? list[list.length - 2 - i] : null;
+                              final newer = i > 0 ? list[list.length - i] : null;
+                              final showDay = older == null || !DateUtils.isSameDay(older.createdAt, m.createdAt);
+                              final mine = m.senderId == me;
+                              // Group consecutive bubbles from the same sender.
+                              final tail = newer == null || newer.senderId != m.senderId;
+                              final picked = _selected.contains(m.id);
+                              final bubble = GestureDetector(
+                                behavior: HitTestBehavior.translucent,
+                                onLongPress: m.scheduledFor != null
+                                    ? () => _scheduledActions(m.id.substring(6))
+                                    : () => _selected.isEmpty ? _messageActions(m, mine) : _toggle(m),
+                                onTap: m.scheduledFor != null
+                                    ? () => _scheduledActions(m.id.substring(6))
+                                    : _selected.isEmpty
+                                    ? null
+                                    : () => _toggle(m),
+                                child: AnimatedContainer(
+                                  duration: Motion.of(context, Motion.fast),
+                                  decoration: BoxDecoration(
+                                    color: picked ? c.accent.withValues(alpha: 0.16) : Colors.transparent,
+                                    borderRadius: BorderRadius.circular(16),
+                                  ),
+                                  child: _Bubble(message: m, mine: mine, tail: tail, selecting: _selected.isNotEmpty),
+                                ),
+                              );
+                              return Column(
+                                children: [
+                                  if (showDay) _DayChip(m.createdAt),
+                                  _initialIds?.contains(m.id) ?? true
+                                      ? bubble
+                                      : _Arrive(key: ValueKey(m.id), mine: mine, child: bubble),
+                                ],
+                              );
+                            },
                           ),
-                        );
-                        return Column(
-                          children: [
-                            if (showDay) _DayChip(m.createdAt),
-                            _initialIds?.contains(m.id) ?? true
-                                ? bubble
-                                : _Arrive(key: ValueKey(m.id), mine: mine, child: bubble),
-                          ],
-                        );
-                      },
-                    ),
+                  ),
+                ),
+                _latestButton(c),
+              ],
             ),
           ),
           if (_dis.on)
@@ -1114,8 +1159,8 @@ class _Composer extends StatelessWidget {
                     ),
                     suffixIcon: IconButton(
                       onPressed: sending || editing ? null : onPhoto,
-                      tooltip: 'Send a photo',
-                      icon: Icon(PhosphorIconsRegular.image, size: 24, color: c.ink2),
+                      tooltip: 'Attach',
+                      icon: Icon(Icons.attach_file_rounded, size: 22, color: c.ink2),
                     ),
                     contentPadding: const EdgeInsets.symmetric(horizontal: 4, vertical: 15),
                     border: OutlineInputBorder(
@@ -1182,6 +1227,23 @@ class _Composer extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Blue for "read".
+const readTickBlue = Color(0xFF4FC3F7);
+
+const _pict =
+    r'[\u{1F000}-\u{1FAFF}\u{2190}-\u{21FF}\u{2300}-\u{23FF}\u{2600}-\u{27BF}\u{2900}-\u{297F}\u{2B00}-\u{2BFF}\u{00A9}\u{00AE}\u{203C}\u{2049}\u{2122}\u{2139}\u{3030}\u{303D}\u{3297}\u{3299}]';
+final _emojiRun = RegExp(
+  '^(?:$_pict|[\\u{1F1E6}-\\u{1F1FF}]{2}|[#*0-9]\\uFE0F?\\u20E3)[\\u{1F3FB}-\\u{1F3FF}\\uFE0F]*(?:\\u200D$_pict[\\u{1F3FB}-\\u{1F3FF}\\uFE0F]*)*\$',
+  unicode: true,
+);
+
+/// True for a message that is exactly one emoji (including flags, skin tones and joined emoji).
+bool isSingleEmoji(String? text) {
+  final t = text?.trim();
+  if (t == null || t.isEmpty || t.characters.length != 1) return false;
+  return _emojiRun.hasMatch(t);
 }
 
 class _Bubble extends StatelessWidget {
@@ -1260,7 +1322,10 @@ class _Bubble extends StatelessWidget {
                   widthFactor: 1,
                   child: Text(
                     message.content ?? '',
-                    style: TextStyle(fontFamily: 'Geist', color: fg, fontSize: 16, height: 22 / 16),
+                    // One emoji on its own is shown a little larger; anything else keeps the normal size.
+                    style: isSingleEmoji(message.content)
+                        ? TextStyle(fontSize: 38, height: 1.2, color: fg)
+                        : TextStyle(fontFamily: 'Geist', color: fg, fontSize: 16, height: 22 / 16),
                   ),
                 ),
               const SizedBox(height: 2),
@@ -1284,7 +1349,12 @@ class _Bubble extends StatelessWidget {
                     Icon(Icons.schedule, size: 13, color: meta),
                   ] else if (mine) ...[
                     const SizedBox(width: 3),
-                    Icon(message.isRead ? PhosphorIconsBold.checks : PhosphorIconsBold.check, size: 13, color: meta),
+                    // One grey tick: sent. Two grey ticks: delivered. Two blue ticks: read.
+                    Icon(
+                      message.receipt == ReceiptStatus.sent ? PhosphorIconsBold.check : PhosphorIconsBold.checks,
+                      size: 14,
+                      color: message.receipt == ReceiptStatus.read ? readTickBlue : meta,
+                    ),
                   ],
                 ],
               ),

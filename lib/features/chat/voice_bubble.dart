@@ -24,6 +24,7 @@ class VoiceBubble extends ConsumerStatefulWidget {
 
   /// Voice notes already heard on this phone (this session).
   static final listened = <String>{};
+  static final _reportedListen = <String>{};
 
   @override
   ConsumerState<VoiceBubble> createState() => _VoiceBubbleState();
@@ -138,6 +139,11 @@ class _VoiceBubbleState extends ConsumerState<VoiceBubble> {
       } catch (_) {}
     }
     _active = this;
+    // First time someone else's voice note is played: the sender sees "listened" in Message info.
+    final backend = ref.read(backendProvider);
+    if (widget.message.senderId != backend.currentUserId && VoiceBubble._reportedListen.add(widget.message.id)) {
+      backend.markListened(widget.message.id);
+    }
     try {
       await _player.setPlaybackRate(_rates[_rate]);
       await _player.resume();

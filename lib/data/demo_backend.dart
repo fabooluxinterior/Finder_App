@@ -1388,6 +1388,7 @@ class DemoBackend implements FinderBackend {
         localImageUrl: MemoryImages.put(webp),
         isRead: false,
         createdAt: DateTime.now(),
+        deliveredAt: DateTime.now(),
       ),
     );
     _scheduleReply(peerId);
@@ -1400,6 +1401,9 @@ class DemoBackend implements FinderBackend {
     if (bytes == null) throw const AppException(AppErrorCode.unknown, 'Photo not available');
     return bytes;
   }
+
+  @override
+  Future<void> markListened(String messageId) async {}
 
   @override
   Future<void> markThreadRead(String peerId) async {
@@ -1679,6 +1683,8 @@ class DemoBackend implements FinderBackend {
     localAudioPath: audio,
     isRead: false,
     createdAt: at ?? DateTime.now(),
+    // The demo's other people are always online: delivered at once.
+    deliveredAt: DateTime.now(),
   );
 
   static const _openers = ['Hey! Thanks for the follow 😊', 'Hii, nice to connect here!', 'Heyy, your profile made me smile 🙂'];
