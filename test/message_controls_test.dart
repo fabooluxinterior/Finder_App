@@ -198,7 +198,7 @@ void main() {
   });
 
   group('view once and bubble colours', () {
-    test('your own bubbles are readable and not orange, in both themes', () {
+    test('your own bubbles are readable neutral grey, never orange or green, in both themes', () {
       double contrast(Color a, Color b) {
         final la = a.computeLuminance(), lb = b.computeLuminance();
         final hi = la > lb ? la : lb, lo = la > lb ? lb : la;
@@ -214,8 +214,12 @@ void main() {
           reason: 'blue ticks stay visible on dark bubble',
           skip: c == FinderColors.light,
         );
-        expect(c.sentBubble.r, lessThan(0.9 * 1), reason: 'not the coral/orange family');
-        expect(c.sentBubble.g >= c.sentBubble.r, isTrue, reason: 'green-leaning, never red-dominant');
+        final ch = [c.sentBubble.r, c.sentBubble.g, c.sentBubble.b];
+        expect(
+          ch.reduce((x, y) => x > y ? x : y) - ch.reduce((x, y) => x < y ? x : y),
+          lessThan(0.04),
+          reason: 'a neutral grey: no colour cast',
+        );
       }
     });
 

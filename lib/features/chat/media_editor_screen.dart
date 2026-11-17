@@ -391,7 +391,7 @@ class _MediaEditorScreenState extends State<MediaEditorScreen> {
                               label: const Text('View once'),
                               selected: _once,
                               showCheckmark: false,
-                              selectedColor: const Color(0xFF0F5E50),
+                              selectedColor: const Color(0xFF3A3A40),
                               backgroundColor: Colors.white12,
                               labelStyle: const TextStyle(color: Colors.white),
                               side: BorderSide.none,
