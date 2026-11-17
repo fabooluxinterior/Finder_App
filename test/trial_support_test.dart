@@ -203,15 +203,15 @@ void main() {
       expect(faqCategories.every((c) => c.items.length >= 3), isTrue);
     });
 
-    testWidgets('pick a topic, then a question, and the answer appears', (tester) async {
+    testWidgets('pick a topic, then a question, and the answer opens', (tester) async {
       await tester.pumpWidget(
         ProviderScope(
           overrides: [backendProvider.overrideWithValue(DemoBackend())],
           child: MaterialApp(theme: buildTheme(Brightness.dark), home: const HelpCenterScreen()),
         ),
       );
-      expect(find.text('Still need help? Contact support'), findsOneWidget);
-      await tester.tap(find.text('Subscription and payments'));
+      expect(find.text('Help chat'), findsOneWidget);
+      await tester.tap(find.text('Payments & Subscription'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('What is the 7-day free trial?'));
       await tester.pumpAndSettle();

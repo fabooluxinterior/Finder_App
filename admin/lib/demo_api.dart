@@ -401,90 +401,300 @@ class DemoAdminApi extends AdminApi {
   @override
   Future<List<StaffRow>> staff() async => _staff;
 
-  final _tickets = <String, ({TicketRow row, List<TicketMsg> thread})>{
+  @override
+  Future<void> setStaff(String email, String? role) async {
+    _staff.removeWhere((s) => s.email == email);
+    if (role != null) _staff.add(StaffRow(userId: email, email: email, role: role));
+  }
+
+  // ---- support tickets (sample data) ----
+  late final Map<
+    String,
+    ({TicketRow row, List<TicketMsg> thread, List<Map<String, dynamic>> notes, List<Map<String, dynamic>> history})
+  >
+  _tickets = {
     't1': (
       row: TicketRow(
         id: 't1',
         ticketNo: 'VB-KT6MA5',
         userId: 'u1',
         userName: 'Rahul Nair',
-        email: 'rahul@example.com',
         category: 'account',
         subject: 'Account suspended',
         status: 'new',
+        priority: 'high',
         createdAt: DateTime(2026, 11, 13, 9, 30),
         updatedAt: DateTime(2026, 11, 13, 9, 30),
-        messages: 0,
-        lastFromStaff: false,
       ),
       thread: [TicketMsg(fromStaff: false, body: 'My account is suspended, please help.', at: DateTime(2026, 11, 13, 9, 30))],
+      notes: <Map<String, dynamic>>[],
+      history: [
+        {'status': 'new', 'note': null, 'actor': null, 'at': DateTime(2026, 11, 13, 9, 30).toIso8601String()},
+      ],
+    ),
+    't2': (
+      row: TicketRow(
+        id: 't2',
+        ticketNo: 'VB-ZQ4D7N',
+        userId: 'u4',
+        userName: 'Nisha Joseph',
+        category: 'subscription',
+        subject: 'Charged twice',
+        status: 'in_progress',
+        priority: 'normal',
+        createdAt: DateTime(2026, 11, 12, 18, 5),
+        updatedAt: DateTime(2026, 11, 13, 8, 0),
+        assignedTo: 's2',
+        assignee: 'mod@vouby.example',
+      ),
+      thread: [
+        TicketMsg(fromStaff: false, body: 'I was charged twice for Fast-Track on the 11th.', at: DateTime(2026, 11, 12, 18, 5)),
+      ],
+      notes: <Map<String, dynamic>>[],
+      history: [
+        {'status': 'new', 'note': null, 'actor': null, 'at': DateTime(2026, 11, 12, 18, 5).toIso8601String()},
+        {
+          'status': 'in_progress',
+          'note': 'Looking into it',
+          'actor': 'mod@vouby.example',
+          'at': DateTime(2026, 11, 13, 8, 0).toIso8601String(),
+        },
+      ],
     ),
   };
 
-  @override
-  Future<List<TicketRow>> tickets({String status = 'open'}) async => [
-    for (final t in _tickets.values)
-      if (status == 'all' ||
-          t.row.status == status ||
-          (status == 'open' && t.row.status != 'resolved' && t.row.status != 'closed'))
-        t.row,
-  ];
+  void _setTicket(
+    String id, {
+    String? status,
+    String? priority,
+    String? assignedTo,
+    String? assignee,
+    bool unassign = false,
+    TicketMsg? msg,
+  }) {
+    final t = _tickets[id]!;
+    final r = t.row;
+    _tickets[id] = (
+      row: TicketRow(
+        id: r.id,
+        ticketNo: r.ticketNo,
+        userId: r.userId,
+        userName: r.userName,
+        category: r.category,
+        subject: r.subject,
+        status: status ?? r.status,
+        priority: priority ?? r.priority,
+        createdAt: r.createdAt,
+        updatedAt: DateTime.now(),
+        assignedTo: unassign ? null : (assignedTo ?? r.assignedTo),
+        assignee: unassign ? null : (assignee ?? r.assignee),
+        messages: r.messages + (msg == null ? 0 : 1),
+        rating: r.rating,
+      ),
+      thread: [...t.thread, ?msg],
+      notes: t.notes,
+      history: [
+        ...t.history,
+        if (status != null)
+          {'status': status, 'note': null, 'actor': 'admin@vouby.example', 'at': DateTime.now().toIso8601String()},
+      ],
+    );
+  }
 
   @override
-  Future<List<TicketMsg>> ticketThread(String ticketId) async => _tickets[ticketId]!.thread;
+  Future<Map<String, int>> ticketCounts() async {
+    int n(bool Function(String) f) => _tickets.values.where((t) => f(t.row.status)).length;
+    return {
+      'total': _tickets.length,
+      'new': n((s) => s == 'new'),
+      'open': n((s) => s == 'open' || s == 'assigned'),
+      'in_progress': n((s) => s == 'in_progress'),
+      'waiting_for_user': n((s) => s == 'waiting_for_user'),
+      'escalated': n((s) => s == 'escalated'),
+      'resolved': n((s) => s == 'resolved'),
+      'closed': n((s) => s == 'closed'),
+    };
+  }
+
+  @override
+  Future<List<TicketRow>> tickets({String? status, String? category, String? priority, String? query, String? assignedTo}) async {
+    final q = (query ?? '').trim().toLowerCase();
+    bool match(TicketRow r) =>
+        (status == null ||
+            status == 'all' ||
+            r.status == status ||
+            (status == 'active' && r.status != 'resolved' && r.status != 'closed') ||
+            (status == 'open' && (r.status == 'open' || r.status == 'assigned'))) &&
+        (category == null || category == 'all' || r.category == category) &&
+        (priority == null || priority == 'all' || r.priority == priority) &&
+        (assignedTo == null || r.assignedTo == assignedTo) &&
+        (q.isEmpty || r.ticketNo.toLowerCase().contains(q) || (r.userName ?? '').toLowerCase().contains(q));
+    return [
+      for (final t in _tickets.values)
+        if (match(t.row)) t.row,
+    ];
+  }
+
+  @override
+  Future<TicketDetail> ticketDetail(String ticketId) async {
+    final t = _tickets[ticketId]!;
+    return TicketDetail({
+      'ticket': {
+        'id': t.row.id,
+        'ticket_no': t.row.ticketNo,
+        'category': t.row.category,
+        'subject': t.row.subject,
+        'status': t.row.status,
+        'priority': t.row.priority,
+        'app_version': 'build 74',
+        'device_info': 'Android 14',
+        'created_at': t.row.createdAt.toIso8601String(),
+        'rating': t.row.rating,
+      },
+      'user': {'id': t.row.userId, 'name': t.row.userName, 'email': 'user@example.com', 'city': 'Kochi', 'status': 'active'},
+      'assignee': t.row.assignee,
+      'thread': [
+        for (final m in t.thread) {'from_staff': m.fromStaff, 'body': m.body, 'at': m.at.toIso8601String()},
+      ],
+      'notes': t.notes,
+      'history': t.history,
+      'bot': [
+        {'mine': false, 'text': 'Hi! Welcome to Vouby Support. How can we help you today?'},
+        {'mine': true, 'text': t.row.subject},
+        {'mine': false, 'text': 'Did that solve your issue?'},
+        {'mine': true, 'text': 'No, I still need help'},
+      ],
+    });
+  }
 
   @override
   Future<void> replyTicket(String ticketId, String body) async {
     if (body.trim().isEmpty) throw const AdminException('Write a reply first.');
-    final t = _tickets[ticketId]!;
-    t.thread.add(TicketMsg(fromStaff: true, body: body.trim(), at: DateTime.now()));
-    _tickets[ticketId] = (
-      row: TicketRow(
-        id: t.row.id,
-        ticketNo: t.row.ticketNo,
-        userId: t.row.userId,
-        userName: t.row.userName,
-        email: t.row.email,
-        category: t.row.category,
-        subject: t.row.subject,
-        status: 'waiting_for_user',
-        createdAt: t.row.createdAt,
-        updatedAt: DateTime.now(),
-        messages: t.row.messages + 1,
-        lastFromStaff: true,
-      ),
-      thread: t.thread,
+    _setTicket(
+      ticketId,
+      status: 'waiting_for_user',
+      msg: TicketMsg(fromStaff: true, body: body.trim(), at: DateTime.now()),
     );
     _log('ticket_reply', ticketId, null);
   }
 
   @override
-  Future<void> setTicketStatus(String ticketId, String status, {String? note}) async {
-    final t = _tickets[ticketId]!;
-    _tickets[ticketId] = (
-      row: TicketRow(
-        id: t.row.id,
-        ticketNo: t.row.ticketNo,
-        userId: t.row.userId,
-        userName: t.row.userName,
-        email: t.row.email,
-        category: t.row.category,
-        subject: t.row.subject,
-        status: status,
-        createdAt: t.row.createdAt,
-        updatedAt: DateTime.now(),
-        messages: t.row.messages,
-        lastFromStaff: t.row.lastFromStaff,
-      ),
-      thread: t.thread,
+  Future<void> addTicketNote(String ticketId, String body) async {
+    if (body.trim().isEmpty) throw const AdminException('Write a note first.');
+    _tickets[ticketId]!.notes.add({'body': body.trim(), 'author': 'admin@vouby.example', 'at': DateTime.now().toIso8601String()});
+  }
+
+  @override
+  Future<void> setTicketStatus(String ticketId, String status, {String? note}) async => _setTicket(ticketId, status: status);
+
+  @override
+  Future<void> setTicketPriority(String ticketId, String priority) async => _setTicket(ticketId, priority: priority);
+
+  @override
+  Future<void> assignTicket(String ticketId, String? staffUserId) async {
+    if (staffUserId == null) return _setTicket(ticketId, unassign: true);
+    final p = _staff.firstWhere((s) => s.userId == staffUserId);
+    final r = _tickets[ticketId]!.row;
+    _setTicket(
+      ticketId,
+      assignedTo: p.userId,
+      assignee: p.email,
+      status: r.status == 'new' || r.status == 'open' ? 'assigned' : null,
     );
   }
 
   @override
-  Future<void> setStaff(String email, String? role) async {
-    _staff.removeWhere((s) => s.email == email);
-    if (role != null) _staff.add(StaffRow(userId: email, email: email, role: role));
+  Future<void> escalateTicket(String ticketId, String note) async => _setTicket(ticketId, status: 'escalated');
+
+  @override
+  Future<List<StaffPerson>> staffPeople() async => [
+    for (final s in _staff) StaffPerson(userId: s.userId, email: s.email, role: s.role),
+  ];
+
+  // ---- auto-reply management (sample data) ----
+  var _bot = const BotSettings(
+    enabled: true,
+    welcome: 'Hi! Welcome to Vouby Support. How can we help you today?',
+    fallback: 'Sorry, I didn’t quite get that. Could you rephrase it, or raise a support ticket and our team will help?',
+    resolvedPrompt: 'Did that solve your issue?',
+    ticketPrompt: 'I’m sorry that didn’t help. You can raise a support ticket and our team will look into it.',
+    quickReplies: [
+      'Account & Login',
+      'Profile & Verification',
+      'Matches & Likes',
+      'Chat & Messages',
+      'Payments & Subscription',
+      'Safety & Reporting',
+      'Technical Issues',
+    ],
+  );
+  final _botReplies = <BotReply>[
+    const BotReply(
+      id: 'r1',
+      category: 'account',
+      title: 'How do I log in?',
+      keywords: ['login', 'otp', 'sign in'],
+      answer: 'Enter your mobile number and we send a 6-digit code by SMS.',
+      active: true,
+      sort: 10,
+    ),
+    const BotReply(
+      id: 'r2',
+      category: 'subscription',
+      title: 'What is Fast-Track?',
+      keywords: ['fast track', 'premium', 'plan'],
+      answer: 'Fast-Track lets you send requests and chat. It is ₹79 a month.',
+      active: true,
+      sort: 10,
+    ),
+  ];
+
+  @override
+  Future<BotOverview> botOverview() async => BotOverview(settings: _bot, replies: List.of(_botReplies), conversations: 3);
+
+  @override
+  Future<void> botSaveSettings(BotSettings s) async => _bot = s;
+
+  @override
+  Future<void> botSaveReply({
+    String? id,
+    required String category,
+    required String title,
+    required List<String> keywords,
+    required String answer,
+    required bool active,
+    int sort = 0,
+  }) async {
+    if (title.trim().length < 3 || answer.trim().isEmpty) throw const AdminException('Add a question and an answer.');
+    final r = BotReply(
+      id: id ?? 'r${_botReplies.length + 1}${DateTime.now().millisecondsSinceEpoch}',
+      category: category,
+      title: title.trim(),
+      keywords: keywords,
+      answer: answer.trim(),
+      active: active,
+      sort: sort,
+    );
+    final i = _botReplies.indexWhere((x) => x.id == id);
+    i >= 0 ? _botReplies[i] = r : _botReplies.add(r);
   }
+
+  @override
+  Future<void> botDeleteReply(String id) async => _botReplies.removeWhere((r) => r.id == id);
+
+  @override
+  Future<List<BotConversationRow>> botConversations() async => [
+    BotConversationRow(
+      id: 'c1',
+      userName: 'Rahul Nair',
+      ticketNo: 'VB-KT6MA5',
+      updatedAt: DateTime.now().subtract(const Duration(hours: 3)),
+      messages: const [
+        {'mine': false, 'text': 'Hi! Welcome to Vouby Support. How can we help you today?'},
+        {'mine': true, 'text': 'my account is suspended'},
+      ],
+    ),
+  ];
 
   @override
   Future<Map<String, dynamic>> securityOverview() async => {

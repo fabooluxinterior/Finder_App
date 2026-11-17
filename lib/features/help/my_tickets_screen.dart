@@ -5,16 +5,18 @@ import '../../core/phosphor.dart';
 import '../../core/theme.dart';
 import '../../models/support.dart';
 import '../../providers.dart';
-import 'contact_support_screen.dart';
+import '../help/notifications_screen.dart';
+import 'raise_ticket_screen.dart';
+import 'ticket_detail_screen.dart';
 
 final myTicketsProvider = FutureProvider.autoDispose<List<SupportTicket>>((ref) => ref.watch(backendProvider).myTickets());
 
 Color ticketStatusColor(BuildContext context, TicketStatus s) {
   final c = context.fc;
   return switch (s) {
-    TicketStatus.newTicket => c.ink2,
-    TicketStatus.inProgress => c.gold,
-    TicketStatus.waitingForUser => c.accent,
+    TicketStatus.newTicket || TicketStatus.open => c.ink2,
+    TicketStatus.assigned || TicketStatus.inProgress => c.gold,
+    TicketStatus.waitingForUser || TicketStatus.escalated => c.accent,
     TicketStatus.resolved || TicketStatus.closed => c.ok,
   };
 }
@@ -28,11 +30,27 @@ class MyTicketsScreen extends ConsumerWidget {
     final c = context.fc;
     final tickets = ref.watch(myTicketsProvider);
     return Scaffold(
-      appBar: AppBar(title: const Text('My tickets')),
+      appBar: AppBar(
+        title: const Text('My support tickets'),
+        actions: [
+          // Replies and status changes arrive here as notifications.
+          IconButton(
+            tooltip: 'Notifications',
+            icon: Badge(
+              isLabelVisible: (ref.watch(notificationsProvider).value ?? const []).any((n) => n.readAt == null),
+              child: const Icon(PhosphorIconsRegular.bell),
+            ),
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const NotificationsScreen()),
+            ).then((_) => ref.invalidate(notificationsProvider)),
+          ),
+        ],
+      ),
       floatingActionButton: FloatingActionButton.extended(
         backgroundColor: c.accent,
         foregroundColor: Colors.white,
-        onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ContactSupportScreen())),
+        onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const RaiseTicketScreen())),
         icon: const Icon(PhosphorIconsRegular.plus),
         label: const Text('New request'),
       ),
@@ -74,7 +92,7 @@ class MyTicketsScreen extends ConsumerWidget {
                       borderRadius: BorderRadius.circular(18),
                       onTap: () => Navigator.push(
                         context,
-                        MaterialPageRoute(builder: (_) => ContactSupportScreen(ticket: t)),
+                        MaterialPageRoute(builder: (_) => TicketDetailScreen(ticket: t)),
                       ).then((_) => ref.invalidate(myTicketsProvider)),
                       child: Container(
                         padding: const EdgeInsets.all(14),

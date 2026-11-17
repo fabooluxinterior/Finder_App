@@ -250,7 +250,26 @@ abstract class FinderBackend {
     required String subject,
     required String description,
     Uint8List? screenshotWebp,
+    TicketPriority priority = TicketPriority.normal,
+    String? botConversationId,
   });
+
+  /// The chatbot's messages and quick replies (edited by admins; changes reach the app at once).
+  Future<BotConfig> supportBotConfig();
+
+  /// Questions and answers for Help (search and categories).
+  Future<List<FaqEntry>> supportFaqs({SupportCategory? category, String? query});
+
+  /// The best answer to what was typed, with related questions, or null when nothing matches.
+  Future<BotAnswer?> supportBotAnswer(String text, {SupportCategory? category});
+
+  /// Keeps the chatbot conversation (returns its id); the last one from the past day can be reopened.
+  Future<String> saveBotConversation(String? sessionId, List<Map<String, dynamic>> messages);
+  Future<BotConversation?> lastBotConversation();
+
+  Future<void> reopenTicket(String ticketId);
+  Future<void> rateTicket(String ticketId, int rating, {String? comment});
+  Future<List<TicketEvent>> ticketEvents(String ticketId);
   Future<List<SupportTicket>> myTickets();
 
   /// The conversation on one ticket: your messages and the team's replies, oldest first.

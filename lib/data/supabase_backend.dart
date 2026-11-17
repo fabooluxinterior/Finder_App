@@ -6,6 +6,7 @@ import 'package:supabase_flutter/supabase_flutter.dart' hide OtpChannel;
 import 'package:uuid/uuid.dart';
 
 import '../core/config.dart';
+import '../core/app_info.dart';
 import '../core/errors.dart';
 import '../core/media_auth.dart';
 import '../core/media_cache.dart';
@@ -987,27 +988,100 @@ class SupabaseBackend implements FinderBackend {
     required String subject,
     required String description,
     Uint8List? screenshotWebp,
+    TicketPriority priority = TicketPriority.normal,
+    String? botConversationId,
   }) => _guard(() async {
     final problem = validateTicket(subject: subject, description: description);
     if (problem != null) throw AppException(AppErrorCode.invalidInput, problem);
-    String? path;
-    if (screenshotWebp != null) {
-      // The optimizer outputs WebP (JPEG where a browser can't encode WebP).
-      final webp = screenshotWebp.length > 12 && String.fromCharCodes(screenshotWebp.sublist(8, 12)) == 'WEBP';
-      path = '$_me/${_uuid.v4()}.${webp ? 'webp' : 'jpg'}';
-      await _db.storage
-          .from('support_attachments')
-          .uploadBinary(path, screenshotWebp, fileOptions: FileOptions(contentType: webp ? 'image/webp' : 'image/jpeg'));
-    }
+    // Text only: the app does not allow screenshots or images in support.
     final rows = await _db.rpc(
-      'submit_support_ticket',
-      params: {'p_category': category.wire, 'p_subject': subject, 'p_description': description, 'p_attachment_path': path},
+      'submit_support_ticket_v2',
+      params: {
+        'p_category': category.wire,
+        'p_subject': subject,
+        'p_description': description,
+        'p_priority': priority.wire,
+        'p_app_version': appVersionLabel(),
+        'p_device_info': deviceLabel(),
+        'p_bot_conversation': botConversationId,
+      },
     ) as List;
     final id = (rows.first as Map)['id'] as String;
     // Staff email (if configured). The ticket is stored either way.
     unawaited(_db.functions.invoke('support-notify', body: {'ticket_id': id}).then((_) {}, onError: (_) {}));
     final row = await _db.from('support_tickets').select().eq('id', id).single();
     return SupportTicket.fromJson(row);
+  });
+
+  @override
+  Future<BotConfig> supportBotConfig() =>
+      _guard(() async => BotConfig.fromJson((await _db.rpc('support_bot_config') as Map).cast<String, dynamic>()));
+
+  @override
+  Future<List<FaqEntry>> supportFaqs({SupportCategory? category, String? query}) => _guard(() async {
+    final rows = (await _db.rpc('support_faqs', params: {'p_category': category?.wire, 'p_q': query}) as List)
+        .cast<Map<String, dynamic>>();
+    return [for (final r in rows) FaqEntry.fromJson(r)];
+  });
+
+  @override
+  Future<BotAnswer?> supportBotAnswer(String text, {SupportCategory? category}) => _guard(() async {
+    final rows = (await _db.rpc('support_bot_answer', params: {'p_text': text, 'p_category': category?.wire}) as List)
+        .cast<Map<String, dynamic>>();
+    if (rows.isEmpty) return null;
+    final r = rows.first;
+    return BotAnswer(
+      entry: FaqEntry.fromJson(r),
+      related: [
+        for (final x in (r['related'] as List? ?? const [])) (id: (x as Map)['id'] as String, title: x['title'] as String),
+      ],
+    );
+  });
+
+  @override
+  Future<String> saveBotConversation(String? sessionId, List<Map<String, dynamic>> messages) =>
+      _guard(() async => await _db.rpc('support_bot_save', params: {'p_session': sessionId, 'p_messages': messages}) as String);
+
+  @override
+  Future<BotConversation?> lastBotConversation() => _guard(() async {
+    final rows = (await _db.rpc('support_bot_last') as List).cast<Map<String, dynamic>>();
+    if (rows.isEmpty) return null;
+    return BotConversation(
+      id: rows.first['id'] as String,
+      messages: [for (final m in (rows.first['messages'] as List)) (m as Map).cast<String, dynamic>()],
+    );
+  });
+
+  @override
+  Future<void> reopenTicket(String ticketId) => _guard(() => _db.rpc('reopen_ticket', params: {'p_ticket': ticketId}));
+
+  @override
+  Future<void> rateTicket(String ticketId, int rating, {String? comment}) =>
+      _guard(() => _db.rpc('rate_ticket', params: {'p_ticket': ticketId, 'p_rating': rating, 'p_comment': comment}));
+
+  @override
+  Future<List<TicketEvent>> ticketEvents(String ticketId) => _guard(() async {
+    final rows = await _db
+        .from('support_ticket_events')
+        .select('status, note, created_at')
+        .eq('ticket_id', ticketId)
+        .order('created_at');
+    // Internal steps (assigning, priority, escalation notes) are not part of what the person sees.
+    return [
+      for (final r in rows)
+        if (!((r['note'] as String?) ?? '').startsWith('Priority:') &&
+            (r['note'] as String?) != 'Assigned' &&
+            (r['note'] as String?) != 'Unassigned')
+          () {
+            final st = TicketStatusX.fromWire(r['status'] as String);
+            final internal = st == TicketStatus.escalated || st == TicketStatus.assigned;
+            return TicketEvent(
+              status: st,
+              at: DateTime.parse(r['created_at'] as String).toLocal(),
+              note: internal ? null : r['note'] as String?,
+            );
+          }(),
+    ];
   });
 
   @override

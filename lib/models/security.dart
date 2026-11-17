@@ -62,6 +62,8 @@ enum ReportReason {
   suspiciousBehaviour,
   underage,
   sexualContent,
+  threats,
+  privacyViolation,
   other,
   // Earlier categories, still accepted by the server.
   spamOrScam,
@@ -83,10 +85,12 @@ extension ReportReasonX on ReportReason {
     ReportReason.scam => 'scam',
     ReportReason.impersonation => 'impersonation',
     ReportReason.suspiciousBehaviour => 'suspicious_behaviour',
+    ReportReason.threats => 'threats',
+    ReportReason.privacyViolation => 'privacy_violation',
   };
   String get label => switch (this) {
     ReportReason.sexualContent => 'Sexual or explicit content',
-    ReportReason.harassment => 'Harassment or threats',
+    ReportReason.harassment => 'Harassment',
     ReportReason.spamOrScam => 'Spam or scam',
     ReportReason.fakeProfile => 'Fake profile',
     ReportReason.underage => 'Appears under 18',
@@ -98,6 +102,8 @@ extension ReportReasonX on ReportReason {
     ReportReason.scam => 'Scam or asking for money',
     ReportReason.impersonation => 'Pretending to be someone else',
     ReportReason.suspiciousBehaviour => 'Suspicious behaviour',
+    ReportReason.threats => 'Threats or abuse',
+    ReportReason.privacyViolation => 'Privacy violation',
   };
 
   /// Shown in the report form (the two older combined ones are hidden).

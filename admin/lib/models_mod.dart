@@ -203,41 +203,47 @@ class TicketRow {
     required this.ticketNo,
     required this.userId,
     required this.userName,
-    required this.email,
     required this.category,
     required this.subject,
     required this.status,
+    required this.priority,
     required this.createdAt,
     required this.updatedAt,
-    required this.messages,
-    required this.lastFromStaff,
+    this.assignedTo,
+    this.assignee,
+    this.messages = 0,
+    this.rating,
   });
   final String id;
   final String ticketNo;
   final String? userId;
   final String? userName;
-  final String? email;
   final String category;
   final String subject;
   final String status;
+  final String priority;
   final DateTime createdAt;
   final DateTime updatedAt;
+  final String? assignedTo;
+  final String? assignee;
   final int messages;
-  final bool lastFromStaff;
+  final int? rating;
 
   factory TicketRow.fromJson(Map<String, dynamic> r) => TicketRow(
     id: r['id'] as String,
     ticketNo: r['ticket_no'] as String,
     userId: r['user_id'] as String?,
     userName: r['user_name'] as String?,
-    email: r['email'] as String?,
     category: r['category'] as String,
     subject: r['subject'] as String,
     status: r['status'] as String,
+    priority: (r['priority'] as String?) ?? 'normal',
     createdAt: DateTime.parse(r['created_at'] as String).toLocal(),
     updatedAt: DateTime.parse(r['updated_at'] as String).toLocal(),
+    assignedTo: r['assigned_to'] as String?,
+    assignee: r['assignee'] as String?,
     messages: (r['messages'] as num?)?.toInt() ?? 0,
-    lastFromStaff: (r['last_from_staff'] as bool?) ?? false,
+    rating: (r['rating'] as num?)?.toInt(),
   );
 }
 
@@ -249,6 +255,129 @@ class TicketMsg {
   factory TicketMsg.fromJson(Map<String, dynamic> r) => TicketMsg(
     fromStaff: (r['from_staff'] as bool?) ?? false,
     body: r['body'] as String,
-    at: DateTime.parse(r['created_at'] as String).toLocal(),
+    at: DateTime.parse((r['at'] ?? r['created_at']) as String).toLocal(),
   );
 }
+
+/// Everything staff see on one ticket (the person, thread, internal notes, history, the chatbot conversation).
+class TicketDetail {
+  const TicketDetail(this.m);
+  final Map<String, dynamic> m;
+  Map<String, dynamic> get ticket => (m['ticket'] as Map).cast<String, dynamic>();
+  Map<String, dynamic> get user => ((m['user'] as Map?) ?? const {}).cast<String, dynamic>();
+  String? get assignee => m['assignee'] as String?;
+  List<TicketMsg> get thread => [
+    for (final x in (m['thread'] as List? ?? const [])) TicketMsg.fromJson((x as Map).cast<String, dynamic>()),
+  ];
+  List<Map<String, dynamic>> get notes => [for (final x in (m['notes'] as List? ?? const [])) (x as Map).cast<String, dynamic>()];
+  List<Map<String, dynamic>> get history => [
+    for (final x in (m['history'] as List? ?? const [])) (x as Map).cast<String, dynamic>(),
+  ];
+  List<Map<String, dynamic>> get bot => [for (final x in (m['bot'] as List? ?? const [])) (x as Map).cast<String, dynamic>()];
+}
+
+class StaffPerson {
+  const StaffPerson({required this.userId, required this.email, required this.role});
+  final String userId;
+  final String? email;
+  final String role;
+  factory StaffPerson.fromJson(Map<String, dynamic> r) =>
+      StaffPerson(userId: r['user_id'] as String, email: r['email'] as String?, role: r['role'] as String);
+}
+
+class BotSettings {
+  const BotSettings({
+    required this.enabled,
+    required this.welcome,
+    required this.fallback,
+    required this.resolvedPrompt,
+    required this.ticketPrompt,
+    required this.quickReplies,
+  });
+  final bool enabled;
+  final String welcome;
+  final String fallback;
+  final String resolvedPrompt;
+  final String ticketPrompt;
+  final List<String> quickReplies;
+  factory BotSettings.fromJson(Map<String, dynamic> j) => BotSettings(
+    enabled: (j['enabled'] as bool?) ?? true,
+    welcome: j['welcome'] as String,
+    fallback: j['fallback'] as String,
+    resolvedPrompt: j['resolved_prompt'] as String,
+    ticketPrompt: j['ticket_prompt'] as String,
+    quickReplies: [for (final q in (j['quick_replies'] as List? ?? const [])) '$q'],
+  );
+}
+
+class BotReply {
+  const BotReply({
+    required this.id,
+    required this.category,
+    required this.title,
+    required this.keywords,
+    required this.answer,
+    required this.active,
+    required this.sort,
+  });
+  final String id;
+  final String category;
+  final String title;
+  final List<String> keywords;
+  final String answer;
+  final bool active;
+  final int sort;
+  factory BotReply.fromJson(Map<String, dynamic> j) => BotReply(
+    id: j['id'] as String,
+    category: j['category'] as String,
+    title: j['title'] as String,
+    keywords: [for (final k in (j['keywords'] as List? ?? const [])) '$k'],
+    answer: j['answer'] as String,
+    active: (j['active'] as bool?) ?? true,
+    sort: (j['sort'] as num?)?.toInt() ?? 0,
+  );
+}
+
+class BotOverview {
+  const BotOverview({required this.settings, required this.replies, required this.conversations});
+  final BotSettings settings;
+  final List<BotReply> replies;
+  final int conversations;
+}
+
+class BotConversationRow {
+  const BotConversationRow({
+    required this.id,
+    required this.userName,
+    required this.ticketNo,
+    required this.updatedAt,
+    required this.messages,
+  });
+  final String id;
+  final String? userName;
+  final String? ticketNo;
+  final DateTime updatedAt;
+  final List<Map<String, dynamic>> messages;
+  factory BotConversationRow.fromJson(Map<String, dynamic> j) => BotConversationRow(
+    id: j['id'] as String,
+    userName: j['user_name'] as String?,
+    ticketNo: j['ticket_no'] as String?,
+    updatedAt: DateTime.parse(j['updated_at'] as String).toLocal(),
+    messages: [for (final m in (j['messages'] as List? ?? const [])) (m as Map).cast<String, dynamic>()],
+  );
+}
+
+/// How serious a report is, for ordering the queue (the server applies the same rule).
+String reportPriority(String reason) => switch (reason) {
+  'underage' || 'threats' => 'urgent',
+  'harassment' ||
+  'abusive_messages' ||
+  'scam' ||
+  'spam_or_scam' ||
+  'impersonation' ||
+  'privacy_violation' ||
+  'sexual_content' ||
+  'inappropriate_images' ||
+  'malicious_link' => 'high',
+  _ => 'normal',
+};

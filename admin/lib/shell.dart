@@ -5,6 +5,7 @@ import 'pages/data_migration.dart';
 import 'pages/integrations.dart';
 import 'pages/moderation.dart';
 import 'pages/notifications.dart';
+import 'pages/support.dart';
 import 'pages/safety.dart';
 import 'ui.dart';
 
@@ -28,6 +29,7 @@ List<_Dest> _destinations(bool isAdmin, void Function(String) go) => [
   _Dest('Verification', Icons.verified_outlined, 'Review', false, (a) => VerificationPage(api: a)),
   _Dest('Security events', Icons.shield_outlined, 'Review', false, (a) => SecurityPage(api: a)),
   _Dest('Audit log', Icons.history, 'Admin', false, (a) => AuditPage(api: a)),
+  _Dest('Auto-replies', Icons.smart_toy_outlined, 'Admin', true, (a) => AutoReplyPage(api: a)),
   _Dest('Staff', Icons.badge_outlined, 'Admin', true, (a) => StaffPage(api: a)),
   _Dest('Notifications', Icons.notifications_outlined, 'Admin', true, (a) => NotificationsPage(api: a)),
   _Dest('Database & Data Migration', Icons.storage_outlined, 'Settings', true, (a) => DataMigrationPage(api: a)),

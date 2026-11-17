@@ -6,7 +6,11 @@ import 'package:finder_app/data/demo_backend.dart';
 import 'package:finder_app/data/purchases_service.dart';
 import 'package:finder_app/features/chat/chat_screen.dart';
 import 'package:finder_app/features/chats/chats_screen.dart';
-import 'package:finder_app/features/help/contact_support_screen.dart';
+import 'package:finder_app/features/help/help_center_screen.dart';
+import 'package:finder_app/features/help/raise_ticket_screen.dart';
+import 'package:finder_app/features/help/support_chat_screen.dart';
+import 'package:finder_app/features/help/ticket_detail_screen.dart';
+import 'package:finder_app/models/support.dart';
 import 'package:finder_app/features/profile/blocked_users_screen.dart';
 import 'package:finder_app/features/profile/follow_lists_screen.dart';
 import 'package:finder_app/features/profile/my_profile_screen.dart';
@@ -327,38 +331,121 @@ void main() {
     expect(find.text('Hello there'), findsNothing);
   });
 
-  testWidgets('Help chat: choose a topic, describe the problem, the request is sent with a ticket number and no instant answer', (
-    t,
-  ) async {
+  testWidgets('Help chat: welcome, topic buttons, typing, a matching answer, "solved?" and the ticket button', (t) async {
     await t.binding.setSurfaceSize(const Size(400, 900));
     addTearDown(() => t.binding.setSurfaceSize(null));
     final (b, _) = (await t.runAsync(_world))!;
-    await t.pumpWidget(_app(b, const ContactSupportScreen()));
+    await t.pumpWidget(_app(b, const SupportChatScreen()));
     await _settle(t);
-    expect(find.text('Hi, this is Vouby Help. What do you need help with?'), findsOneWidget);
-    await t.tap(find.text('Chat and messaging'));
+    expect(find.text('Hi! Welcome to Vouby Support. How can we help you today?'), findsOneWidget);
+    expect(find.text('Chat & Messages'), findsOneWidget);
+    expect(find.textContaining('Connect to'), findsNothing, reason: 'no live agent option');
+    expect(find.textContaining('screenshot'), findsNothing);
+    await t.tap(find.text('Chat & Messages'));
     await t.pump(const Duration(milliseconds: 500));
     expect(find.bySemanticsLabel('Vouby Help is typing'), findsOneWidget, reason: 'the assistant types before it answers');
     await _settle(t, 2600);
-    expect(find.textContaining('Tell us what happened'), findsOneWidget);
-    await t.enterText(find.byType(TextField), 'hi');
+    expect(find.textContaining('common questions about chat'), findsOneWidget);
+    // Type a question the demo FAQ can answer.
+    await t.enterText(find.byType(TextField), 'how do I delete my account');
     await t.pump();
     await t.tap(find.byTooltip('Send'));
     await t.pump(const Duration(milliseconds: 500));
-    expect(find.text('hi'), findsOneWidget, reason: 'even a very short message is shown and sent');
-    expect(find.textContaining('ticket number'), findsNothing, reason: 'the reply waits about two seconds');
+    expect(find.text('how do I delete my account'), findsOneWidget);
     await _settle(t, 2600);
-    expect(find.textContaining('ticket number is VB-'), findsOneWidget);
-    expect(find.textContaining('shared this with our team'), findsOneWidget);
-    expect(find.textContaining('isn’t instant'), findsOneWidget);
-    expect(find.textContaining('screenshot'), findsNothing);
-    final stored = (await t.runAsync(b.myTickets))!;
-    expect(stored.single.description, 'hi (Chat and messaging)', reason: 'the content reached the team');
-    // Add more afterwards: it goes on the same request.
-    await t.enterText(find.byType(TextField), 'It happens on Wi-Fi only');
+    await _settle(t, 2600);
+    expect(find.text('Did that solve your issue?'), findsOneWidget);
+    expect(find.text('No, I still need help'), findsOneWidget);
+    await t.ensureVisible(find.text('No, I still need help'));
+    await t.tap(find.text('No, I still need help'));
+    await _settle(t, 2600);
+    expect(find.text('Raise a Support Ticket'), findsOneWidget);
+    // Nonsense falls back to "rephrase or raise a ticket".
+    await t.enterText(find.byType(TextField), 'qqqq zzzz');
     await t.pump();
     await t.tap(find.byTooltip('Send'));
     await _settle(t, 2600);
-    expect((await t.runAsync(() => b.ticketThread(stored.single.id)))!.map((m) => m.body), contains('It happens on Wi-Fi only'));
+    await _settle(t, 2600);
+    expect(find.textContaining('rephrase'), findsOneWidget);
+    await t.scrollUntilVisible(find.text('Raise a Support Ticket'), 200, scrollable: find.byType(Scrollable).first);
+    expect(find.text('Raise a Support Ticket'), findsOneWidget);
+    // The conversation is kept.
+    final saved = (await t.runAsync(b.lastBotConversation))!;
+    expect(saved.messages.any((m) => m['text'] == 'how do I delete my account'), isTrue);
+  });
+
+  testWidgets('Raise a ticket: form with category, title, details, priority; opens the ticket; staff reply, reopen and rating', (
+    t,
+  ) async {
+    await t.binding.setSurfaceSize(const Size(400, 1000));
+    addTearDown(() => t.binding.setSurfaceSize(null));
+    final (b, _) = (await t.runAsync(_world))!;
+    await t.pumpWidget(_app(b, const RaiseTicketScreen(category: SupportCategory.chat)));
+    await _settle(t);
+    expect(find.text('Issue category'), findsOneWidget);
+    expect(find.textContaining('screenshot'), findsNothing);
+    await t.enterText(find.widgetWithText(TextField, 'A short summary'), 'Voice notes');
+    await t.enterText(
+      find.widgetWithText(TextField, 'What happened? What did you expect?'),
+      'Voice notes stop after a few seconds',
+    );
+    await t.tap(find.text('High'));
+    await t.pump();
+    await t.tap(find.text('Submit ticket'));
+    await _settle(t, 800);
+    expect(find.byType(TicketDetailScreen), findsOneWidget);
+    final ticket = (await t.runAsync(b.myTickets))!.single;
+    expect((ticket.priority, ticket.category, ticket.subject), (TicketPriority.high, SupportCategory.chat, 'Voice notes'));
+    expect(find.text(ticket.ticketNo), findsWidgets);
+    // Reply as the user.
+    await t.enterText(
+      find.descendant(of: find.byType(TicketDetailScreen), matching: find.byType(TextField)),
+      'It happens on Wi-Fi only',
+    );
+    await t.pump();
+    await t.tap(find.byTooltip('Send'));
+    await _settle(t, 800);
+    expect(find.text('It happens on Wi-Fi only'), findsOneWidget);
+    // The team resolves it: the user can reopen or rate.
+    b.setTicketStatusForTest(ticket.id, TicketStatus.resolved);
+    await t.pump(const Duration(seconds: 11));
+    await _settle(t, 800);
+    expect(find.text('Reopen ticket'), findsOneWidget);
+    expect(find.text('Rate support'), findsOneWidget);
+    await t.tap(find.text('Rate support'));
+    await _settle(t);
+    await t.tap(find.byTooltip('5 stars'));
+    await t.pump();
+    await t.tap(find.text('Send'));
+    await _settle(t, 800);
+    expect((await t.runAsync(b.myTickets))!.single.rating, 5);
+    await t.tap(find.text('Reopen ticket'));
+    await _settle(t, 800);
+    expect((await t.runAsync(b.myTickets))!.single.status, TicketStatus.open);
+  });
+
+  testWidgets('Help & Support home: search, the seven topics, Help chat and My support tickets', (t) async {
+    await t.binding.setSurfaceSize(const Size(400, 1000));
+    addTearDown(() => t.binding.setSurfaceSize(null));
+    final (b, _) = (await t.runAsync(_world))!;
+    await t.pumpWidget(_app(b, const HelpCenterScreen()));
+    await _settle(t);
+    for (final label in [
+      'Account & Login',
+      'Profile & Verification',
+      'Matches & Likes',
+      'Chat & Messages',
+      'Payments & Subscription',
+      'Safety & Reporting',
+      'Technical Issues',
+    ]) {
+      expect(find.text(label), findsWidgets, reason: label);
+    }
+    expect(find.text('Help chat'), findsOneWidget);
+    expect(find.text('My support tickets'), findsOneWidget);
+    await t.enterText(find.byType(TextField), 'delete');
+    await t.pump(const Duration(milliseconds: 400));
+    await _settle(t);
+    expect(find.text('How do I delete my account?'), findsOneWidget);
   });
 }

@@ -70,6 +70,7 @@ void main() {
     expect(find.text('Overview'), findsWidgets);
     expect(find.text('Open reports'), findsOneWidget);
 
+    await t.ensureVisible(find.text('Database & Data Migration'));
     await t.tap(find.text('Database & Data Migration'));
     await _settle(t);
     expect(find.text('Profile updates'), findsOneWidget);
@@ -81,6 +82,7 @@ void main() {
     await _settle(t);
     expect(find.textContaining('Remind again'), findsOneWidget);
 
+    await t.ensureVisible(find.text('Integrations & credentials'));
     await t.tap(find.text('Integrations & credentials'));
     await _settle(t);
     expect(find.text('Image moderation (Google Vision)'), findsOneWidget);
@@ -141,18 +143,86 @@ void main() {
     expect((await api.restricted(status: 'suspended')), isEmpty);
   });
 
-  test('support: staff see the ticket, reply reaches the thread and moves it to waiting for the user', () async {
+  test('support: counts, filters, detail with the chatbot history, reply, notes, assign, escalate, close', () async {
     final api = DemoAdminApi();
-    final open = await api.tickets();
-    expect(open.single.ticketNo, 'VB-KT6MA5');
-    expect((await api.ticketThread(open.single.id)).single.body, contains('suspended'));
-    await expectLater(api.replyTicket(open.single.id, '  '), throwsA(isA<AdminException>()));
-    await api.replyTicket(open.single.id, 'Hi, we are looking into it.');
-    final thread = await api.ticketThread(open.single.id);
-    expect(thread.last.fromStaff, isTrue);
-    expect((await api.tickets()).single.status, 'waiting_for_user');
-    await api.setTicketStatus(open.single.id, 'resolved');
-    expect(await api.tickets(), isEmpty);
-    expect((await api.tickets(status: 'all')).single.status, 'resolved');
+    final c = await api.ticketCounts();
+    expect((c['total'], c['new'], c['in_progress']), (2, 1, 1));
+
+    expect((await api.tickets(status: 'new')).single.ticketNo, 'VB-KT6MA5');
+    expect((await api.tickets(query: 'nisha')).single.ticketNo, 'VB-ZQ4D7N', reason: 'search by username');
+    expect((await api.tickets(query: 'VB-KT6')).single.userName, 'Rahul Nair', reason: 'search by ticket id');
+    expect((await api.tickets(category: 'subscription')).single.subject, 'Charged twice');
+    expect((await api.tickets(priority: 'high')).single.ticketNo, 'VB-KT6MA5');
+
+    final id = (await api.tickets(status: 'new')).single.id;
+    final d = await api.ticketDetail(id);
+    expect(d.thread.single.body, contains('suspended'));
+    expect(d.bot, isNotEmpty, reason: 'the chatbot conversation is on the ticket');
+    await expectLater(api.replyTicket(id, '  '), throwsA(isA<AdminException>()));
+    await api.replyTicket(id, 'Hi, we are looking into it.');
+    expect((await api.ticketDetail(id)).thread.last.fromStaff, isTrue);
+    expect((await api.tickets(status: 'waiting_for_user')).single.id, id);
+
+    await api.addTicketNote(id, 'Checked the report history.');
+    expect((await api.ticketDetail(id)).notes.single['body'], 'Checked the report history.');
+    await api.assignTicket(id, 's2');
+    expect((await api.tickets(assignedTo: 's2')).map((t) => t.id), contains(id));
+    await api.setTicketPriority(id, 'urgent');
+    await api.escalateTicket(id, 'Needs an admin');
+    expect((await api.ticketCounts())['escalated'], 1);
+    await api.setTicketStatus(id, 'closed');
+    expect((await api.ticketCounts())['closed'], 1);
+    expect((await api.tickets(status: 'active')).map((t) => t.id), isNot(contains(id)));
+  });
+
+  test('auto-reply management: edit settings, add/disable/delete a reply, view conversations', () async {
+    final api = DemoAdminApi();
+    final o = await api.botOverview();
+    expect(o.settings.welcome, startsWith('Hi! Welcome to Vouby Support'));
+    await api.botSaveSettings(
+      BotSettings(
+        enabled: false,
+        welcome: 'Hello!',
+        fallback: o.settings.fallback,
+        resolvedPrompt: o.settings.resolvedPrompt,
+        ticketPrompt: o.settings.ticketPrompt,
+        quickReplies: const ['Account & Login'],
+      ),
+    );
+    final changed = (await api.botOverview()).settings;
+    expect((changed.enabled, changed.welcome), (false, 'Hello!'));
+    expect(changed.quickReplies, ['Account & Login']);
+
+    await expectLater(
+      api.botSaveReply(category: 'account', title: 'x', keywords: const [], answer: '', active: true),
+      throwsA(isA<AdminException>()),
+    );
+    await api.botSaveReply(
+      category: 'technical',
+      title: 'Dark mode',
+      keywords: const ['night'],
+      answer: 'Follows your phone.',
+      active: true,
+    );
+    final added = (await api.botOverview()).replies.firstWhere((r) => r.title == 'Dark mode');
+    await api.botSaveReply(
+      id: added.id,
+      category: 'technical',
+      title: 'Dark mode',
+      keywords: const ['night'],
+      answer: 'Follows your phone.',
+      active: false,
+    );
+    expect((await api.botOverview()).replies.firstWhere((r) => r.id == added.id).active, isFalse);
+    await api.botDeleteReply(added.id);
+    expect((await api.botOverview()).replies.where((r) => r.id == added.id), isEmpty);
+    expect((await api.botConversations()).single.messages, isNotEmpty);
+  });
+
+  test('serious reports rank first', () {
+    expect(reportPriority('underage'), 'urgent');
+    expect(reportPriority('threats'), 'urgent');
+    expect(reportPriority('harassment'), 'high');
+    expect(reportPriority('other'), 'normal');
   });
 }

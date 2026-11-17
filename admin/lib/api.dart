@@ -61,12 +61,34 @@ abstract class AdminApi {
   Future<List<AuditRow>> auditLog({int offset = 0});
   Future<List<StaffRow>> staff();
 
-  // Support tickets
-  Future<List<TicketRow>> tickets({String status = 'open'});
-  Future<List<TicketMsg>> ticketThread(String ticketId);
-  Future<void> replyTicket(String ticketId, String body);
-  Future<void> setTicketStatus(String ticketId, String status, {String? note});
   Future<void> setStaff(String email, String? role);
+
+  // Support tickets
+  Future<Map<String, int>> ticketCounts();
+  Future<List<TicketRow>> tickets({String? status, String? category, String? priority, String? query, String? assignedTo});
+  Future<TicketDetail> ticketDetail(String ticketId);
+  Future<void> replyTicket(String ticketId, String body);
+  Future<void> addTicketNote(String ticketId, String body);
+  Future<void> setTicketStatus(String ticketId, String status, {String? note});
+  Future<void> setTicketPriority(String ticketId, String priority);
+  Future<void> assignTicket(String ticketId, String? staffUserId);
+  Future<void> escalateTicket(String ticketId, String note);
+  Future<List<StaffPerson>> staffPeople();
+
+  // Auto-reply management (admins)
+  Future<BotOverview> botOverview();
+  Future<void> botSaveSettings(BotSettings s);
+  Future<void> botSaveReply({
+    String? id,
+    required String category,
+    required String title,
+    required List<String> keywords,
+    required String answer,
+    required bool active,
+    int sort = 0,
+  });
+  Future<void> botDeleteReply(String id);
+  Future<List<BotConversationRow>> botConversations();
 
   // Messaging → Notifications (admins only)
   Future<PushSendResult> sendPush({required String title, required String body, required String audience, String? phone});
@@ -285,24 +307,111 @@ class SupabaseAdminApi extends AdminApi {
   });
 
   @override
-  Future<List<TicketRow>> tickets({String status = 'open'}) => _guard(() async {
-    final rows = _rows(await _db.rpc('mod_list_tickets_v2', params: {'p_status': status}));
-    return [for (final r in rows) TicketRow.fromJson(r)];
+  Future<Map<String, int>> ticketCounts() => _guard(() async {
+    final m = (await _db.rpc('mod_ticket_counts') as Map).cast<String, dynamic>();
+    return {for (final e in m.entries) e.key: (e.value as num).toInt()};
   });
 
   @override
-  Future<List<TicketMsg>> ticketThread(String ticketId) => _guard(() async {
-    final rows = _rows(await _db.rpc('mod_ticket_thread', params: {'p_ticket': ticketId}));
-    return [for (final r in rows) TicketMsg.fromJson(r)];
-  });
+  Future<List<TicketRow>> tickets({String? status, String? category, String? priority, String? query, String? assignedTo}) =>
+      _guard(() async {
+        final rows = _rows(
+          await _db.rpc(
+            'mod_list_tickets_v3',
+            params: {'p_status': status, 'p_category': category, 'p_priority': priority, 'p_q': query, 'p_assigned': assignedTo},
+          ),
+        );
+        return [for (final r in rows) TicketRow.fromJson(r)];
+      });
+
+  @override
+  Future<TicketDetail> ticketDetail(String ticketId) => _guard(
+    () async => TicketDetail((await _db.rpc('mod_ticket_detail', params: {'p_ticket': ticketId}) as Map).cast<String, dynamic>()),
+  );
 
   @override
   Future<void> replyTicket(String ticketId, String body) =>
       _guard(() => _db.rpc('mod_reply_ticket', params: {'p_ticket': ticketId, 'p_body': body}));
 
   @override
+  Future<void> addTicketNote(String ticketId, String body) =>
+      _guard(() => _db.rpc('mod_add_ticket_note', params: {'p_ticket': ticketId, 'p_body': body}));
+
+  @override
   Future<void> setTicketStatus(String ticketId, String status, {String? note}) =>
-      _guard(() => _db.rpc('mod_set_ticket_status', params: {'p_ticket': ticketId, 'p_status': status, 'p_note': note}));
+      _guard(() => _db.rpc('mod_set_ticket_status_v2', params: {'p_ticket': ticketId, 'p_status': status, 'p_note': note}));
+
+  @override
+  Future<void> setTicketPriority(String ticketId, String priority) =>
+      _guard(() => _db.rpc('mod_set_ticket_priority', params: {'p_ticket': ticketId, 'p_priority': priority}));
+
+  @override
+  Future<void> assignTicket(String ticketId, String? staffUserId) =>
+      _guard(() => _db.rpc('mod_assign_ticket', params: {'p_ticket': ticketId, 'p_admin': staffUserId}));
+
+  @override
+  Future<void> escalateTicket(String ticketId, String note) =>
+      _guard(() => _db.rpc('mod_escalate_ticket', params: {'p_ticket': ticketId, 'p_note': note}));
+
+  @override
+  Future<List<StaffPerson>> staffPeople() =>
+      _guard(() async => [for (final r in _rows(await _db.rpc('mod_list_staff'))) StaffPerson.fromJson(r)]);
+
+  @override
+  Future<BotOverview> botOverview() => _guard(() async {
+    final m = (await _db.rpc('admin_bot_overview') as Map).cast<String, dynamic>();
+    return BotOverview(
+      settings: BotSettings.fromJson((m['settings'] as Map).cast<String, dynamic>()),
+      replies: [for (final r in (m['replies'] as List)) BotReply.fromJson((r as Map).cast<String, dynamic>())],
+      conversations: (m['conversations'] as num).toInt(),
+    );
+  });
+
+  @override
+  Future<void> botSaveSettings(BotSettings s) => _guard(
+    () => _db.rpc(
+      'admin_bot_set_settings',
+      params: {
+        'p_enabled': s.enabled,
+        'p_welcome': s.welcome,
+        'p_fallback': s.fallback,
+        'p_resolved_prompt': s.resolvedPrompt,
+        'p_ticket_prompt': s.ticketPrompt,
+        'p_quick_replies': s.quickReplies,
+      },
+    ),
+  );
+
+  @override
+  Future<void> botSaveReply({
+    String? id,
+    required String category,
+    required String title,
+    required List<String> keywords,
+    required String answer,
+    required bool active,
+    int sort = 0,
+  }) => _guard(
+    () => _db.rpc(
+      'admin_bot_upsert_reply',
+      params: {
+        'p_id': id,
+        'p_category': category,
+        'p_title': title,
+        'p_keywords': keywords,
+        'p_answer': answer,
+        'p_active': active,
+        'p_sort': sort,
+      },
+    ),
+  );
+
+  @override
+  Future<void> botDeleteReply(String id) => _guard(() => _db.rpc('admin_bot_delete_reply', params: {'p_id': id}));
+
+  @override
+  Future<List<BotConversationRow>> botConversations() =>
+      _guard(() async => [for (final r in _rows(await _db.rpc('admin_bot_conversations'))) BotConversationRow.fromJson(r)]);
 
   @override
   Future<List<StaffRow>> staff() =>

@@ -14,6 +14,7 @@ import '../core/sanitizer.dart';
 import '../models/access.dart';
 import '../models/follow_request.dart';
 import '../models/message.dart';
+import '../features/help/faq_content.dart';
 import '../models/scheduled_message.dart';
 import '../models/presence.dart';
 import '../models/moderation.dart';
@@ -1210,6 +1211,8 @@ class DemoBackend implements FinderBackend {
     required String subject,
     required String description,
     Uint8List? screenshotWebp,
+    TicketPriority priority = TicketPriority.normal,
+    String? botConversationId,
   }) async {
     await _latency();
     final problem = validateTicket(subject: subject, description: description);
@@ -1234,8 +1237,10 @@ class DemoBackend implements FinderBackend {
       createdAt: now,
       updatedAt: now,
       email: await supportEmail(),
-      hasAttachment: screenshotWebp != null,
+      hasAttachment: false,
       userId: meId,
+      priority: category == SupportCategory.safety && priority.index < TicketPriority.high.index ? TicketPriority.high : priority,
+      botConversationId: botConversationId,
     );
     _tickets.insert(0, t);
     _persist();
@@ -1244,6 +1249,102 @@ class DemoBackend implements FinderBackend {
 
   @override
   Future<List<SupportTicket>> myTickets() async => List.unmodifiable(_tickets);
+
+  // ---- Help chatbot (demo: built from the bundled FAQ list; the live app reads admin-managed answers) ----
+  BotConversation? _botLast;
+
+  static SupportCategory _faqCat(SupportCategory c) => c;
+
+  List<FaqEntry> get _allFaqs => [
+    for (final cat in faqCategories)
+      for (final (i, f) in cat.items.indexed)
+        FaqEntry(id: '${cat.support.wire}-$i', category: _faqCat(cat.support), title: f.question, answer: f.answer),
+  ];
+
+  @override
+  Future<BotConfig> supportBotConfig() async => BotConfig(
+    enabled: true,
+    welcome: 'Hi! Welcome to Vouby Support. How can we help you today?',
+    fallback: 'Sorry, I didn’t quite get that. Could you rephrase it, or raise a support ticket and our team will help?',
+    resolvedPrompt: 'Did that solve your issue?',
+    ticketPrompt: 'I’m sorry that didn’t help. You can raise a support ticket and our team will look into it.',
+    quickReplies: [for (final c in SupportCategoryX.helpTopics) c.label],
+  );
+
+  @override
+  Future<List<FaqEntry>> supportFaqs({SupportCategory? category, String? query}) async {
+    final q = (query ?? '').trim().toLowerCase();
+    return [
+      for (final f in _allFaqs)
+        if ((category == null || f.category == category) &&
+            (q.isEmpty || f.title.toLowerCase().contains(q) || f.answer.toLowerCase().contains(q)))
+          f,
+    ];
+  }
+
+  @override
+  Future<BotAnswer?> supportBotAnswer(String text, {SupportCategory? category}) async {
+    await _latency();
+    final words = text.toLowerCase().split(RegExp(r'[^a-z0-9]+')).where((w) => w.length >= 4).toSet();
+    if (words.isEmpty) return null;
+    final scored = [
+      for (final f in _allFaqs)
+        (
+          f,
+          words.where((w) => f.title.toLowerCase().contains(w)).length * 3 +
+              words.where((w) => f.answer.toLowerCase().contains(w)).length,
+        ),
+    ]..sort((a, b) => b.$2.compareTo(a.$2));
+    if (scored.first.$2 < 3) return null;
+    return BotAnswer(
+      entry: scored.first.$1,
+      related: [
+        for (final r in scored.skip(1).take(3))
+          if (r.$2 > 0) (id: r.$1.id, title: r.$1.title),
+      ],
+    );
+  }
+
+  @override
+  Future<String> saveBotConversation(String? sessionId, List<Map<String, dynamic>> messages) async {
+    final id = sessionId ?? _uuid.v4();
+    _botLast = BotConversation(id: id, messages: messages);
+    return id;
+  }
+
+  @override
+  Future<BotConversation?> lastBotConversation() async => _botLast;
+
+  @override
+  Future<void> reopenTicket(String ticketId) async {
+    final i = _tickets.indexWhere((t) => t.id == ticketId);
+    if (i < 0 || !_tickets[i].canReopen) {
+      throw const AppException(AppErrorCode.invalidInput, 'This ticket can’t be reopened. Please raise a new one.');
+    }
+    _tickets[i] = _tickets[i].copyWith(status: TicketStatus.open, updatedAt: DateTime.now());
+  }
+
+  @override
+  Future<void> rateTicket(String ticketId, int rating, {String? comment}) async {
+    final i = _tickets.indexWhere((t) => t.id == ticketId);
+    if (i < 0 || !_tickets[i].canRate) {
+      throw const AppException(AppErrorCode.invalidInput, 'You can rate once the ticket is resolved.');
+    }
+    _tickets[i] = _tickets[i].copyWith(rating: rating);
+  }
+
+  @override
+  Future<List<TicketEvent>> ticketEvents(String ticketId) async {
+    final t = _tickets.where((x) => x.id == ticketId).firstOrNull;
+    return t == null ? const [] : [TicketEvent(status: TicketStatus.newTicket, at: t.createdAt)];
+  }
+
+  /// Test only: the team moves a ticket to another status.
+  @visibleForTesting
+  void setTicketStatusForTest(String ticketId, TicketStatus status) {
+    final i = _tickets.indexWhere((t) => t.id == ticketId);
+    if (i >= 0) _tickets[i] = _tickets[i].copyWith(status: status, updatedAt: DateTime.now());
+  }
 
   final _ticketMessages = <String, List<TicketMessage>>{};
 
