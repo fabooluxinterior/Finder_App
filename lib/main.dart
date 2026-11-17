@@ -25,7 +25,11 @@ Future<void> main() async {
     await demo.restore(); // stay signed in across restarts
     runApp(
       ProviderScope(
-        overrides: [backendProvider.overrideWithValue(demo), purchasesProvider.overrideWithValue(DemoPurchases(demo))],
+        overrides: [
+          backendProvider.overrideWithValue(demo),
+          purchasesProvider.overrideWithValue(DemoPurchases(demo)),
+          secureKvProvider.overrideWithValue(PlatformSecureKv()),
+        ],
         child: const FinderApp(),
       ),
     );
@@ -58,6 +62,7 @@ Future<void> main() async {
     ProviderScope(
       overrides: [
         backendProvider.overrideWithValue(backend),
+        secureKvProvider.overrideWithValue(kv),
         pushServiceProvider.overrideWithValue(push),
         localNotifierProvider.overrideWithValue(local),
         // Real Google Play billing once the build has a RevenueCat key; until then the

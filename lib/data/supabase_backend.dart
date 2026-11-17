@@ -975,6 +975,25 @@ class SupabaseBackend implements FinderBackend {
   // ---------------------------------------------------------------- chat ----
 
   @override
+  Future<Disappearing> disappearing(String peerId) => _guard(() async {
+    final rows = (await _db.rpc('get_disappearing', params: {'p_peer': peerId}) as List).cast<Map<String, dynamic>>();
+    if (rows.isEmpty) return Disappearing.off;
+    final r = rows.first;
+    return Disappearing(
+      seconds: (r['seconds'] as num).toInt(),
+      setBy: r['set_by'] as String?,
+      setAt: DateTime.parse(r['set_at'] as String).toLocal(),
+    );
+  });
+
+  @override
+  Future<void> setDisappearing(String peerId, int seconds) =>
+      _guard(() => _db.rpc('set_disappearing', params: {'p_peer': peerId, 'p_seconds': seconds}));
+
+  @override
+  Future<void> purgeExpired(String peerId) => _guard(() => _db.rpc('purge_expired_messages', params: {'p_peer': peerId}));
+
+  @override
   Stream<List<ChatMessage>> watchMessages(String peerId) {
     final ctl = _threads.putIfAbsent(peerId, () => StreamController<List<ChatMessage>>.broadcast());
     return Stream.multi((listener) {

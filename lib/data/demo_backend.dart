@@ -1268,6 +1268,31 @@ class DemoBackend implements FinderBackend {
 
   // ---------------------------------------------------------------- chat ----
 
+  final _disappearing = <String, Disappearing>{};
+
+  @override
+  Future<Disappearing> disappearing(String peerId) async => _disappearing[peerId] ?? Disappearing.off;
+
+  @override
+  Future<void> setDisappearing(String peerId, int seconds) async {
+    if (seconds != 0 && !Disappearing.choices.contains(seconds)) {
+      throw const AppException(AppErrorCode.invalidInput, 'Invalid duration');
+    }
+    _disappearing[peerId] = seconds == 0 ? Disappearing.off : Disappearing(seconds: seconds, setBy: meId, setAt: DateTime.now());
+  }
+
+  @override
+  Future<void> purgeExpired(String peerId) async {
+    final d = _disappearing[peerId];
+    if (d == null || !d.on) return;
+    final list = _threads[peerId];
+    if (list == null) return;
+    final now = DateTime.now();
+    final before = list.length;
+    list.removeWhere((m) => d.expired(m, now));
+    if (list.length != before) _threadCtl[peerId]?.add(List.unmodifiable(list));
+  }
+
   @override
   Stream<List<ChatMessage>> watchMessages(String peerId) {
     final ctl = _threadCtl.putIfAbsent(peerId, () => StreamController.broadcast());

@@ -180,6 +180,38 @@ void main() {
     expect(find.byType(ChatScreen), findsOneWidget);
   });
 
+  testWidgets('Chat: emoji button on the left of the bar, photo button on the right, menu has Disappearing messages', (t) async {
+    await t.binding.setSurfaceSize(const Size(400, 900));
+    addTearDown(() => t.binding.setSurfaceSize(null));
+    final (b, all) = (await t.runAsync(_world))!;
+    final peer = all.firstWhere((c) => c.hasChat).profile;
+    await t.pumpWidget(_app(b, ChatScreen(peer: peer)));
+    await _settle(t, 800);
+    final emoji = find.byTooltip('Emoji');
+    final photo = find.byTooltip('Send a photo');
+    expect(emoji, findsOneWidget);
+    expect(photo, findsOneWidget);
+    expect(t.getCenter(emoji).dx, lessThan(t.getCenter(find.byType(TextField)).dx), reason: 'emoji on the left of the bar');
+    expect(t.getCenter(photo).dx, greaterThan(t.getCenter(find.byType(TextField)).dx), reason: 'photo icon on the right');
+    await t.tap(emoji);
+    await _settle(t);
+    await t.tap(find.text('😂'));
+    await t.pump();
+    expect(t.widget<TextField>(find.byType(TextField)).controller!.text, '😂');
+    await t.tap(find.byTooltip('Show menu'));
+    await _settle(t);
+    expect(find.text('Disappearing messages'), findsOneWidget);
+    expect(find.text('Scheduled messages'), findsNothing, reason: 'only shown when something is scheduled');
+    await t.tap(find.text('Disappearing messages'));
+    await _settle(t);
+    expect(find.text('24 hours'), findsOneWidget);
+    expect(find.text('7 days'), findsOneWidget);
+    expect(find.text('1 month'), findsOneWidget);
+    await t.tap(find.text('7 days'));
+    await _settle(t, 800);
+    expect(find.textContaining('Messages disappear after 7 days'), findsWidgets);
+  });
+
   testWidgets('Chat: edit a sent message ("edited" tag) and delete it for everyone ("Message deleted")', (t) async {
     await t.binding.setSurfaceSize(const Size(400, 900));
     addTearDown(() => t.binding.setSurfaceSize(null));

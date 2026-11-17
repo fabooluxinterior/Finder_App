@@ -161,6 +161,13 @@ abstract class FinderBackend {
 
   Stream<List<ChatMessage>> watchMessages(String peerId);
   Future<void> sendText(String peerId, String text);
+
+  /// Disappearing messages for this chat (24 hours, 7 days, 1 month, or off).
+  Future<Disappearing> disappearing(String peerId);
+  Future<void> setDisappearing(String peerId, int seconds);
+
+  /// Removes this chat's expired messages from the server.
+  Future<void> purgeExpired(String peerId);
   Future<void> sendVoice(String peerId, Uint8List aacBytes, {String? localPath, Duration duration});
   Future<void> markThreadRead(String peerId);
   Future<VoicePlayback> voicePlayback(ChatMessage message);

@@ -12,11 +12,16 @@ import 'models/message.dart';
 import 'models/presence.dart';
 import 'models/profile.dart';
 import 'models/profile_update.dart';
+import 'security/secure_kv.dart';
 
 /// Overridden in main() with the Supabase or demo implementation.
 final backendProvider = Provider<FinderBackend>((ref) => throw UnimplementedError());
 final purchasesProvider = Provider<PurchasesService>((ref) => throw UnimplementedError());
 final mediaProvider = Provider<MediaService>((ref) => MediaService());
+
+/// The phone's encrypted key-value storage. Overridden in main(); screens that don't need it never read it.
+// ignore: invalid_use_of_visible_for_testing_member
+final secureKvProvider = Provider<SecureKv>((ref) => MemorySecureKv());
 
 final authUserProvider = StreamProvider<String?>((ref) => ref.watch(backendProvider).authChanges());
 

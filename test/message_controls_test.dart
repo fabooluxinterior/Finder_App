@@ -107,4 +107,38 @@ void main() {
     Fx.instance.received();
     Fx.instance.received();
   });
+
+  group('disappearing messages', () {
+    ChatMessage msg(DateTime at) => ChatMessage(
+      id: '${at.millisecondsSinceEpoch}',
+      senderId: 'a',
+      receiverId: 'b',
+      content: 'hi',
+      isRead: true,
+      createdAt: at,
+    );
+
+    test('only messages sent after turning it on can expire, and only after the chosen time', () {
+      final now = DateTime(2026, 11, 17, 12);
+      final d = Disappearing(seconds: 86400, setBy: 'a', setAt: now.subtract(const Duration(days: 3)));
+      expect(d.expired(msg(now.subtract(const Duration(days: 10))), now), isFalse, reason: 'sent before it was turned on');
+      expect(d.expired(msg(now.subtract(const Duration(days: 2))), now), isTrue);
+      expect(d.expired(msg(now.subtract(const Duration(hours: 23))), now), isFalse);
+      expect(Disappearing.off.expired(msg(now.subtract(const Duration(days: 99))), now), isFalse);
+      expect([for (final s in Disappearing.choices) Disappearing.label(s)], ['24 hours', '7 days', '1 month']);
+    });
+
+    test('demo: either choice is stored, invalid ones are refused, and turning off keeps everything', () async {
+      final (b, peer) = await _chat();
+      expect((await b.disappearing(peer)).on, isFalse);
+      await expectLater(b.setDisappearing(peer, 3600), throwsA(isA<AppException>()));
+      await b.setDisappearing(peer, 604800);
+      expect((await b.disappearing(peer)).seconds, 604800);
+      await b.sendText(peer, 'hello');
+      await b.purgeExpired(peer);
+      expect((await b.watchMessages(peer).first).any((m) => m.content == 'hello'), isTrue, reason: 'not expired yet');
+      await b.setDisappearing(peer, 0);
+      expect((await b.disappearing(peer)).on, isFalse);
+    });
+  });
 }

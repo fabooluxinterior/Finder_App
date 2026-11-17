@@ -31,6 +31,11 @@ import '../profile/profile_detail_screen.dart';
 import '../safety/safety_actions.dart';
 import '../security/safety_number_screen.dart';
 import 'emoji_panel.dart';
+import 'media_editor_screen.dart';
+import 'schedule_picker.dart';
+import 'scheduled_provider.dart';
+import '../../models/scheduled_message.dart';
+import '../../data/memory_images.dart';
 import 'voice_bubble.dart';
 import 'voice_recorder_bar.dart';
 import 'words.dart';
@@ -45,6 +50,91 @@ class ChatScreen extends ConsumerStatefulWidget {
 
 class _ChatScreenState extends ConsumerState<ChatScreen> {
   bool _emojiOpen = false;
+
+  // ------------------------------------------------ disappearing messages ----
+  Disappearing _dis = Disappearing.off;
+  Timer? _disTimer;
+
+  Future<void> _refreshDisappearing() async {
+    try {
+      final d = await _backend.disappearing(widget.peer.id);
+      if (!mounted) return;
+      final me = _backend.currentUserId;
+      if (d != _dis && d.setBy != null && d.setBy != me) {
+        showSnack(
+          context,
+          d.on
+              ? '${widget.peer.firstName} set messages to disappear after ${Disappearing.label(d.seconds)}.'
+              : '${widget.peer.firstName} turned off disappearing messages.',
+          icon: Icons.timer_outlined,
+        );
+      }
+      if (d.on) await _backend.purgeExpired(widget.peer.id);
+      if (mounted) setState(() => _dis = d);
+    } catch (_) {
+      if (mounted) setState(() {}); // still hide anything that has expired
+    }
+  }
+
+  List<ChatMessage> _visible(List<ChatMessage> l) {
+    if (!_dis.on) return l;
+    final now = DateTime.now();
+    return [
+      for (final m in l)
+        if (!_dis.expired(m, now)) m,
+    ];
+  }
+
+  Future<void> _chooseDisappearing() async {
+    final c = context.fc;
+    final picked = await showModalBottomSheet<int>(
+      context: context,
+      backgroundColor: c.surface,
+      showDragHandle: true,
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Disappearing messages',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600, color: c.ink),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                'New messages in this chat disappear for both of you after the time you choose. Messages sent before you turn it on stay.',
+                style: TextStyle(fontSize: 14.5, height: 1.4, color: c.ink3),
+              ),
+              const SizedBox(height: 8),
+              for (final s in [86400, 604800, 2592000, 0])
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: Text(Disappearing.label(s)),
+                  trailing: _dis.seconds == s ? Icon(PhosphorIconsFill.checkCircle, color: c.accent) : null,
+                  onTap: () => Navigator.pop(ctx, s),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+    if (picked == null || picked == _dis.seconds || !mounted) return;
+    try {
+      await _backend.setDisappearing(widget.peer.id, picked);
+      await _refreshDisappearing();
+      if (mounted) {
+        showSnack(
+          context,
+          picked == 0 ? 'Disappearing messages are off.' : 'Messages will disappear after ${Disappearing.label(picked)}.',
+          icon: Icons.timer_outlined,
+        );
+      }
+    } catch (e) {
+      await _handleError(e);
+    }
+  }
 
   final _text = TextEditingController();
   final _scroll = ScrollController();
@@ -78,6 +168,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     });
     _refreshPresence();
     _presenceTimer = Timer.periodic(const Duration(seconds: 30), (_) => _refreshPresence());
+    _refreshDisappearing();
+    _disTimer = Timer.periodic(const Duration(seconds: 20), (_) => _refreshDisappearing());
   }
 
   Future<void> _refreshPresence() async {
@@ -154,7 +246,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     _heartbeat?.cancel();
     _typingIdle?.cancel();
     _presenceTimer?.cancel();
-    if (_mine != PeerState.idle && _sharing) _backend.sendPeerState(id, PeerState.idle);
+    _disTimer?.cancel();
+    // _mine only leaves idle while sharing is on (see _setMine), so no provider read is needed here.
+    if (_mine != PeerState.idle) _backend.sendPeerState(id, PeerState.idle);
     _text.removeListener(_onTextChanged);
     _text.dispose();
     _scroll.dispose();
@@ -175,6 +269,168 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     }
     showSnack(context, '$e', icon: PhosphorIconsFill.warningCircle);
     return false;
+  }
+
+  // ------------------------------------------------------ scheduled messages ----
+  final _pendingImageKeys = <String, String>{};
+
+  List<ChatMessage> _pendingMessages() {
+    final me = _backend.currentUserId ?? '';
+    return [
+      for (final m
+          in ref.watch(scheduledProvider).where((x) => x.peerId == widget.peer.id).toList()
+            ..sort((a, b) => a.sendAt.compareTo(b.sendAt)))
+        ChatMessage(
+          id: 'sched:${m.id}',
+          senderId: me,
+          receiverId: widget.peer.id,
+          content: m.hasImage ? null : m.text,
+          localImageUrl: m.hasImage ? _pendingImageKey(m) : null,
+          isRead: false,
+          createdAt: m.sendAt,
+          scheduledFor: m.sendAt,
+        ),
+    ];
+  }
+
+  String? _pendingImageKey(ScheduledMessage m) {
+    final known = _pendingImageKeys[m.id];
+    if (known != null) return known;
+    ref.read(scheduledProvider.notifier).imageOf(m.id).then((bytes) {
+      if (bytes != null && mounted && !_pendingImageKeys.containsKey(m.id)) {
+        setState(() => _pendingImageKeys[m.id] = MemoryImages.put(bytes));
+      }
+    });
+    return null;
+  }
+
+  Future<void> _scheduleText(List<ChatMessage> thread) async {
+    final me = _backend.currentUserId;
+    var text = _text.text.trim();
+    if (text.isEmpty || _editing != null) return;
+    if (!isPremium(ref)) {
+      await showPaywall(context, reason: PaywallReason.messaging);
+      return;
+    }
+    final sentByMe = thread.where((m) => m.senderId == me).length;
+    if (sentByMe < AppConfig.sanitizedOpeningMessages && ContactSanitizer.containsContactInfo(text)) {
+      text = ContactSanitizer.sanitize(text);
+      showSnack(context, 'Contact details were removed. Get to know each other first.', icon: PhosphorIconsFill.shieldCheck);
+      if (text.replaceAll('•', '').trim().isEmpty) return;
+    }
+    final at = await pickSendTime(context);
+    if (at == null || !mounted) return;
+    await ref.read(scheduledProvider.notifier).scheduleText(widget.peer.id, text, at);
+    _text.clear();
+    Fx.instance.tap();
+    if (mounted) showSnack(context, 'Scheduled for ${DateFormat('d MMM, h:mm a').format(at)}.', icon: Icons.schedule);
+    _scrollToLatest();
+  }
+
+  Future<void> _scheduledActions(String id) async {
+    final c = context.fc;
+    final m = ref.read(scheduledProvider).where((x) => x.id == id).firstOrNull;
+    if (m == null) return;
+    final what = await showModalBottomSheet<String>(
+      context: context,
+      backgroundColor: c.surface,
+      showDragHandle: true,
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.schedule),
+              title: Text('Scheduled for ${DateFormat('d MMM, h:mm a').format(m.sendAt)}'),
+              subtitle: m.error == null ? null : Text(m.error!, style: TextStyle(color: c.accent)),
+            ),
+            ListTile(
+              leading: const Icon(Icons.edit_calendar_outlined),
+              title: const Text('Reschedule'),
+              onTap: () => Navigator.pop(ctx, 'move'),
+            ),
+            ListTile(
+              leading: const Icon(Icons.delete_outline),
+              title: const Text('Delete'),
+              onTap: () => Navigator.pop(ctx, 'delete'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (!mounted || what == null) return;
+    final notifier = ref.read(scheduledProvider.notifier);
+    if (what == 'delete') {
+      await notifier.remove(id);
+    } else {
+      final at = await pickSendTime(context, initial: m.sendAt);
+      if (at != null) await notifier.reschedule(id, at);
+    }
+  }
+
+  Future<void> _scheduledList() async {
+    final c = context.fc;
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: c.surface,
+      showDragHandle: true,
+      builder: (ctx) => Consumer(
+        builder: (ctx, ref, _) {
+          final items = ref.watch(scheduledProvider.select((l) => l.where((x) => x.peerId == widget.peer.id).toList()))
+            ..sort((a, b) => a.sendAt.compareTo(b.sendAt));
+          return SafeArea(
+            child: ConstrainedBox(
+              constraints: BoxConstraints(maxHeight: MediaQuery.sizeOf(ctx).height * 0.7),
+              child: ListView(
+                shrinkWrap: true,
+                padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
+                children: [
+                  Text(
+                    'Scheduled messages',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600, color: c.ink),
+                  ),
+                  const SizedBox(height: 8),
+                  if (items.isEmpty)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      child: Text('Nothing scheduled.', style: TextStyle(color: c.muted)),
+                    ),
+                  for (final m in items)
+                    ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      leading: Icon(m.hasImage ? PhosphorIconsRegular.image : Icons.schedule, color: c.ink2),
+                      title: Text(m.hasImage ? 'Photo' : (m.text ?? ''), maxLines: 2, overflow: TextOverflow.ellipsis),
+                      subtitle: Text(
+                        m.error ?? DateFormat('EEE d MMM, h:mm a').format(m.sendAt),
+                        style: TextStyle(color: m.error == null ? c.muted : c.accent),
+                      ),
+                      trailing: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          IconButton(
+                            tooltip: 'Reschedule',
+                            icon: const Icon(Icons.edit_calendar_outlined),
+                            onPressed: () async {
+                              final at = await pickSendTime(ctx, initial: m.sendAt);
+                              if (at != null) await ref.read(scheduledProvider.notifier).reschedule(m.id, at);
+                            },
+                          ),
+                          IconButton(
+                            tooltip: 'Delete',
+                            icon: const Icon(Icons.delete_outline),
+                            onPressed: () => ref.read(scheduledProvider.notifier).remove(m.id),
+                          ),
+                        ],
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
   }
 
   void _insertEmoji(String e) {
@@ -314,13 +570,26 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     }
     try {
       final raw = await ref.read(mediaProvider).pickOriginalPhoto();
-      if (raw == null) return;
+      if (raw == null || !mounted) return;
+      // Preview first: draw, add text or crop, then send once (hold the send button to send later).
+      final edited = await Navigator.push<EditedMedia>(
+        context,
+        MaterialPageRoute(fullscreenDialog: true, builder: (_) => MediaEditorScreen(bytes: raw)),
+      );
+      if (edited == null || !mounted) return;
       setState(() => _sending = true);
-      _setMine(PeerState.photo);
       // Any image type: resized and compressed on the device, then encrypted.
-      final img = await ImageOptimizer.optimizeForChat(raw);
-      await ref.read(backendProvider).sendImage(widget.peer.id, img.bytes, width: img.width, height: img.height);
-      Fx.instance.sent();
+      final img = await ImageOptimizer.optimizeForChat(edited.bytes);
+      final at = edited.sendAt;
+      if (at != null) {
+        await ref.read(scheduledProvider.notifier).schedulePhoto(widget.peer.id, img.bytes, img.width, img.height, at);
+        Fx.instance.tap();
+        if (mounted) showSnack(context, 'Scheduled for ${DateFormat('d MMM, h:mm a').format(at)}.', icon: Icons.schedule);
+      } else {
+        _setMine(PeerState.photo);
+        await ref.read(backendProvider).sendImage(widget.peer.id, img.bytes, width: img.width, height: img.height);
+        Fx.instance.sent();
+      }
       _scrollToLatest();
     } catch (e) {
       await _handleError(e);
@@ -447,7 +716,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     final c = context.fc;
     final backend = ref.watch(backendProvider);
     final me = backend.currentUserId;
-    final messages = ref.watch(messagesProvider(widget.peer.id));
+    final visibleMessages = ref.watch(messagesProvider(widget.peer.id)).whenData(_visible);
+    final messages = visibleMessages.whenData((l) => [...l, ..._pendingMessages()]);
     final theirState = ref.watch(peerStateProvider(widget.peer.id)).value ?? PeerState.idle;
 
     ref.listen(messagesProvider(widget.peer.id), (prev, next) {
@@ -458,7 +728,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       if (before.length < list.length) WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToLatest());
     });
 
-    final thread = messages.value ?? const <ChatMessage>[];
+    final thread = visibleMessages.value ?? const <ChatMessage>[];
     if (_initialIds == null && messages.hasValue) _initialIds = thread.map((m) => m.id).toSet();
     // ref.listen only fires on changes, so messages that were already waiting are marked read here.
     if (messages.hasValue) WidgetsBinding.instance.addPostFrameCallback((_) => mounted ? _markReadIfNeeded(thread, me) : null);
@@ -553,6 +823,10 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
                   onSelected: (v) async {
                     switch (v) {
+                      case 'scheduled':
+                        _scheduledList();
+                      case 'disappearing':
+                        _chooseDisappearing();
                       case 'verify':
                         Navigator.push(context, MaterialPageRoute(builder: (_) => SafetyNumberScreen(peer: widget.peer)));
                       case 'report':
@@ -566,6 +840,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                     }
                   },
                   itemBuilder: (_) => [
+                    if (ref.read(scheduledProvider).any((x) => x.peerId == widget.peer.id))
+                      _menuItem('scheduled', Icons.schedule, 'Scheduled messages'),
+                    _menuItem('disappearing', Icons.timer_outlined, 'Disappearing messages'),
                     if (backend.isEndToEndEncrypted) _menuItem('verify', PhosphorIconsRegular.shieldCheck, 'Verify encryption'),
                     _menuItem('report', PhosphorIconsRegular.flag, 'Report'),
                     _menuItem('block', PhosphorIconsRegular.prohibit, 'Block'),
@@ -616,8 +893,14 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                         final picked = _selected.contains(m.id);
                         final bubble = GestureDetector(
                           behavior: HitTestBehavior.translucent,
-                          onLongPress: () => _selected.isEmpty ? _messageActions(m, mine) : _toggle(m),
-                          onTap: _selected.isEmpty ? null : () => _toggle(m),
+                          onLongPress: m.scheduledFor != null
+                              ? () => _scheduledActions(m.id.substring(6))
+                              : () => _selected.isEmpty ? _messageActions(m, mine) : _toggle(m),
+                          onTap: m.scheduledFor != null
+                              ? () => _scheduledActions(m.id.substring(6))
+                              : _selected.isEmpty
+                              ? null
+                              : () => _toggle(m),
                           child: AnimatedContainer(
                             duration: Motion.of(context, Motion.fast),
                             decoration: BoxDecoration(
@@ -639,6 +922,27 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                     ),
             ),
           ),
+          if (_dis.on)
+            GestureDetector(
+              onTap: _chooseDisappearing,
+              child: Padding(
+                padding: const EdgeInsets.only(bottom: 6),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.timer_outlined, size: 14, color: c.muted),
+                    const SizedBox(width: 6),
+                    Flexible(
+                      child: Text(
+                        'Messages disappear after ${Disappearing.label(_dis.seconds)}',
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(fontSize: 12.5, color: c.muted),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
           PeerStateLine(state: theirState),
           SafeArea(
             top: false,
@@ -701,6 +1005,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                           onPhoto: _sendPhoto,
                           emojiOpen: _emojiOpen,
                           onEmoji: _toggleEmoji,
+                          onSchedule: () => _scheduleText(thread),
                           onFieldTap: () {
                             if (_emojiOpen) setState(() => _emojiOpen = false);
                           },
@@ -721,7 +1026,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       children: [
         Icon(icon, size: 18, color: context.fc.ink2),
         const SizedBox(width: 10),
-        Text(label),
+        Flexible(child: Text(label, overflow: TextOverflow.ellipsis)),
       ],
     ),
   );
@@ -756,10 +1061,12 @@ class _Composer extends StatelessWidget {
     required this.onPhoto,
     required this.onEmoji,
     required this.onFieldTap,
+    required this.onSchedule,
     this.emojiOpen = false,
     this.editing = false,
   });
   final VoidCallback onEmoji;
+  final VoidCallback onSchedule;
   final VoidCallback onFieldTap;
   final bool emojiOpen;
   final bool editing;
@@ -828,40 +1135,44 @@ class _Composer extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 8),
-              Pressable(
-                onTap: sending ? null : (hasText ? onSend : onMic),
-                semanticLabel: hasText ? 'Send' : 'Record voice note',
-                child: Container(
-                  width: 52,
-                  height: 52,
-                  decoration: BoxDecoration(color: c.accent, shape: BoxShape.circle),
-                  // Mic ↔ send morph: scale + blur crossfade.
-                  child: AnimatedSwitcher(
-                    duration: Motion.of(context, Motion.fast),
-                    switchInCurve: Motion.easeOut,
-                    switchOutCurve: Motion.easeOut,
-                    transitionBuilder: (child, a) => ScaleTransition(
-                      scale: Tween(begin: 0.6, end: 1.0).animate(a),
-                      child: FadeTransition(
-                        opacity: a,
-                        child: AnimatedBuilder(
-                          animation: a,
-                          builder: (_, child) => ImageFiltered(
-                            imageFilter: ImageFilter.blur(sigmaX: (1 - a.value) * 3, sigmaY: (1 - a.value) * 3),
+              GestureDetector(
+                // Hold the send button to choose when it is sent.
+                onLongPress: sending || !hasText || editing ? null : onSchedule,
+                child: Pressable(
+                  onTap: sending ? null : (hasText ? onSend : onMic),
+                  semanticLabel: hasText ? 'Send' : 'Record voice note',
+                  child: Container(
+                    width: 52,
+                    height: 52,
+                    decoration: BoxDecoration(color: c.accent, shape: BoxShape.circle),
+                    // Mic ↔ send morph: scale + blur crossfade.
+                    child: AnimatedSwitcher(
+                      duration: Motion.of(context, Motion.fast),
+                      switchInCurve: Motion.easeOut,
+                      switchOutCurve: Motion.easeOut,
+                      transitionBuilder: (child, a) => ScaleTransition(
+                        scale: Tween(begin: 0.6, end: 1.0).animate(a),
+                        child: FadeTransition(
+                          opacity: a,
+                          child: AnimatedBuilder(
+                            animation: a,
+                            builder: (_, child) => ImageFiltered(
+                              imageFilter: ImageFilter.blur(sigmaX: (1 - a.value) * 3, sigmaY: (1 - a.value) * 3),
+                              child: child,
+                            ),
                             child: child,
                           ),
-                          child: child,
                         ),
                       ),
+                      child: sending
+                          ? SizedBox(
+                              key: const ValueKey('s'),
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(strokeWidth: 2, color: c.paper),
+                            )
+                          : VIcon(hasText ? VIcons.send : VIcons.voice, key: ValueKey(hasText), size: 22, color: c.paper),
                     ),
-                    child: sending
-                        ? SizedBox(
-                            key: const ValueKey('s'),
-                            width: 18,
-                            height: 18,
-                            child: CircularProgressIndicator(strokeWidth: 2, color: c.paper),
-                          )
-                        : VIcon(hasText ? VIcons.send : VIcons.voice, key: ValueKey(hasText), size: 22, color: c.paper),
                   ),
                 ),
               ),
@@ -967,7 +1278,11 @@ class _Bubble extends StatelessWidget {
                     time,
                     style: TextStyle(fontFamily: 'Geist', color: meta, fontSize: 11),
                   ),
-                  if (mine) ...[
+                  if (message.scheduledFor != null) ...[
+                    // Only on the sender's own screen: waiting to be sent at this time.
+                    const SizedBox(width: 4),
+                    Icon(Icons.schedule, size: 13, color: meta),
+                  ] else if (mine) ...[
                     const SizedBox(width: 3),
                     Icon(message.isRead ? PhosphorIconsBold.checks : PhosphorIconsBold.check, size: 13, color: meta),
                   ],

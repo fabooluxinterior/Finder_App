@@ -82,6 +82,7 @@ class ChatMessage {
     this.localImageUrl,
     this.edited = false,
     this.deleted = false,
+    this.scheduledFor,
   });
 
   /// Server message id (or a client id until confirmed).
@@ -106,6 +107,9 @@ class ChatMessage {
 
   /// The sender deleted it for everyone: nothing of the original is kept.
   final bool deleted;
+
+  /// Only on the sender's own screen: this message is waiting to be sent at this time.
+  final DateTime? scheduledFor;
 
   bool get isVoice => voice != null || localAudioPath != null;
 
@@ -244,4 +248,37 @@ class SecurePayload {
       image: j['image'] == null ? null : ImageRef.fromJson((j['image'] as Map).cast<String, dynamic>()),
     );
   }
+}
+
+/// A chat's "disappearing messages" setting. Only messages sent after [setAt] are affected.
+class Disappearing {
+  const Disappearing({this.seconds = 0, this.setBy, this.setAt});
+  static const off = Disappearing();
+  static const choices = [86400, 604800, 2592000];
+
+  final int seconds;
+  final String? setBy;
+  final DateTime? setAt;
+
+  bool get on => seconds > 0;
+
+  static String label(int seconds) => switch (seconds) {
+    86400 => '24 hours',
+    604800 => '7 days',
+    2592000 => '1 month',
+    _ => 'Off',
+  };
+
+  /// Whether [m] has expired and should no longer be shown.
+  bool expired(ChatMessage m, DateTime now) {
+    final at = setAt;
+    return on && at != null && !m.createdAt.isBefore(at) && now.difference(m.createdAt).inSeconds >= seconds;
+  }
+
+  @override
+  bool operator ==(Object other) =>
+      other is Disappearing && other.seconds == seconds && other.setBy == setBy && other.setAt == setAt;
+
+  @override
+  int get hashCode => Object.hash(seconds, setBy, setAt);
 }

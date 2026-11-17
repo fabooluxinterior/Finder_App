@@ -14,6 +14,7 @@ import '../../data/push_service.dart';
 import '../notifications/push_prompt.dart';
 import '../../models/follow_request.dart';
 import '../../providers.dart';
+import '../chat/scheduled_provider.dart';
 import '../chats/chats_screen.dart';
 import 'social_refresher.dart';
 import '../deck/deck_screen.dart';
@@ -102,6 +103,7 @@ class _HomeShellState extends ConsumerState<HomeShell> with WidgetsBindingObserv
 
   @override
   Widget build(BuildContext context) {
+    ref.watch(scheduledSenderProvider); // sends "send later" messages when their time comes
     // New connections and new messages, announced from anywhere in the app.
     ref.listen<AsyncValue<List<Connection>>>(connectionsProvider, (prev, next) {
       final before = prev?.value;
