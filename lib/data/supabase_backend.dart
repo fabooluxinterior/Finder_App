@@ -962,6 +962,16 @@ class SupabaseBackend implements FinderBackend {
     return [for (final r in rows) SupportTicket.fromJson(r)];
   });
 
+  @override
+  Future<List<TicketMessage>> ticketThread(String ticketId) => _guard(() async {
+    final rows = (await _db.rpc('my_ticket_thread', params: {'p_ticket': ticketId}) as List).cast<Map<String, dynamic>>();
+    return [for (final r in rows) TicketMessage.fromJson(r)];
+  });
+
+  @override
+  Future<void> replyToTicket(String ticketId, String body) =>
+      _guard(() => _db.rpc('reply_to_ticket', params: {'p_ticket': ticketId, 'p_body': body}));
+
   // ---------------------------------------------------------------- chat ----
 
   @override

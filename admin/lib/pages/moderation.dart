@@ -128,7 +128,7 @@ class OverviewPage extends StatelessWidget {
                   const Color(0xFFFF4D4D),
                   () => onGo('Suspended accounts'),
                 ),
-                _Tile('Open tickets', o.n('open_tickets'), Icons.support_agent_outlined, okGreen, () => onGo('Reports')),
+                _Tile('Open tickets', o.n('open_tickets'), Icons.support_agent_outlined, okGreen, () => onGo('Support tickets')),
               ],
             ),
             const SizedBox(height: 16),
@@ -907,4 +907,232 @@ class _StaffPageState extends State<StaffPage> {
       ),
     ],
   );
+}
+
+// ------------------------------------------------------------------- support
+
+String _statusWords(String s) => switch (s) {
+  'new' => 'New',
+  'in_progress' => 'In progress',
+  'waiting_for_user' => 'Waiting for user',
+  'resolved' => 'Resolved',
+  'closed' => 'Closed',
+  _ => s,
+};
+
+class SupportPage extends StatefulWidget {
+  const SupportPage({super.key, required this.api});
+  final AdminApi api;
+  @override
+  State<SupportPage> createState() => _SupportPageState();
+}
+
+class _SupportPageState extends State<SupportPage> {
+  String _status = 'open';
+  int _gen = 0;
+
+  @override
+  Widget build(BuildContext context) => PageFrame(
+    title: 'Support tickets',
+    subtitle: 'What people send from Help in the app. Your reply appears in their Help chat and as a notification.',
+    actions: [
+      SegmentedButton<String>(
+        segments: const [
+          ButtonSegment(value: 'open', label: Text('Open')),
+          ButtonSegment(value: 'resolved', label: Text('Resolved')),
+          ButtonSegment(value: 'all', label: Text('All')),
+        ],
+        selected: {_status},
+        onSelectionChanged: (s) => setState(() {
+          _status = s.first;
+          _gen++;
+        }),
+      ),
+    ],
+    children: [
+      Loader<List<TicketRow>>(
+        key: ValueKey('$_status$_gen'),
+        load: () => widget.api.tickets(status: _status),
+        builder: (context, rows, reload) => rows.isEmpty
+            ? const SectionCard(
+                title: 'No tickets',
+                child: Text('Nothing waiting.', style: TextStyle(color: muted)),
+              )
+            : Card(
+                child: Column(
+                  children: [
+                    for (final (i, t) in rows.indexed) ...[
+                      if (i > 0) const Divider(),
+                      ListTile(
+                        onTap: () => showDialog<void>(
+                          context: context,
+                          builder: (_) => _TicketDialog(api: widget.api, ticket: t, onChanged: () => setState(() => _gen++)),
+                        ),
+                        title: Text('${t.ticketNo} · ${t.subject}', overflow: TextOverflow.ellipsis),
+                        subtitle: Text('${t.userName ?? t.email ?? 'Unknown'} · ${_words(t.category)} · ${fmtDate(t.updatedAt)}'),
+                        trailing: StatusChip(
+                          _statusWords(t.status),
+                          color: t.status == 'new'
+                              ? accent
+                              : (t.status == 'waiting_for_user'
+                                    ? warnAmber
+                                    : (t.status == 'in_progress' ? const Color(0xFFFF8A3D) : okGreen)),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+      ),
+    ],
+  );
+}
+
+class _TicketDialog extends StatefulWidget {
+  const _TicketDialog({required this.api, required this.ticket, required this.onChanged});
+  final AdminApi api;
+  final TicketRow ticket;
+  final VoidCallback onChanged;
+  @override
+  State<_TicketDialog> createState() => _TicketDialogState();
+}
+
+class _TicketDialogState extends State<_TicketDialog> {
+  final _reply = TextEditingController();
+  late Future<List<TicketMsg>> _thread = widget.api.ticketThread(widget.ticket.id);
+  bool _busy = false;
+
+  @override
+  void dispose() {
+    _reply.dispose();
+    super.dispose();
+  }
+
+  Future<void> _send() async {
+    if (_reply.text.trim().isEmpty) return;
+    setState(() => _busy = true);
+    try {
+      await widget.api.replyTicket(widget.ticket.id, _reply.text.trim());
+      _reply.clear();
+      widget.onChanged();
+      if (mounted) setState(() => _thread = widget.api.ticketThread(widget.ticket.id));
+    } on AdminException catch (e) {
+      if (mounted) toast(context, e.message);
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _status(String s) async {
+    try {
+      await widget.api.setTicketStatus(widget.ticket.id, s);
+      widget.onChanged();
+      if (mounted) {
+        Navigator.pop(context);
+        toast(context, 'Marked ${_statusWords(s).toLowerCase()}.');
+      }
+    } on AdminException catch (e) {
+      if (mounted) toast(context, e.message);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final t = widget.ticket;
+    return Dialog(
+      backgroundColor: bg,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 640, maxHeight: 720),
+        child: Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(22, 18, 10, 6),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('${t.ticketNo} · ${t.subject}', style: const TextStyle(fontSize: 19, fontWeight: FontWeight.w700)),
+                        Text(
+                          '${t.userName ?? 'Unknown'} · ${t.email ?? 'no email'} · ${_statusWords(t.status)}',
+                          style: const TextStyle(color: muted),
+                        ),
+                      ],
+                    ),
+                  ),
+                  IconButton(onPressed: () => Navigator.pop(context), icon: const Icon(Icons.close)),
+                ],
+              ),
+            ),
+            Expanded(
+              child: FutureBuilder<List<TicketMsg>>(
+                future: _thread,
+                builder: (context, s) {
+                  if (s.hasError) return Padding(padding: const EdgeInsets.all(20), child: Text('${s.error}'));
+                  final list = s.data;
+                  if (list == null) return const Center(child: CircularProgressIndicator());
+                  return ListView(
+                    padding: const EdgeInsets.fromLTRB(22, 8, 22, 8),
+                    children: [
+                      for (final m in list)
+                        Align(
+                          alignment: m.fromStaff ? Alignment.centerRight : Alignment.centerLeft,
+                          child: Container(
+                            margin: const EdgeInsets.symmetric(vertical: 4),
+                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                            constraints: const BoxConstraints(maxWidth: 440),
+                            decoration: BoxDecoration(
+                              color: m.fromStaff ? accent.withValues(alpha: 0.18) : surface,
+                              border: Border.all(color: hair),
+                              borderRadius: BorderRadius.circular(16),
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(m.body),
+                                const SizedBox(height: 4),
+                                Text(
+                                  '${m.fromStaff ? 'Team' : (t.userName ?? 'User')} · ${fmtDate(m.at)}',
+                                  style: const TextStyle(color: muted, fontSize: 12),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                    ],
+                  );
+                },
+              ),
+            ),
+            const Divider(),
+            Padding(
+              padding: const EdgeInsets.all(14),
+              child: Column(
+                children: [
+                  TextField(
+                    controller: _reply,
+                    minLines: 2,
+                    maxLines: 5,
+                    maxLength: 2000,
+                    decoration: const InputDecoration(labelText: 'Reply to the user'),
+                  ),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      FilledButton(onPressed: _busy ? null : _send, child: const Text('Send reply')),
+                      OutlinedButton(onPressed: () => _status('in_progress'), child: const Text('In progress')),
+                      OutlinedButton(onPressed: () => _status('resolved'), child: const Text('Resolved')),
+                      TextButton(onPressed: () => _status('closed'), child: const Text('Close')),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }

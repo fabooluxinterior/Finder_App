@@ -1242,6 +1242,24 @@ class DemoBackend implements FinderBackend {
   @override
   Future<List<SupportTicket>> myTickets() async => List.unmodifiable(_tickets);
 
+  final _ticketMessages = <String, List<TicketMessage>>{};
+
+  @override
+  Future<List<TicketMessage>> ticketThread(String ticketId) async {
+    final t = _tickets.firstWhere(
+      (x) => x.id == ticketId,
+      orElse: () => throw const AppException(AppErrorCode.unknown, 'Ticket not found'),
+    );
+    return [TicketMessage(id: 0, fromStaff: false, body: t.description, createdAt: t.createdAt), ...?_ticketMessages[ticketId]];
+  }
+
+  @override
+  Future<void> replyToTicket(String ticketId, String body) async {
+    if (body.trim().isEmpty) throw const AppException(AppErrorCode.invalidInput, 'Write a message first.');
+    final list = _ticketMessages.putIfAbsent(ticketId, () => []);
+    list.add(TicketMessage(id: list.length + 1, fromStaff: false, body: body.trim(), createdAt: DateTime.now()));
+  }
+
   void setPremium(bool value) {
     premium = value;
     _persist();

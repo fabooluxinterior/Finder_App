@@ -30,6 +30,7 @@ import '../paywall/paywall_sheet.dart';
 import '../profile/profile_detail_screen.dart';
 import '../safety/safety_actions.dart';
 import '../security/safety_number_screen.dart';
+import 'emoji_panel.dart';
 import 'voice_bubble.dart';
 import 'voice_recorder_bar.dart';
 import 'words.dart';
@@ -43,6 +44,8 @@ class ChatScreen extends ConsumerStatefulWidget {
 }
 
 class _ChatScreenState extends ConsumerState<ChatScreen> {
+  bool _emojiOpen = false;
+
   final _text = TextEditingController();
   final _scroll = ScrollController();
   final _recorder = VoiceRecorder();
@@ -172,6 +175,38 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     }
     showSnack(context, '$e', icon: PhosphorIconsFill.warningCircle);
     return false;
+  }
+
+  void _insertEmoji(String e) {
+    final v = _text.value;
+    final sel = v.selection.isValid ? v.selection : TextSelection.collapsed(offset: v.text.length);
+    final next = v.text.replaceRange(sel.start, sel.end, e);
+    _text.value = TextEditingValue(
+      text: next,
+      selection: TextSelection.collapsed(offset: sel.start + e.length),
+    );
+  }
+
+  void _emojiBackspace() {
+    final v = _text.value;
+    final sel = v.selection.isValid ? v.selection : TextSelection.collapsed(offset: v.text.length);
+    if (sel.start != sel.end) {
+      _text.value = TextEditingValue(
+        text: v.text.replaceRange(sel.start, sel.end, ''),
+        selection: TextSelection.collapsed(offset: sel.start),
+      );
+    } else if (sel.start > 0) {
+      final before = v.text.substring(0, sel.start).characters.skipLast(1).toString();
+      _text.value = TextEditingValue(
+        text: before + v.text.substring(sel.start),
+        selection: TextSelection.collapsed(offset: before.length),
+      );
+    }
+  }
+
+  void _toggleEmoji() {
+    FocusScope.of(context).unfocus();
+    setState(() => _emojiOpen = !_emojiOpen);
   }
 
   Future<void> _sendText(List<ChatMessage> thread) async {
@@ -664,7 +699,13 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                           onSend: () => _sendText(thread),
                           onMic: _startRecording,
                           onPhoto: _sendPhoto,
+                          emojiOpen: _emojiOpen,
+                          onEmoji: _toggleEmoji,
+                          onFieldTap: () {
+                            if (_emojiOpen) setState(() => _emojiOpen = false);
+                          },
                         ),
+                        if (_emojiOpen) EmojiPanel(onPick: _insertEmoji, onBackspace: _emojiBackspace),
                       ],
                     ),
             ),
@@ -713,8 +754,14 @@ class _Composer extends StatelessWidget {
     required this.onSend,
     required this.onMic,
     required this.onPhoto,
+    required this.onEmoji,
+    required this.onFieldTap,
+    this.emojiOpen = false,
     this.editing = false,
   });
+  final VoidCallback onEmoji;
+  final VoidCallback onFieldTap;
+  final bool emojiOpen;
   final bool editing;
   final TextEditingController controller;
   final bool sending;
@@ -735,14 +782,6 @@ class _Composer extends StatelessWidget {
           return Row(
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
-              Padding(
-                padding: const EdgeInsets.only(bottom: 2),
-                child: IconButton(
-                  onPressed: sending || editing ? null : onPhoto,
-                  tooltip: 'Send a photo',
-                  icon: Icon(PhosphorIconsRegular.image, size: 26, color: c.ink2),
-                ),
-              ),
               Expanded(
                 child: TextField(
                   controller: controller,
@@ -752,10 +791,26 @@ class _Composer extends StatelessWidget {
                   textInputAction: TextInputAction.send,
                   textCapitalization: TextCapitalization.sentences,
                   style: t.bodyLarge?.copyWith(color: c.ink),
+                  onTap: onFieldTap,
                   decoration: InputDecoration(
                     hintText: 'Message',
                     counterText: '',
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 15),
+                    // Emoji on the left of the bar, photo on the right.
+                    prefixIcon: IconButton(
+                      onPressed: sending ? null : onEmoji,
+                      tooltip: emojiOpen ? 'Keyboard' : 'Emoji',
+                      icon: Icon(
+                        emojiOpen ? Icons.keyboard_alt_outlined : Icons.emoji_emotions_outlined,
+                        size: 24,
+                        color: c.ink2,
+                      ),
+                    ),
+                    suffixIcon: IconButton(
+                      onPressed: sending || editing ? null : onPhoto,
+                      tooltip: 'Send a photo',
+                      icon: Icon(PhosphorIconsRegular.image, size: 24, color: c.ink2),
+                    ),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 4, vertical: 15),
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(26),
                       borderSide: BorderSide(color: c.hair),

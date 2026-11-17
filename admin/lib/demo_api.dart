@@ -218,7 +218,7 @@ class DemoAdminApi extends AdminApi {
     'restricted': _status.values.where((s) => s == AccountStatus.restricted).length,
     'banned': _status.values.where((s) => s == AccountStatus.banned).length,
     'removal_pending': _status.values.where((s) => s == AccountStatus.removalPending).length,
-    'open_tickets': 2,
+    'open_tickets': _tickets.values.where((t) => t.row.status != 'resolved' && t.row.status != 'closed').length,
     'users_total': 1284,
     'users_today': 17,
     'actions_today': _audit.length,
@@ -400,6 +400,85 @@ class DemoAdminApi extends AdminApi {
 
   @override
   Future<List<StaffRow>> staff() async => _staff;
+
+  final _tickets = <String, ({TicketRow row, List<TicketMsg> thread})>{
+    't1': (
+      row: TicketRow(
+        id: 't1',
+        ticketNo: 'VB-KT6MA5',
+        userId: 'u1',
+        userName: 'Rahul Nair',
+        email: 'rahul@example.com',
+        category: 'account',
+        subject: 'Account suspended',
+        status: 'new',
+        createdAt: DateTime(2026, 11, 13, 9, 30),
+        updatedAt: DateTime(2026, 11, 13, 9, 30),
+        messages: 0,
+        lastFromStaff: false,
+      ),
+      thread: [TicketMsg(fromStaff: false, body: 'My account is suspended, please help.', at: DateTime(2026, 11, 13, 9, 30))],
+    ),
+  };
+
+  @override
+  Future<List<TicketRow>> tickets({String status = 'open'}) async => [
+    for (final t in _tickets.values)
+      if (status == 'all' ||
+          t.row.status == status ||
+          (status == 'open' && t.row.status != 'resolved' && t.row.status != 'closed'))
+        t.row,
+  ];
+
+  @override
+  Future<List<TicketMsg>> ticketThread(String ticketId) async => _tickets[ticketId]!.thread;
+
+  @override
+  Future<void> replyTicket(String ticketId, String body) async {
+    if (body.trim().isEmpty) throw const AdminException('Write a reply first.');
+    final t = _tickets[ticketId]!;
+    t.thread.add(TicketMsg(fromStaff: true, body: body.trim(), at: DateTime.now()));
+    _tickets[ticketId] = (
+      row: TicketRow(
+        id: t.row.id,
+        ticketNo: t.row.ticketNo,
+        userId: t.row.userId,
+        userName: t.row.userName,
+        email: t.row.email,
+        category: t.row.category,
+        subject: t.row.subject,
+        status: 'waiting_for_user',
+        createdAt: t.row.createdAt,
+        updatedAt: DateTime.now(),
+        messages: t.row.messages + 1,
+        lastFromStaff: true,
+      ),
+      thread: t.thread,
+    );
+    _log('ticket_reply', ticketId, null);
+  }
+
+  @override
+  Future<void> setTicketStatus(String ticketId, String status, {String? note}) async {
+    final t = _tickets[ticketId]!;
+    _tickets[ticketId] = (
+      row: TicketRow(
+        id: t.row.id,
+        ticketNo: t.row.ticketNo,
+        userId: t.row.userId,
+        userName: t.row.userName,
+        email: t.row.email,
+        category: t.row.category,
+        subject: t.row.subject,
+        status: status,
+        createdAt: t.row.createdAt,
+        updatedAt: DateTime.now(),
+        messages: t.row.messages,
+        lastFromStaff: t.row.lastFromStaff,
+      ),
+      thread: t.thread,
+    );
+  }
 
   @override
   Future<void> setStaff(String email, String? role) async {

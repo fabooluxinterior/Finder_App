@@ -92,7 +92,7 @@ class _VerificationScreenState extends ConsumerState<VerificationScreen> {
       );
     } else if (_start == null) {
       body = Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           if (status == VerificationStatus.rejected)
             Container(
@@ -106,10 +106,11 @@ class _VerificationScreenState extends ConsumerState<VerificationScreen> {
             ),
           const VerifiedTick(size: 52),
           const SizedBox(height: 16),
-          Text('Get the Verified badge', style: t.headlineSmall),
+          Text('Get the Verified badge', style: t.headlineSmall, textAlign: TextAlign.center),
           const SizedBox(height: 8),
           Text(
             'Take a quick selfie copying a pose we show you. Our team checks it matches your profile photo.',
+            textAlign: TextAlign.center,
             style: t.bodyMedium?.copyWith(color: c.muted),
           ),
           const SizedBox(height: 18),
@@ -121,24 +122,34 @@ class _VerificationScreenState extends ConsumerState<VerificationScreen> {
             Padding(
               padding: const EdgeInsets.symmetric(vertical: 6),
               child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   Icon(icon, size: 20, color: c.ink2),
                   const SizedBox(width: 12),
-                  Expanded(child: Text(text, style: t.bodyMedium)),
+                  Flexible(
+                    child: Text(text, textAlign: TextAlign.center, style: t.bodyMedium),
+                  ),
                 ],
               ),
             ),
           const SizedBox(height: 24),
-          PillButton(label: 'Start', busy: _busy, onTap: _begin),
+          SizedBox(
+            width: double.infinity,
+            child: PillButton(label: 'Start', busy: _busy, onTap: _begin),
+          ),
         ],
       );
     } else {
       body = Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Text('Copy this pose', style: t.labelMedium?.copyWith(color: c.muted)),
+          Text(
+            'Copy this pose',
+            textAlign: TextAlign.center,
+            style: t.labelMedium?.copyWith(color: c.muted),
+          ),
           const SizedBox(height: 6),
-          Text(_start!.pose, style: t.headlineSmall),
+          Text(_start!.pose, textAlign: TextAlign.center, style: t.headlineSmall),
           const SizedBox(height: 18),
           AspectRatio(
             aspectRatio: 3 / 4,
@@ -181,7 +192,16 @@ class _VerificationScreenState extends ConsumerState<VerificationScreen> {
         title: const Text('Verification'),
       ),
       body: SafeArea(
-        child: SingleChildScrollView(padding: const EdgeInsets.fromLTRB(22, 8, 22, 24), child: body),
+        // Centred on the screen, both ways (scrolls when the content is taller than the screen).
+        child: LayoutBuilder(
+          builder: (context, box) => SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(22, 8, 22, 24),
+            child: ConstrainedBox(
+              constraints: BoxConstraints(minHeight: box.maxHeight - 32),
+              child: Center(child: body),
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -198,12 +218,13 @@ class _Message extends StatelessWidget {
   Widget build(BuildContext context) {
     final t = Theme.of(context).textTheme;
     return Padding(
-      padding: const EdgeInsets.only(top: 60),
+      padding: EdgeInsets.zero,
       child: Column(
+        mainAxisSize: MainAxisSize.min,
         children: [
           leading ?? Icon(icon, size: 52, color: context.fc.ink),
           const SizedBox(height: 16),
-          Text(title, style: t.headlineSmall),
+          Text(title, textAlign: TextAlign.center, style: t.headlineSmall),
           const SizedBox(height: 8),
           Text(
             text,

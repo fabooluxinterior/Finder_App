@@ -235,6 +235,12 @@ abstract class FinderBackend {
   });
   Future<List<SupportTicket>> myTickets();
 
+  /// The conversation on one ticket: your messages and the team's replies, oldest first.
+  Future<List<TicketMessage>> ticketThread(String ticketId);
+
+  /// Adds a follow-up message to a ticket.
+  Future<void> replyToTicket(String ticketId, String body);
+
   // Account security
   Future<List<SessionInfo>> sessions();
   Future<void> revokeSession(String sessionId);

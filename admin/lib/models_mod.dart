@@ -196,3 +196,59 @@ class StaffRow {
 }
 
 DateTime? _d(Object? v) => v == null ? null : DateTime.parse(v as String).toLocal();
+
+class TicketRow {
+  const TicketRow({
+    required this.id,
+    required this.ticketNo,
+    required this.userId,
+    required this.userName,
+    required this.email,
+    required this.category,
+    required this.subject,
+    required this.status,
+    required this.createdAt,
+    required this.updatedAt,
+    required this.messages,
+    required this.lastFromStaff,
+  });
+  final String id;
+  final String ticketNo;
+  final String? userId;
+  final String? userName;
+  final String? email;
+  final String category;
+  final String subject;
+  final String status;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+  final int messages;
+  final bool lastFromStaff;
+
+  factory TicketRow.fromJson(Map<String, dynamic> r) => TicketRow(
+    id: r['id'] as String,
+    ticketNo: r['ticket_no'] as String,
+    userId: r['user_id'] as String?,
+    userName: r['user_name'] as String?,
+    email: r['email'] as String?,
+    category: r['category'] as String,
+    subject: r['subject'] as String,
+    status: r['status'] as String,
+    createdAt: DateTime.parse(r['created_at'] as String).toLocal(),
+    updatedAt: DateTime.parse(r['updated_at'] as String).toLocal(),
+    messages: (r['messages'] as num?)?.toInt() ?? 0,
+    lastFromStaff: (r['last_from_staff'] as bool?) ?? false,
+  );
+}
+
+class TicketMsg {
+  const TicketMsg({required this.fromStaff, required this.body, required this.at});
+  final bool fromStaff;
+  final String body;
+  final DateTime at;
+  factory TicketMsg.fromJson(Map<String, dynamic> r) => TicketMsg(
+    fromStaff: (r['from_staff'] as bool?) ?? false,
+    body: r['body'] as String,
+    at: DateTime.parse(r['created_at'] as String).toLocal(),
+  );
+}

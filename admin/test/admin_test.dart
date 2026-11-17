@@ -140,4 +140,19 @@ void main() {
     expect(find.text('Rahul Nair'), findsNothing);
     expect((await api.restricted(status: 'suspended')), isEmpty);
   });
+
+  test('support: staff see the ticket, reply reaches the thread and moves it to waiting for the user', () async {
+    final api = DemoAdminApi();
+    final open = await api.tickets();
+    expect(open.single.ticketNo, 'VB-KT6MA5');
+    expect((await api.ticketThread(open.single.id)).single.body, contains('suspended'));
+    await expectLater(api.replyTicket(open.single.id, '  '), throwsA(isA<AdminException>()));
+    await api.replyTicket(open.single.id, 'Hi, we are looking into it.');
+    final thread = await api.ticketThread(open.single.id);
+    expect(thread.last.fromStaff, isTrue);
+    expect((await api.tickets()).single.status, 'waiting_for_user');
+    await api.setTicketStatus(open.single.id, 'resolved');
+    expect(await api.tickets(), isEmpty);
+    expect((await api.tickets(status: 'all')).single.status, 'resolved');
+  });
 }

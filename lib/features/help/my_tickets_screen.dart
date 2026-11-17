@@ -70,54 +70,61 @@ class MyTicketsScreen extends ConsumerWidget {
                   itemBuilder: (_, i) {
                     final t = list[i];
                     final color = ticketStatusColor(context, t.status);
-                    return Container(
-                      padding: const EdgeInsets.all(14),
-                      decoration: BoxDecoration(
-                        color: c.surface,
-                        borderRadius: BorderRadius.circular(18),
-                        border: Border.all(color: c.hair),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              Text(
-                                t.ticketNo,
-                                style: TextStyle(fontWeight: FontWeight.w700, color: c.ink, letterSpacing: 0.5),
-                              ),
-                              const Spacer(),
-                              Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                                decoration: BoxDecoration(
-                                  color: color.withValues(alpha: 0.14),
-                                  borderRadius: BorderRadius.circular(99),
+                    return InkWell(
+                      borderRadius: BorderRadius.circular(18),
+                      onTap: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (_) => ContactSupportScreen(ticket: t)),
+                      ).then((_) => ref.invalidate(myTicketsProvider)),
+                      child: Container(
+                        padding: const EdgeInsets.all(14),
+                        decoration: BoxDecoration(
+                          color: c.surface,
+                          borderRadius: BorderRadius.circular(18),
+                          border: Border.all(color: c.hair),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Text(
+                                  t.ticketNo,
+                                  style: TextStyle(fontWeight: FontWeight.w700, color: c.ink, letterSpacing: 0.5),
                                 ),
-                                child: Text(
-                                  t.status.label,
-                                  style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: color),
+                                const Spacer(),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                  decoration: BoxDecoration(
+                                    color: color.withValues(alpha: 0.14),
+                                    borderRadius: BorderRadius.circular(99),
+                                  ),
+                                  child: Text(
+                                    t.status.label,
+                                    style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: color),
+                                  ),
                                 ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 6),
-                          Text(
-                            t.subject,
-                            style: TextStyle(fontSize: 15.5, fontWeight: FontWeight.w600, color: c.ink),
-                          ),
-                          const SizedBox(height: 2),
-                          Text(
-                            t.description,
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(fontSize: 14, color: c.ink3),
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            '${t.category.label} · ${MaterialLocalizations.of(context).formatMediumDate(t.createdAt)}',
-                            style: TextStyle(fontSize: 12.5, color: c.muted),
-                          ),
-                        ],
+                              ],
+                            ),
+                            const SizedBox(height: 6),
+                            Text(
+                              t.subject,
+                              style: TextStyle(fontSize: 15.5, fontWeight: FontWeight.w600, color: c.ink),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              t.description,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(fontSize: 14, color: c.ink3),
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              '${t.category.label} · ${MaterialLocalizations.of(context).formatMediumDate(t.createdAt)}',
+                              style: TextStyle(fontSize: 12.5, color: c.muted),
+                            ),
+                          ],
+                        ),
                       ),
                     );
                   },

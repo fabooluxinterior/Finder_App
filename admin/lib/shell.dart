@@ -23,6 +23,7 @@ List<_Dest> _destinations(bool isAdmin, void Function(String) go) => [
   _Dest('Reports', Icons.flag_outlined, 'Moderation', false, (a) => ReportsQueuePage(api: a, isAdmin: isAdmin)),
   _Dest('Users', Icons.people_outline, 'Moderation', false, (a) => UsersPage(api: a, isAdmin: isAdmin)),
   _Dest('Suspended accounts', Icons.pause_circle_outline, 'Moderation', false, (a) => SuspendedPage(api: a, isAdmin: isAdmin)),
+  _Dest('Support tickets', Icons.support_agent_outlined, 'Moderation', false, (a) => SupportPage(api: a)),
   _Dest('Photo review', Icons.image_outlined, 'Review', false, (a) => MediaReviewPage(api: a)),
   _Dest('Verification', Icons.verified_outlined, 'Review', false, (a) => VerificationPage(api: a)),
   _Dest('Security events', Icons.shield_outlined, 'Review', false, (a) => SecurityPage(api: a)),

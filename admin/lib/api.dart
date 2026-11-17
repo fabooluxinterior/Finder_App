@@ -60,6 +60,12 @@ abstract class AdminApi {
   Future<List<RestrictedRow>> restricted({String? status});
   Future<List<AuditRow>> auditLog({int offset = 0});
   Future<List<StaffRow>> staff();
+
+  // Support tickets
+  Future<List<TicketRow>> tickets({String status = 'open'});
+  Future<List<TicketMsg>> ticketThread(String ticketId);
+  Future<void> replyTicket(String ticketId, String body);
+  Future<void> setTicketStatus(String ticketId, String status, {String? note});
   Future<void> setStaff(String email, String? role);
 
   // Messaging → Notifications (admins only)
@@ -277,6 +283,26 @@ class SupabaseAdminApi extends AdminApi {
     final rows = _rows(await _db.rpc('mod_audit_log', params: {'p_limit': 50, 'p_offset': offset}));
     return [for (final r in rows) AuditRow.fromJson(r)];
   });
+
+  @override
+  Future<List<TicketRow>> tickets({String status = 'open'}) => _guard(() async {
+    final rows = _rows(await _db.rpc('mod_list_tickets_v2', params: {'p_status': status}));
+    return [for (final r in rows) TicketRow.fromJson(r)];
+  });
+
+  @override
+  Future<List<TicketMsg>> ticketThread(String ticketId) => _guard(() async {
+    final rows = _rows(await _db.rpc('mod_ticket_thread', params: {'p_ticket': ticketId}));
+    return [for (final r in rows) TicketMsg.fromJson(r)];
+  });
+
+  @override
+  Future<void> replyTicket(String ticketId, String body) =>
+      _guard(() => _db.rpc('mod_reply_ticket', params: {'p_ticket': ticketId, 'p_body': body}));
+
+  @override
+  Future<void> setTicketStatus(String ticketId, String status, {String? note}) =>
+      _guard(() => _db.rpc('mod_set_ticket_status', params: {'p_ticket': ticketId, 'p_status': status, 'p_note': note}));
 
   @override
   Future<List<StaffRow>> staff() =>

@@ -222,13 +222,28 @@ void main() {
     await _settle(t);
     expect(find.text('Hi, this is Vouby Help. What do you need help with?'), findsOneWidget);
     await t.tap(find.text('Chat and messaging'));
-    await _settle(t);
-    await t.enterText(find.byType(TextField), 'Voice notes sometimes stop playing');
+    await t.pump(const Duration(milliseconds: 500));
+    expect(find.bySemanticsLabel('Vouby Help is typing'), findsOneWidget, reason: 'the assistant types before it answers');
+    await _settle(t, 2600);
+    expect(find.textContaining('Tell us what happened'), findsOneWidget);
+    await t.enterText(find.byType(TextField), 'hi');
     await t.pump();
     await t.tap(find.byTooltip('Send'));
-    await _settle(t, 1200);
-    expect(find.textContaining('Ticket number'), findsOneWidget);
+    await t.pump(const Duration(milliseconds: 500));
+    expect(find.text('hi'), findsOneWidget, reason: 'even a very short message is shown and sent');
+    expect(find.textContaining('ticket number'), findsNothing, reason: 'the reply waits about two seconds');
+    await _settle(t, 2600);
+    expect(find.textContaining('ticket number is VB-'), findsOneWidget);
+    expect(find.textContaining('shared this with our team'), findsOneWidget);
     expect(find.textContaining('isn’t instant'), findsOneWidget);
     expect(find.textContaining('screenshot'), findsNothing);
+    final stored = (await t.runAsync(b.myTickets))!;
+    expect(stored.single.description, 'hi (Chat and messaging)', reason: 'the content reached the team');
+    // Add more afterwards: it goes on the same request.
+    await t.enterText(find.byType(TextField), 'It happens on Wi-Fi only');
+    await t.pump();
+    await t.tap(find.byTooltip('Send'));
+    await _settle(t, 2600);
+    expect((await t.runAsync(() => b.ticketThread(stored.single.id)))!.map((m) => m.body), contains('It happens on Wi-Fi only'));
   });
 }

@@ -24,7 +24,6 @@ import '../security/security_center_screen.dart';
 import '../legal/policy_screen.dart';
 import '../help/help_center_screen.dart';
 import '../help/my_tickets_screen.dart';
-import '../help/notifications_screen.dart';
 import '../subscription/trial_banner.dart';
 import '../verification/verification_screen.dart';
 import 'profile_detail_screen.dart';
@@ -60,7 +59,6 @@ class _MyProfileScreenState extends ConsumerState<MyProfileScreen> {
     // Paid Fast-Track only (an active trial also unlocks chat, but nothing is
     // billed, so it isn't shown as a subscription).
     final premium = isPremium(ref) && !inTrial;
-    final unread = (ref.watch(notificationsProvider).value ?? const []).where((n) => n.readAt == null).length;
     if (me == null) return const Scaffold(body: SizedBox.shrink());
     // extendBody: the shell already adds the tab bar to the bottom padding.
     final bottomBar = MediaQuery.paddingOf(context).bottom;
@@ -198,15 +196,6 @@ class _MyProfileScreenState extends ConsumerState<MyProfileScreen> {
                     context,
                     MaterialPageRoute(builder: (_) => const AddEmailScreen()),
                   ).then((_) => ref.invalidate(contactEmailProvider)),
-                ),
-                _Row(
-                  icon: PhosphorIconsRegular.bell,
-                  title: 'Notifications',
-                  subtitle: unread == 0 ? 'Trial reminders, ticket updates' : '$unread new',
-                  onTap: () => Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (_) => const NotificationsScreen()),
-                  ).then((_) => ref.invalidate(notificationsProvider)),
                 ),
                 _Row(
                   icon: PhosphorIconsRegular.chatCircle,

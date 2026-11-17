@@ -93,6 +93,22 @@ class SupportTicket {
   );
 }
 
+/// One message in a ticket's conversation: the person's or the team's.
+class TicketMessage {
+  const TicketMessage({required this.id, required this.fromStaff, required this.body, required this.createdAt});
+  final int id;
+  final bool fromStaff;
+  final String body;
+  final DateTime createdAt;
+
+  factory TicketMessage.fromJson(Map<String, dynamic> m) => TicketMessage(
+    id: (m['id'] as num).toInt(),
+    fromStaff: (m['from_staff'] as bool?) ?? false,
+    body: m['body'] as String,
+    createdAt: DateTime.parse(m['created_at'] as String).toLocal(),
+  );
+}
+
 /// Client-side validation (the server checks the same limits).
 String? validateTicket({required String subject, required String description}) {
   if (subject.trim().length < 3) return 'Add a short subject (at least 3 characters).';
