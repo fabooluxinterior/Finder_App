@@ -12,6 +12,7 @@ import '../core/media_cache.dart';
 import '../models/access.dart';
 import '../models/follow_request.dart';
 import '../models/message.dart';
+import '../models/scheduled_message.dart';
 import '../models/presence.dart';
 import '../models/moderation.dart';
 import '../models/profile.dart';
@@ -1026,6 +1027,125 @@ class SupabaseBackend implements FinderBackend {
       _guard(() => _db.rpc('reply_to_ticket', params: {'p_ticket': ticketId, 'p_body': body}));
 
   // ---------------------------------------------------------------- chat ----
+
+  // -------------------------------------------------- scheduled messages ----
+  // The phone encrypts the message now (exactly as for a normal send); the server stores only that ciphertext and
+  // releases it at the chosen time. The plain text stays on this phone, for the list and for the chat afterwards.
+
+  String get _schedKey => 'vouby_sched_text_v1_$_me';
+
+  Future<Map<String, dynamic>> _schedTexts() async {
+    try {
+      final raw = await _kv.read(_schedKey);
+      return raw == null ? {} : (jsonDecode(raw) as Map).cast<String, dynamic>();
+    } catch (_) {
+      return {};
+    }
+  }
+
+  @override
+  Future<void> scheduleMessage(String peerId, String text, DateTime at) => _guard(() async {
+    final t = text.trim();
+    if (t.isEmpty) throw const AppException(AppErrorCode.invalidInput, 'Write a message first.');
+    if (!at.isAfter(DateTime.now().add(const Duration(seconds: 30)))) {
+      throw const AppException(AppErrorCode.invalidInput, 'Choose a time in the future.');
+    }
+    await _ready();
+    final payload = SecurePayload(clientId: _uuid.v4(), sentAt: at, text: t);
+    final envelopes = await _engine.encryptFor(peerId, payload.encode());
+    try {
+      await _db.rpc(
+        'schedule_message',
+        params: {
+          'p_receiver': peerId,
+          'p_client_msg_id': payload.clientId,
+          'p_sender_device': _engine.deviceId,
+          'p_envelopes': envelopes.map((e) => e.toJson()).toList(),
+          'p_send_at': at.toUtc().toIso8601String(),
+          'p_tz': at.timeZoneName,
+        },
+      );
+    } on PostgrestException catch (e) {
+      if (e.hint == 'SUBSCRIPTION_REQUIRED') {
+        throw const AppException(AppErrorCode.subscriptionRequired, 'Messaging is part of Fast-Track');
+      }
+      rethrow;
+    }
+    final texts = await _schedTexts();
+    texts[payload.clientId] = {'t': t, 'p': peerId, 'at': at.toUtc().toIso8601String()};
+    await _kv.write(_schedKey, jsonEncode(texts));
+  });
+
+  @override
+  Future<void> cancelScheduled(String id) => _guard(() async {
+    await _db.rpc('cancel_scheduled_message', params: {'p_id': id});
+  });
+
+  @override
+  Future<List<ScheduledItem>> scheduledMessages({String? peerId}) => _guard(() async {
+    final me = _me;
+    final rows = (await _db.rpc('my_scheduled_messages', params: {'p_peer': peerId}) as List).cast<Map<String, dynamic>>();
+    final texts = await _schedTexts();
+    final items = <ScheduledItem>[];
+    for (final r in rows) {
+      final clientId = r['client_msg_id'] as String;
+      final peer = r['receiver_id'] as String;
+      final status = switch (r['status']) {
+        'sent' => ScheduledStatus.sent,
+        'failed' => ScheduledStatus.failed,
+        'cancelled' => ScheduledStatus.cancelled,
+        _ => ScheduledStatus.scheduled,
+      };
+      final text = (texts[clientId] as Map?)?['t'] as String?;
+      final messageId = r['message_id'] as String?;
+      final sentAt = _ts(r['sent_at']);
+      // The server delivered it: put it into this phone's copy of the chat (once), so it shows as a normal message.
+      if (status == ScheduledStatus.sent && messageId != null && text != null) {
+        if (await _vault.markSeen(me, me, clientId)) {
+          final list = await _vault.upsert(
+            me,
+            peer,
+            ChatMessage(
+              id: messageId,
+              senderId: me,
+              receiverId: peer,
+              content: text,
+              isRead: false,
+              createdAt: sentAt ?? _ts(r['send_at']) ?? DateTime.now(),
+            ),
+          );
+          _threads[peer]?.add(list);
+          _social.add(null);
+        }
+      }
+      items.add(
+        ScheduledItem(
+          id: r['id'] as String,
+          peerId: peer,
+          clientId: clientId,
+          sendAt: _ts(r['send_at'])!,
+          status: status,
+          text: text,
+          timezone: r['tz'] as String?,
+          error: r['last_error'] as String?,
+          messageId: messageId,
+          sentAt: sentAt,
+        ),
+      );
+    }
+    // Forget plain texts for messages the server no longer lists (older than 30 days).
+    final known = {for (final i in items) i.clientId};
+    if (peerId == null && texts.keys.any((k) => !known.contains(k))) {
+      texts.removeWhere(
+        (k, v) =>
+            !known.contains(k) &&
+            DateTime.tryParse((v as Map)['at'] as String? ?? '')?.isBefore(DateTime.now().subtract(const Duration(days: 35))) ==
+                true,
+      );
+      await _kv.write(_schedKey, jsonEncode(texts));
+    }
+    return items;
+  });
 
   @override
   Future<Disappearing> disappearing(String peerId) => _guard(() async {

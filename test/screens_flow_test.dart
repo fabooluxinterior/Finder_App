@@ -201,7 +201,7 @@ void main() {
     await t.tap(find.byTooltip('Show menu'));
     await _settle(t);
     expect(find.text('Disappearing messages'), findsOneWidget);
-    expect(find.text('Scheduled messages'), findsNothing, reason: 'only shown when something is scheduled');
+    expect(find.text('Scheduled messages'), findsOneWidget, reason: 'its own section in the chat menu');
     await t.tap(find.text('Disappearing messages'));
     await _settle(t);
     expect(find.text('24 hours'), findsOneWidget);

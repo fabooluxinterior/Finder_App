@@ -3,6 +3,7 @@ import 'dart:typed_data';
 import '../models/access.dart';
 import '../models/follow_request.dart';
 import '../models/message.dart';
+import '../models/scheduled_message.dart';
 import '../models/presence.dart';
 import '../models/moderation.dart';
 import '../models/profile.dart';
@@ -161,6 +162,13 @@ abstract class FinderBackend {
 
   Stream<List<ChatMessage>> watchMessages(String peerId);
   Future<void> sendText(String peerId, String text, {ReplyRef? replyTo});
+
+  /// Schedules a text or emoji message. The server keeps it (encrypted) and sends it at [at], even if this phone is off.
+  Future<void> scheduleMessage(String peerId, String text, DateTime at);
+  Future<void> cancelScheduled(String id);
+
+  /// Waiting, sent and failed scheduled messages (optionally for one chat). Also puts delivered ones into the chat.
+  Future<List<ScheduledItem>> scheduledMessages({String? peerId});
 
   /// Disappearing messages for this chat (24 hours, 7 days, 1 month, or off).
   Future<Disappearing> disappearing(String peerId);

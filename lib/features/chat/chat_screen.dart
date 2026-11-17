@@ -34,9 +34,7 @@ import '../security/safety_number_screen.dart';
 import 'emoji_panel.dart';
 import 'media_editor_screen.dart';
 import 'schedule_picker.dart';
-import 'scheduled_provider.dart';
-import '../../models/scheduled_message.dart';
-import '../../data/memory_images.dart';
+import 'scheduled_messages_screen.dart';
 import 'voice_bubble.dart';
 import 'voice_recorder_bar.dart';
 import 'words.dart';
@@ -68,7 +66,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   }
 
   void _startReply(ChatMessage m) {
-    if (m.deleted || m.scheduledFor != null) return;
+    if (m.deleted) return;
     Fx.instance.tap();
     setState(() {
       _replying = m;
@@ -338,7 +336,11 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     _refreshPresence();
     _presenceTimer = Timer.periodic(const Duration(seconds: 30), (_) => _refreshPresence());
     _refreshDisappearing();
-    _disTimer = Timer.periodic(const Duration(seconds: 20), (_) => _refreshDisappearing());
+    _syncScheduled();
+    _disTimer = Timer.periodic(const Duration(seconds: 20), (_) {
+      _refreshDisappearing();
+      _syncScheduled();
+    });
   }
 
   Future<void> _refreshPresence() async {
@@ -443,36 +445,16 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   }
 
   // ------------------------------------------------------ scheduled messages ----
-  final _pendingImageKeys = <String, String>{};
+  // Scheduled messages live on the server and are released at their time, even when this phone is off. They are
+  // not shown in the chat until then; they are listed in "Scheduled messages" in this chat's menu.
 
-  List<ChatMessage> _pendingMessages() {
-    final me = _backend.currentUserId ?? '';
-    return [
-      for (final m
-          in ref.watch(scheduledProvider).where((x) => x.peerId == widget.peer.id).toList()
-            ..sort((a, b) => a.sendAt.compareTo(b.sendAt)))
-        ChatMessage(
-          id: 'sched:${m.id}',
-          senderId: me,
-          receiverId: widget.peer.id,
-          content: m.hasImage ? null : m.text,
-          localImageUrl: m.hasImage ? _pendingImageKey(m) : null,
-          isRead: false,
-          createdAt: m.sendAt,
-          scheduledFor: m.sendAt,
-        ),
-    ];
-  }
-
-  String? _pendingImageKey(ScheduledMessage m) {
-    final known = _pendingImageKeys[m.id];
-    if (known != null) return known;
-    ref.read(scheduledProvider.notifier).imageOf(m.id).then((bytes) {
-      if (bytes != null && mounted && !_pendingImageKeys.containsKey(m.id)) {
-        setState(() => _pendingImageKeys[m.id] = MemoryImages.put(bytes));
-      }
-    });
-    return null;
+  /// Puts messages the server has already sent into this chat (and keeps the list fresh).
+  Future<void> _syncScheduled() async {
+    try {
+      await _backend.scheduledMessages(peerId: widget.peer.id);
+    } catch (_) {
+      /* offline: nothing to show yet */
+    }
   }
 
   Future<void> _scheduleText(List<ChatMessage> thread) async {
@@ -491,117 +473,14 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     }
     final at = await pickSendTime(context);
     if (at == null || !mounted) return;
-    await ref.read(scheduledProvider.notifier).scheduleText(widget.peer.id, text, at);
-    _text.clear();
-    Fx.instance.tap();
-    if (mounted) showSnack(context, 'Scheduled for ${DateFormat('d MMM, h:mm a').format(at)}.', icon: Icons.schedule);
-    _scrollToLatest();
-  }
-
-  Future<void> _scheduledActions(String id) async {
-    final c = context.fc;
-    final m = ref.read(scheduledProvider).where((x) => x.id == id).firstOrNull;
-    if (m == null) return;
-    final what = await showModalBottomSheet<String>(
-      context: context,
-      backgroundColor: c.surface,
-      showDragHandle: true,
-      builder: (ctx) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(
-              leading: const Icon(Icons.schedule),
-              title: Text('Scheduled for ${DateFormat('d MMM, h:mm a').format(m.sendAt)}'),
-              subtitle: m.error == null ? null : Text(m.error!, style: TextStyle(color: c.accent)),
-            ),
-            ListTile(
-              leading: const Icon(Icons.edit_calendar_outlined),
-              title: const Text('Reschedule'),
-              onTap: () => Navigator.pop(ctx, 'move'),
-            ),
-            ListTile(
-              leading: const Icon(Icons.delete_outline),
-              title: const Text('Delete'),
-              onTap: () => Navigator.pop(ctx, 'delete'),
-            ),
-          ],
-        ),
-      ),
-    );
-    if (!mounted || what == null) return;
-    final notifier = ref.read(scheduledProvider.notifier);
-    if (what == 'delete') {
-      await notifier.remove(id);
-    } else {
-      final at = await pickSendTime(context, initial: m.sendAt);
-      if (at != null) await notifier.reschedule(id, at);
+    try {
+      await _backend.scheduleMessage(widget.peer.id, text, at);
+      _text.clear();
+      Fx.instance.tap();
+      if (mounted) showSnack(context, 'Scheduled for ${DateFormat('d MMM, h:mm a').format(at)}.', icon: Icons.schedule);
+    } catch (e) {
+      await _handleError(e);
     }
-  }
-
-  Future<void> _scheduledList() async {
-    final c = context.fc;
-    await showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: c.surface,
-      showDragHandle: true,
-      builder: (ctx) => Consumer(
-        builder: (ctx, ref, _) {
-          final items = ref.watch(scheduledProvider.select((l) => l.where((x) => x.peerId == widget.peer.id).toList()))
-            ..sort((a, b) => a.sendAt.compareTo(b.sendAt));
-          return SafeArea(
-            child: ConstrainedBox(
-              constraints: BoxConstraints(maxHeight: MediaQuery.sizeOf(ctx).height * 0.7),
-              child: ListView(
-                shrinkWrap: true,
-                padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
-                children: [
-                  Text(
-                    'Scheduled messages',
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600, color: c.ink),
-                  ),
-                  const SizedBox(height: 8),
-                  if (items.isEmpty)
-                    Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 16),
-                      child: Text('Nothing scheduled.', style: TextStyle(color: c.muted)),
-                    ),
-                  for (final m in items)
-                    ListTile(
-                      contentPadding: EdgeInsets.zero,
-                      leading: Icon(m.hasImage ? PhosphorIconsRegular.image : Icons.schedule, color: c.ink2),
-                      title: Text(m.hasImage ? 'Photo' : (m.text ?? ''), maxLines: 2, overflow: TextOverflow.ellipsis),
-                      subtitle: Text(
-                        m.error ?? DateFormat('EEE d MMM, h:mm a').format(m.sendAt),
-                        style: TextStyle(color: m.error == null ? c.muted : c.accent),
-                      ),
-                      trailing: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          IconButton(
-                            tooltip: 'Reschedule',
-                            icon: const Icon(Icons.edit_calendar_outlined),
-                            onPressed: () async {
-                              final at = await pickSendTime(ctx, initial: m.sendAt);
-                              if (at != null) await ref.read(scheduledProvider.notifier).reschedule(m.id, at);
-                            },
-                          ),
-                          IconButton(
-                            tooltip: 'Delete',
-                            icon: const Icon(Icons.delete_outline),
-                            onPressed: () => ref.read(scheduledProvider.notifier).remove(m.id),
-                          ),
-                        ],
-                      ),
-                    ),
-                ],
-              ),
-            ),
-          );
-        },
-      ),
-    );
   }
 
   void _insertEmoji(String e) {
@@ -746,22 +625,15 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       // Preview first: draw, add text or crop, then send once (hold the send button to send later).
       final edited = await Navigator.push<EditedMedia>(
         context,
-        MaterialPageRoute(fullscreenDialog: true, builder: (_) => MediaEditorScreen(bytes: raw)),
+        MaterialPageRoute(fullscreenDialog: true, builder: (_) => MediaEditorScreen(bytes: raw, allowSchedule: false)),
       );
       if (edited == null || !mounted) return;
       setState(() => _sending = true);
       // Any image type: resized and compressed on the device, then encrypted.
       final img = await ImageOptimizer.optimizeForChat(edited.bytes);
-      final at = edited.sendAt;
-      if (at != null) {
-        await ref.read(scheduledProvider.notifier).schedulePhoto(widget.peer.id, img.bytes, img.width, img.height, at);
-        Fx.instance.tap();
-        if (mounted) showSnack(context, 'Scheduled for ${DateFormat('d MMM, h:mm a').format(at)}.', icon: Icons.schedule);
-      } else {
-        _setMine(PeerState.photo);
-        await ref.read(backendProvider).sendImage(widget.peer.id, img.bytes, width: img.width, height: img.height);
-        Fx.instance.sent();
-      }
+      _setMine(PeerState.photo);
+      await ref.read(backendProvider).sendImage(widget.peer.id, img.bytes, width: img.width, height: img.height);
+      Fx.instance.sent();
       _scrollToLatest();
     } catch (e) {
       await _handleError(e);
@@ -907,7 +779,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     final backend = ref.watch(backendProvider);
     final me = backend.currentUserId;
     final visibleMessages = ref.watch(messagesProvider(widget.peer.id)).whenData(_visible);
-    final messages = visibleMessages.whenData((l) => [...l, ..._pendingMessages()]);
+    final messages = visibleMessages;
     final theirState = ref.watch(peerStateProvider(widget.peer.id)).value ?? PeerState.idle;
 
     ref.listen(messagesProvider(widget.peer.id), (prev, next) {
@@ -1015,7 +887,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                   onSelected: (v) async {
                     switch (v) {
                       case 'scheduled':
-                        _scheduledList();
+                        Navigator.push(context, MaterialPageRoute(builder: (_) => ScheduledMessagesScreen(peer: widget.peer)));
                       case 'disappearing':
                         _chooseDisappearing();
                       case 'verify':
@@ -1031,8 +903,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                     }
                   },
                   itemBuilder: (_) => [
-                    if (ref.read(scheduledProvider).any((x) => x.peerId == widget.peer.id))
-                      _menuItem('scheduled', Icons.schedule, 'Scheduled messages'),
+                    _menuItem('scheduled', Icons.schedule, 'Scheduled messages'),
                     _menuItem('disappearing', Icons.timer_outlined, 'Disappearing messages'),
                     if (backend.isEndToEndEncrypted) _menuItem('verify', PhosphorIconsRegular.shieldCheck, 'Verify encryption'),
                     _menuItem('report', PhosphorIconsRegular.flag, 'Report'),
@@ -1087,14 +958,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                               final picked = _selected.contains(m.id);
                               final bubble = GestureDetector(
                                 behavior: HitTestBehavior.translucent,
-                                onLongPress: m.scheduledFor != null
-                                    ? () => _scheduledActions(m.id.substring(6))
-                                    : () => _selected.isEmpty ? _messageActions(m, mine) : _toggle(m),
-                                onTap: m.scheduledFor != null
-                                    ? () => _scheduledActions(m.id.substring(6))
-                                    : _selected.isEmpty
-                                    ? null
-                                    : () => _toggle(m),
+                                onLongPress: () => _selected.isEmpty ? _messageActions(m, mine) : _toggle(m),
+                                onTap: _selected.isEmpty ? null : () => _toggle(m),
                                 child: AnimatedContainer(
                                   duration: Motion.of(context, Motion.fast),
                                   decoration: BoxDecoration(
@@ -1115,7 +980,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                                 ),
                               );
                               final swipable = _SwipeToReply(
-                                enabled: m.scheduledFor == null && !m.deleted && _selected.isEmpty,
+                                enabled: !m.deleted && _selected.isEmpty,
                                 onReply: () => _startReply(m),
                                 child: bubble,
                               );
@@ -1536,11 +1401,7 @@ class _Bubble extends StatelessWidget {
                     time,
                     style: TextStyle(fontFamily: 'Geist', color: meta, fontSize: 11),
                   ),
-                  if (message.scheduledFor != null) ...[
-                    // Only on the sender's own screen: waiting to be sent at this time.
-                    const SizedBox(width: 4),
-                    Icon(Icons.schedule, size: 13, color: meta),
-                  ] else if (mine) ...[
+                  if (mine) ...[
                     const SizedBox(width: 3),
                     // One grey tick: sent. Two grey ticks: delivered. Two blue ticks: read.
                     Icon(

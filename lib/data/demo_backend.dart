@@ -1,3 +1,5 @@
+import 'package:flutter/foundation.dart' show visibleForTesting;
+
 import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
@@ -12,6 +14,7 @@ import '../core/sanitizer.dart';
 import '../models/access.dart';
 import '../models/follow_request.dart';
 import '../models/message.dart';
+import '../models/scheduled_message.dart';
 import '../models/presence.dart';
 import '../models/moderation.dart';
 import '../models/profile.dart';
@@ -1267,6 +1270,84 @@ class DemoBackend implements FinderBackend {
   }
 
   // ---------------------------------------------------------------- chat ----
+
+  // Demo: the "server" is this object; due messages are released whenever the list is read or a chat is opened.
+  final _scheduled = <ScheduledItem>[];
+
+  @override
+  Future<void> scheduleMessage(String peerId, String text, DateTime at) async {
+    if (!_hasAccess) throw const AppException(AppErrorCode.subscriptionRequired, 'Messaging is part of Fast-Track');
+    if (!_connected(meId, peerId)) {
+      throw const AppException(AppErrorCode.notConnected, 'Chat unlocks once the follow request is accepted.');
+    }
+    if (text.trim().isEmpty) throw const AppException(AppErrorCode.invalidInput, 'Write a message first.');
+    if (!at.isAfter(DateTime.now().add(const Duration(seconds: 30)))) {
+      throw const AppException(AppErrorCode.invalidInput, 'Choose a time in the future.');
+    }
+    final id = _uuid.v4();
+    _scheduled.add(
+      ScheduledItem(id: id, peerId: peerId, clientId: id, sendAt: at, status: ScheduledStatus.scheduled, text: text.trim()),
+    );
+  }
+
+  @override
+  Future<void> cancelScheduled(String id) async {
+    final i = _scheduled.indexWhere((x) => x.id == id && x.status == ScheduledStatus.scheduled);
+    if (i < 0) return;
+    final x = _scheduled[i];
+    _scheduled[i] = ScheduledItem(
+      id: x.id,
+      peerId: x.peerId,
+      clientId: x.clientId,
+      sendAt: x.sendAt,
+      status: ScheduledStatus.cancelled,
+      text: x.text,
+    );
+  }
+
+  @override
+  Future<List<ScheduledItem>> scheduledMessages({String? peerId}) async {
+    final now = DateTime.now();
+    for (var i = 0; i < _scheduled.length; i++) {
+      final x = _scheduled[i];
+      if (x.status == ScheduledStatus.scheduled && !x.sendAt.isAfter(now)) {
+        final m = _msg(meId, x.peerId, content: x.text);
+        _push(x.peerId, m);
+        _scheduled[i] = ScheduledItem(
+          id: x.id,
+          peerId: x.peerId,
+          clientId: x.clientId,
+          sendAt: x.sendAt,
+          status: ScheduledStatus.sent,
+          text: x.text,
+          messageId: m.id,
+          sentAt: now,
+        );
+      }
+    }
+    return [
+      for (final x in _scheduled)
+        if (peerId == null || x.peerId == peerId) x,
+    ];
+  }
+
+  /// Test only: moves every waiting scheduled message's time back so it is due.
+  @visibleForTesting
+  Future<void> advanceClockForTest(Duration by) async {
+    for (var i = 0; i < _scheduled.length; i++) {
+      final x = _scheduled[i];
+      _scheduled[i] = ScheduledItem(
+        id: x.id,
+        peerId: x.peerId,
+        clientId: x.clientId,
+        sendAt: x.sendAt.subtract(by),
+        status: x.status,
+        text: x.text,
+        messageId: x.messageId,
+        sentAt: x.sentAt,
+      );
+    }
+  }
 
   final _disappearing = <String, Disappearing>{};
 

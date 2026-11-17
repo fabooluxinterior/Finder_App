@@ -5,13 +5,8 @@ import 'package:finder_app/core/errors.dart';
 import 'package:finder_app/data/backend.dart';
 import 'package:finder_app/data/demo_backend.dart';
 import 'package:finder_app/features/chat/media_editor_screen.dart';
-import 'package:finder_app/features/chat/scheduled_provider.dart';
-import 'package:finder_app/models/message.dart';
 import 'package:finder_app/models/scheduled_message.dart';
-import 'package:finder_app/providers.dart';
-import 'package:finder_app/security/secure_kv.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 Uint8List _bytes(int n) => Uint8List.fromList(List.filled(n, 7));
@@ -50,79 +45,56 @@ Future<Uint8List> _png(int w, int h) async {
 }
 
 void main() {
-  test('a scheduled message round-trips and is due only at its time', () {
-    final at = DateTime(2026, 11, 20, 21);
-    final m = ScheduledMessage(id: 'a', peerId: 'p', sendAt: at, createdAt: DateTime(2026, 11, 17), text: 'Good night');
-    final back = ScheduledMessage.fromJson(m.toJson());
-    expect((back.id, back.peerId, back.text, back.sendAt, back.hasImage), ('a', 'p', 'Good night', at, false));
-    expect(back.due(at.subtract(const Duration(minutes: 1))), isFalse);
-    expect(back.due(at), isTrue);
-  });
+  test(
+    'scheduled: waits on the server side, appears in the chat only at its time, can be edited, rescheduled and cancelled',
+    () async {
+      final (b, peer) = await _chat();
+      expect(await b.scheduledMessages(peerId: peer), isEmpty);
+      await expectLater(
+        b.scheduleMessage(peer, 'Late', DateTime.now().subtract(const Duration(minutes: 1))),
+        throwsA(isA<AppException>()),
+      );
+      await expectLater(
+        b.scheduleMessage(peer, '   ', DateTime.now().add(const Duration(days: 1))),
+        throwsA(isA<AppException>()),
+      );
 
-  test('scheduled: waits until its time, sends once, can be rescheduled or deleted, and offline keeps it', () async {
+      // Far in the future: no upper limit.
+      await b.scheduleMessage(peer, 'See you in a year', DateTime.now().add(const Duration(days: 400)));
+      await b.scheduleMessage(peer, 'Good night', DateTime.now().add(const Duration(hours: 5)));
+      final waiting = await b.scheduledMessages(peerId: peer);
+      expect(waiting.map((m) => m.status).toSet(), {ScheduledStatus.scheduled});
+      expect(waiting.map((m) => m.text), containsAll(['See you in a year', 'Good night']));
+      expect(
+        (await b.watchMessages(peer).first).where((m) => m.content == 'Good night'),
+        isEmpty,
+        reason: 'not in the chat before its time',
+      );
+
+      // Reschedule = new time, old one cancelled; cancel removes it for good.
+      final night = waiting.firstWhere((m) => m.text == 'Good night');
+      await b.scheduleMessage(peer, night.text!, DateTime.now().add(const Duration(hours: 6)));
+      await b.cancelScheduled(night.id);
+      final after = await b.scheduledMessages(peerId: peer);
+      expect(after.where((m) => m.status == ScheduledStatus.scheduled && m.text == 'Good night'), hasLength(1));
+      expect(after.where((m) => m.status == ScheduledStatus.cancelled), hasLength(1));
+    },
+  );
+
+  test('scheduled: the chat gets the message exactly once when its time has come', () async {
     final (b, peer) = await _chat();
-    final kv = MemorySecureKv();
-    final c = ProviderContainer(overrides: [backendProvider.overrideWithValue(b), secureKvProvider.overrideWithValue(kv)]);
-    addTearDown(c.dispose);
-    c.listen(authUserProvider, (_, _) {});
-    c.listen(scheduledProvider, (_, _) {});
-    await Future<void>.delayed(const Duration(milliseconds: 100));
-    final n = c.read(scheduledProvider.notifier);
-    await Future<void>.delayed(const Duration(milliseconds: 50));
-
-    await n.scheduleText(peer, 'Later', DateTime.now().add(const Duration(hours: 2)));
-    await n.flushDue();
-    expect((await b.watchMessages(peer).first).where((m) => m.content == 'Later'), isEmpty, reason: 'not before its time');
-    expect(c.read(scheduledProvider), hasLength(1));
-
-    final id = c.read(scheduledProvider).single.id;
-    await n.reschedule(id, DateTime.now().subtract(const Duration(seconds: 1)));
-    await Future<void>.delayed(const Duration(milliseconds: 100));
-    await n.flushDue();
-    expect((await b.watchMessages(peer).first).where((m) => m.content == 'Later'), hasLength(1), reason: 'sent at its time');
-    expect(c.read(scheduledProvider), isEmpty);
-
-    await n.scheduleText(peer, 'Never mind', DateTime.now().add(const Duration(days: 1)));
-    await n.remove(c.read(scheduledProvider).single.id);
-    expect(c.read(scheduledProvider), isEmpty);
-    expect(kv.map.keys.where((k) => k.startsWith('vouby_scheduled_v1_')).length, 1, reason: 'list persisted (empty)');
-
-    // A photo is kept in encrypted storage until it is sent, and removed with the entry.
-    await n.schedulePhoto(peer, _bytes(500), 10, 10, DateTime.now().add(const Duration(days: 1)));
-    final pid = c.read(scheduledProvider).single.id;
-    expect(await n.imageOf(pid), isNotNull);
-    await n.remove(pid);
-    expect(await n.imageOf(pid), isNull);
-  });
-
-  test('scheduled: offline keeps it for later; a refusal is marked instead of retrying forever', () async {
-    final (b, peer) = await _chat();
-    final failing = _Flaky(b);
-    final c = ProviderContainer(
-      overrides: [backendProvider.overrideWithValue(failing), secureKvProvider.overrideWithValue(MemorySecureKv())],
+    // The demo releases due messages when it is asked; a time just ahead is reached after a short wait.
+    await b.scheduleMessage(peer, 'On its way', DateTime.now().add(const Duration(seconds: 31)));
+    expect((await b.scheduledMessages(peerId: peer)).single.status, ScheduledStatus.scheduled);
+    await b.advanceClockForTest(const Duration(minutes: 1));
+    final done = await b.scheduledMessages(peerId: peer);
+    expect(done.single.status, ScheduledStatus.sent);
+    await b.scheduledMessages(peerId: peer);
+    expect(
+      (await b.watchMessages(peer).first).where((m) => m.content == 'On its way'),
+      hasLength(1),
+      reason: 'no duplicate on later checks',
     );
-    addTearDown(c.dispose);
-    c.listen(authUserProvider, (_, _) {});
-    c.listen(scheduledProvider, (_, _) {});
-    await Future<void>.delayed(const Duration(milliseconds: 100));
-    final n = c.read(scheduledProvider.notifier);
-    await n.scheduleText(peer, 'Hello later', DateTime.now().subtract(const Duration(seconds: 1)));
-
-    failing.error = const AppException(AppErrorCode.network, 'offline');
-    await n.flushDue();
-    expect(c.read(scheduledProvider).single.error, isNull, reason: 'offline: stays, tried again later');
-
-    failing.error = const AppException(AppErrorCode.subscriptionRequired, 'Fast-Track needed');
-    await n.flushDue();
-    expect(c.read(scheduledProvider).single.error, 'Needs Fast-Track to send');
-    final calls = failing.calls;
-    await n.flushDue();
-    expect(failing.calls, calls, reason: 'a refused message is not retried until it is rescheduled');
-
-    failing.error = null;
-    await n.reschedule(c.read(scheduledProvider).single.id, DateTime.now().subtract(const Duration(seconds: 1)));
-    await Future<void>.delayed(const Duration(milliseconds: 100));
-    expect(c.read(scheduledProvider), isEmpty, reason: 'rescheduled, then sent');
   });
 
   testWidgets('media editor: preview opens, pencil/text/crop tools exist, and Send returns a picture', (t) async {
@@ -176,23 +148,4 @@ void main() {
     expect(result!.sendAt, isNull);
     expect(result!.bytes.length, greaterThan(100));
   });
-}
-
-class _Flaky extends DemoBackend {
-  _Flaky(DemoBackend inner) : _inner = inner;
-  final DemoBackend _inner;
-  AppException? error;
-  int calls = 0;
-
-  @override
-  String? get currentUserId => _inner.currentUserId;
-  @override
-  Stream<String?> authChanges() => _inner.authChanges();
-  @override
-  Future<void> sendText(String peerId, String text, {ReplyRef? replyTo}) async {
-    calls++;
-    final e = error;
-    if (e != null) throw e;
-    return _inner.sendText(peerId, text);
-  }
 }

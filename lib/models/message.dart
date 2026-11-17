@@ -82,7 +82,6 @@ class ChatMessage {
     this.localImageUrl,
     this.edited = false,
     this.deleted = false,
-    this.scheduledFor,
     this.deliveredAt,
     this.readAt,
     this.listenedAt,
@@ -112,9 +111,6 @@ class ChatMessage {
   /// The sender deleted it for everyone: nothing of the original is kept.
   final bool deleted;
 
-  /// Only on the sender's own screen: this message is waiting to be sent at this time.
-  final DateTime? scheduledFor;
-
   /// Server times: when it reached the other person's device, when it was read and, for a voice note, played.
   final DateTime? deliveredAt;
   final DateTime? readAt;
@@ -142,7 +138,6 @@ class ChatMessage {
     createdAt: createdAt,
     edited: edited,
     deleted: deleted,
-    scheduledFor: scheduledFor,
     deliveredAt: deliveredAt ?? this.deliveredAt,
     readAt: readAt ?? this.readAt,
     listenedAt: listenedAt ?? this.listenedAt,
