@@ -1,9 +1,9 @@
 import 'dart:async';
 import 'dart:math' as math;
-import 'dart:typed_data';
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../core/image_optimizer.dart';
 
@@ -1500,17 +1500,7 @@ class _PhotoContentState extends ConsumerState<_PhotoContent> {
                   );
                 }
                 return GestureDetector(
-                  onTap: !openable
-                      ? null
-                      : () => Navigator.push(
-                          context,
-                          PageRouteBuilder<void>(
-                            opaque: false,
-                            barrierColor: Colors.black,
-                            pageBuilder: (_, _, _) => _PhotoViewer(bytes: s.data!),
-                            transitionsBuilder: (_, a, _, child) => FadeTransition(opacity: a, child: child),
-                          ),
-                        ),
+                  onTap: !openable ? null : () => Navigator.push(context, chatPhotoRoute(s.data!)),
                   child: Image.memory(s.data!, fit: BoxFit.cover, gaplessPlayback: true),
                 );
               },
@@ -1522,31 +1512,177 @@ class _PhotoContentState extends ConsumerState<_PhotoContent> {
   }
 }
 
-class _PhotoViewer extends StatelessWidget {
-  const _PhotoViewer({required this.bytes, this.once = false});
+/// Opens a photo full screen with a quick fade.
+Route<void> chatPhotoRoute(Uint8List bytes, {bool once = false}) => PageRouteBuilder<void>(
+  opaque: false,
+  barrierColor: Colors.transparent,
+  transitionDuration: const Duration(milliseconds: 140),
+  reverseTransitionDuration: const Duration(milliseconds: 110),
+  pageBuilder: (_, _, _) => ChatPhotoViewer(bytes: bytes, once: once),
+  transitionsBuilder: (_, a, _, child) => FadeTransition(opacity: a, child: child),
+);
+
+/// True when a vertical drag of [dy] pixels, released at [velocity] pixels per second, should close the viewer.
+@visibleForTesting
+bool shouldDismissPhoto(double dy, double velocity) => dy.abs() > 90 || velocity.abs() > 700;
+
+/// Full-screen photo: no bars or arrows. Tap, or swipe anywhere (up or down), to go back; pinch to zoom, drag to pan
+/// while zoomed. Everything moves with the finger and settles in about a tenth of a second.
+class ChatPhotoViewer extends StatefulWidget {
+  const ChatPhotoViewer({super.key, required this.bytes, this.once = false});
   final Uint8List bytes;
   final bool once;
 
   @override
-  Widget build(BuildContext context) => Scaffold(
-    backgroundColor: Colors.black,
-    appBar: AppBar(
-      backgroundColor: Colors.black,
-      foregroundColor: Colors.white,
-      title: once ? const Text('View once', style: TextStyle(fontSize: 16)) : null,
-    ),
-    body: Column(
-      children: [
-        Expanded(
-          child: Center(child: InteractiveViewer(maxScale: 4, child: Image.memory(bytes))),
+  State<ChatPhotoViewer> createState() => _ChatPhotoViewerState();
+}
+
+class _ChatPhotoViewerState extends State<ChatPhotoViewer> with SingleTickerProviderStateMixin {
+  late final AnimationController _a = AnimationController(vsync: this);
+  double _scale = 1;
+  Offset _off = Offset.zero;
+  double _dy = 0;
+  double _s0 = 1;
+  Offset _o0 = Offset.zero;
+  Offset _f0 = Offset.zero;
+  bool _zooming = false;
+  bool _closing = false;
+  Size _size = Size.zero;
+
+  @override
+  void initState() {
+    super.initState();
+    SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersive);
+  }
+
+  @override
+  void dispose() {
+    SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+    _a.dispose();
+    super.dispose();
+  }
+
+  double get _bg => (1 - _dy.abs() / 320).clamp(0.0, 1.0);
+
+  Offset _clamp(Offset o, double scale) {
+    final mx = (_size.width * (scale - 1) / 2).clamp(0.0, 4000.0);
+    final my = (_size.height * (scale - 1) / 2).clamp(0.0, 4000.0);
+    return Offset(o.dx.clamp(-mx, mx), o.dy.clamp(-my, my));
+  }
+
+  void _animateTo({double scale = 1, Offset off = Offset.zero, double dy = 0, int ms = 120, VoidCallback? done}) {
+    final (s1, o1, d1) = (_scale, _off, _dy);
+    _a.stop();
+    _a.duration = Duration(milliseconds: ms);
+    void tick() {
+      final t = Curves.easeOutCubic.transform(_a.value);
+      setState(() {
+        _scale = s1 + (scale - s1) * t;
+        _off = Offset.lerp(o1, off, t)!;
+        _dy = d1 + (dy - d1) * t;
+      });
+    }
+
+    _a.removeListener(tick);
+    _a.addListener(tick);
+    _a.forward(from: 0).whenComplete(() {
+      _a.removeListener(tick);
+      done?.call();
+    });
+  }
+
+  void _close(double toward) {
+    if (_closing) return;
+    _closing = true;
+    _animateTo(
+      dy: toward * (_size.height * 0.7),
+      ms: 130,
+      done: () {
+        if (mounted) Navigator.pop(context);
+      },
+    );
+  }
+
+  void _start(ScaleStartDetails d) {
+    if (_closing) return;
+    _a.stop();
+    _s0 = _scale;
+    _o0 = _off;
+    _f0 = d.localFocalPoint;
+    _zooming = _scale > 1.01;
+  }
+
+  void _update(ScaleUpdateDetails d) {
+    if (_closing) return;
+    if (d.pointerCount >= 2) _zooming = true;
+    final center = Offset(_size.width / 2, _size.height / 2);
+    if (_zooming) {
+      final ns = (_s0 * d.scale).clamp(1.0, 4.0);
+      final raw = d.localFocalPoint - center - (_f0 - center - _o0) * (ns / _s0);
+      setState(() {
+        _scale = ns;
+        _off = _clamp(raw, ns);
+      });
+    } else {
+      setState(() => _dy += d.focalPointDelta.dy);
+    }
+  }
+
+  void _end(ScaleEndDetails d) {
+    if (_closing) return;
+    if (_zooming) {
+      if (_scale < 1.05) _animateTo(ms: 110);
+      return;
+    }
+    final v = d.velocity.pixelsPerSecond.dy;
+    if (shouldDismissPhoto(_dy, v)) {
+      _close(_dy == 0 ? (v < 0 ? -1 : 1) : _dy.sign);
+    } else {
+      _animateTo(ms: 110);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => LayoutBuilder(
+    builder: (context, box) {
+      _size = box.biggest;
+      return GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: () {
+          if (_scale <= 1.01) _close(1);
+        },
+        onScaleStart: _start,
+        onScaleUpdate: _update,
+        onScaleEnd: _end,
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            ColoredBox(color: Colors.black.withValues(alpha: _bg)),
+            Transform.translate(
+              offset: _off + Offset(0, _dy),
+              child: Transform.scale(
+                scale: _scale * (1 - (_dy.abs() / 320).clamp(0.0, 1.0) * 0.16),
+                child: Image.memory(widget.bytes, fit: BoxFit.contain, gaplessPlayback: true),
+              ),
+            ),
+            if (widget.once)
+              Positioned(
+                left: 0,
+                right: 0,
+                bottom: 28,
+                child: Opacity(
+                  opacity: _bg,
+                  child: const Text(
+                    'This photo disappears when you close it.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: Colors.white70, decoration: TextDecoration.none, fontSize: 14),
+                  ),
+                ),
+              ),
+          ],
         ),
-        if (once)
-          const Padding(
-            padding: EdgeInsets.only(bottom: 24),
-            child: Text('This photo disappears when you close it.', style: TextStyle(color: Colors.white70)),
-          ),
-      ],
-    ),
+      );
+    },
   );
 }
 
@@ -1866,14 +2002,7 @@ class _OnceTileState extends ConsumerState<_OnceTile> {
       final backend = ref.read(backendProvider);
       final bytes = await backend.imageBytes(m);
       if (!mounted) return;
-      await Navigator.push(
-        context,
-        PageRouteBuilder<void>(
-          opaque: true,
-          pageBuilder: (_, _, _) => _PhotoViewer(bytes: bytes, once: true),
-          transitionsBuilder: (_, a, _, child) => FadeTransition(opacity: a, child: child),
-        ),
-      );
+      await Navigator.push(context, chatPhotoRoute(bytes, once: true));
       // Closed: the photo is gone from this phone.
       await backend.markPhotoViewed(widget.peerId, m.id);
     } catch (_) {
