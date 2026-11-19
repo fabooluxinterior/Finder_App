@@ -225,4 +225,20 @@ void main() {
     expect(reportPriority('harassment'), 'high');
     expect(reportPriority('other'), 'normal');
   });
+
+  test('fun lines and calling days: add, edit, disable, delete; days are saved', () async {
+    final api = DemoAdminApi();
+    final before = (await api.funLines()).length;
+    await api.saveFunLine(slot: 'welcome', text: 'Swagatham!', enabled: true);
+    final added = (await api.funLines()).firstWhere((l) => l.text == 'Swagatham!');
+    expect(added.slot, 'welcome');
+    await api.saveFunLine(id: added.id, slot: 'tip', text: 'Chaya kudikku', enabled: false);
+    final edited = (await api.funLines()).firstWhere((l) => l.id == added.id);
+    expect((edited.slot, edited.text, edited.enabled), ('tip', 'Chaya kudikku', false));
+    await api.deleteFunLine(added.id);
+    expect((await api.funLines()).length, before);
+    expect(await api.callDays(), 4);
+    await api.setCallDays(3);
+    expect(await api.callDays(), 3);
+  });
 }

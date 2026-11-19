@@ -381,3 +381,30 @@ String reportPriority(String reason) => switch (reason) {
   'malicious_link' => 'high',
   _ => 'normal',
 };
+
+/// One editable Malayalam / Manglish line shown in the app (welcome, tips, call lock…).
+class FunLine {
+  const FunLine({required this.id, required this.slot, required this.text, required this.enabled, required this.sort});
+  final String id;
+  final String slot;
+  final String text;
+  final bool enabled;
+  final int sort;
+  factory FunLine.fromJson(Map<String, dynamic> j) => FunLine(
+    id: j['id'] as String,
+    slot: j['slot'] as String,
+    text: j['text'] as String,
+    enabled: j['enabled'] as bool? ?? true,
+    sort: (j['sort'] as num?)?.toInt() ?? 0,
+  );
+}
+
+/// Where each kind of line appears in the app, for the dashboard.
+const funSlots = <String, String>{
+  'welcome': 'Welcome card (new users)',
+  'tip': 'Tips',
+  'call_locked': 'Call locked (use {n} for days left)',
+  'call_ready': 'Call opened',
+  'call_started': 'Call started',
+  'empty_chat': 'Empty chat',
+};

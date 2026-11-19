@@ -6,6 +6,28 @@ import '../ui.dart';
 
 /// Messaging → Notifications. Custom popup notifications to users' phones.
 /// Each send is also added to the user's in-app notification list and logged.
+class _Template {
+  const _Template(this.name, this.title, this.body, this.audience);
+  final String name, title, body, audience;
+}
+
+/// One tap fills the form; edit the words before sending. Audience 'free' = people who are not on Fast-Track.
+const _templates = [
+  _Template(
+    'Fast-Track offer',
+    'Fast-Track-il chernnolu 🚀',
+    'Chat cheyyaan, request ayakkaan, ellam thurakkaam. Ippo Fast-Track edukku, nalla aal kaathirikkunnu!',
+    'free',
+  ),
+  _Template(
+    'Trial ending soon',
+    'Trial theerunnu ⏳',
+    'Ninte free trial udane theerum. Chat nirthaathe Fast-Track edukku, chaya kudikkunna pole easy 😄',
+    'plan',
+  ),
+  _Template('Say hello', 'Oru “Hi” ayakku 💬', 'Matches ninte chat-inu kaathirikkunnu. Oru chodyam chodich thudangu!', 'all'),
+];
+
 class NotificationsPage extends StatefulWidget {
   const NotificationsPage({super.key, required this.api});
   final AdminApi api;
@@ -86,6 +108,24 @@ class _NotificationsPageState extends State<NotificationsPage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
+            const Text('Ready-made messages', style: TextStyle(color: muted, fontSize: 13)),
+            const SizedBox(height: 6),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                for (final t in _templates)
+                  ActionChip(
+                    label: Text(t.name),
+                    onPressed: () => setState(() {
+                      _title.text = t.title;
+                      _body.text = t.body;
+                      _audience = t.audience;
+                    }),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 14),
             DropdownButtonFormField<String>(
               initialValue: _audience,
               decoration: const InputDecoration(labelText: 'Send to'),

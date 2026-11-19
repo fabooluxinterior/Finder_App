@@ -158,8 +158,22 @@ class E2eeEngine {
 
   /// Encrypts [payload] for every active device of [peerUserId] and for
   /// this user's other devices. Returns one envelope per target device.
+  // The device list of a chat changes rarely: keep it for a short while so each message does not wait for the network.
+  final _deviceCache = <String, (DateTime, List<RemoteDevice>)>{};
+  static const _deviceCacheFor = Duration(seconds: 45);
+
+  Future<List<RemoteDevice>> _devicesOf(String peerUserId) async {
+    final key = '${_userId!}|$peerUserId';
+    final hit = _deviceCache[key];
+    if (hit != null && DateTime.now().difference(hit.$1) < _deviceCacheFor) return hit.$2;
+    final fresh = await directory.activeDevices([peerUserId, _userId!]);
+    // Only a complete answer is kept (a peer who has not opened the app yet is looked up again every time).
+    if (fresh.any((d) => d.userId == peerUserId)) _deviceCache[key] = (DateTime.now(), fresh);
+    return fresh;
+  }
+
   Future<List<Envelope>> encryptFor(String peerUserId, Uint8List payload) => _locked(() async {
-    final devices = (await directory.activeDevices([peerUserId, _userId!])).where((d) => d.id != deviceId).toList();
+    final devices = (await _devicesOf(peerUserId)).where((d) => d.id != deviceId).toList();
     if (!devices.any((d) => d.userId == peerUserId)) {
       throw const E2eeException('They need to open the app once before you can message them securely.');
     }

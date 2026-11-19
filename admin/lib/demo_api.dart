@@ -682,6 +682,54 @@ class DemoAdminApi extends AdminApi {
   @override
   Future<void> botDeleteReply(String id) async => _botReplies.removeWhere((r) => r.id == id);
 
+  final _fun = <FunLine>[
+    const FunLine(id: 'f1', slot: 'welcome', text: 'Vouby-lekku swagatham! Oru chai edukkam ☕', enabled: true, sort: 0),
+    const FunLine(
+      id: 'f2',
+      slot: 'call_locked',
+      text: 'Aadyam onnu parichayappedu. {n} divasam koodi kshamikku 😄',
+      enabled: true,
+      sort: 0,
+    ),
+    const FunLine(
+      id: 'f3',
+      slot: 'tip',
+      text: 'Oru nalla photo + oru nalla bio = pakuthi joli kazhinju 📸',
+      enabled: true,
+      sort: 0,
+    ),
+  ];
+  var _callDays = 4;
+
+  @override
+  Future<List<FunLine>> funLines() async => List.of(_fun);
+
+  @override
+  Future<void> saveFunLine({String? id, required String slot, required String text, required bool enabled, int sort = 0}) async {
+    final i = id == null ? -1 : _fun.indexWhere((f) => f.id == id);
+    final line = FunLine(
+      id: id ?? 'f${_fun.length + 1}${DateTime.now().millisecondsSinceEpoch}',
+      slot: slot,
+      text: text,
+      enabled: enabled,
+      sort: sort,
+    );
+    if (i >= 0) {
+      _fun[i] = line;
+    } else {
+      _fun.add(line);
+    }
+  }
+
+  @override
+  Future<void> deleteFunLine(String id) async => _fun.removeWhere((f) => f.id == id);
+
+  @override
+  Future<int> callDays() async => _callDays;
+
+  @override
+  Future<void> setCallDays(int days) async => _callDays = days;
+
   @override
   Future<List<BotConversationRow>> botConversations() async => [
     BotConversationRow(

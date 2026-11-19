@@ -90,6 +90,13 @@ abstract class AdminApi {
   Future<void> botDeleteReply(String id);
   Future<List<BotConversationRow>> botConversations();
 
+  // Fun lines and calling (admins)
+  Future<List<FunLine>> funLines();
+  Future<void> saveFunLine({String? id, required String slot, required String text, required bool enabled, int sort = 0});
+  Future<void> deleteFunLine(String id);
+  Future<int> callDays();
+  Future<void> setCallDays(int days);
+
   // Messaging → Notifications (admins only)
   Future<PushSendResult> sendPush({required String title, required String body, required String audience, String? phone});
   Future<List<PushCampaign>> pushCampaigns();
@@ -408,6 +415,28 @@ class SupabaseAdminApi extends AdminApi {
 
   @override
   Future<void> botDeleteReply(String id) => _guard(() => _db.rpc('admin_bot_delete_reply', params: {'p_id': id}));
+
+  @override
+  Future<List<FunLine>> funLines() =>
+      _guard(() async => [for (final r in _rows(await _db.rpc('admin_fun_lines'))) FunLine.fromJson(r)]);
+
+  @override
+  Future<void> saveFunLine({String? id, required String slot, required String text, required bool enabled, int sort = 0}) =>
+      _guard(
+        () => _db.rpc(
+          'admin_fun_line_save',
+          params: {'p_id': id, 'p_slot': slot, 'p_text': text, 'p_enabled': enabled, 'p_sort': sort},
+        ),
+      );
+
+  @override
+  Future<void> deleteFunLine(String id) => _guard(() => _db.rpc('admin_fun_line_delete', params: {'p_id': id}));
+
+  @override
+  Future<int> callDays() => _guard(() async => ((await _db.rpc('call_unlock_days')) as num?)?.toInt() ?? 4);
+
+  @override
+  Future<void> setCallDays(int days) => _guard(() => _db.rpc('admin_set_call_days', params: {'p_days': days}));
 
   @override
   Future<List<BotConversationRow>> botConversations() =>
