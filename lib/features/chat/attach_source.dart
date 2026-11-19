@@ -8,9 +8,12 @@ import 'package:photo_manager/photo_manager.dart';
 
 /// One picture in the phone's gallery.
 class GalleryItem {
-  const GalleryItem(this.id, [this.handle]);
+  const GalleryItem(this.id, [this.handle, this.takenAt]);
   final String id;
   final Object? handle;
+
+  /// When the picture was taken (null when unknown): used to group the gallery by day.
+  final DateTime? takenAt;
 }
 
 /// A folder in the phone's gallery (Camera, Screenshots, WhatsApp Images…). The first one is "Recent": everything.
@@ -66,6 +69,9 @@ class DeviceAttachSource implements AttachSource {
   bool _flash = false;
   AssetPathEntity? _all;
 
+  /// Newest picture first (the phone's default order starts from the oldest).
+  static final _newestFirst = FilterOptionGroup(orders: [const OrderOption()]);
+
   @override
   bool get hasCamera => _cam?.value.isInitialized ?? false;
   @override
@@ -114,7 +120,7 @@ class DeviceAttachSource implements AttachSource {
     try {
       final p = await PhotoManager.requestPermissionExtend();
       if (!p.hasAccess) return false;
-      final paths = await PhotoManager.getAssetPathList(onlyAll: true, type: RequestType.image);
+      final paths = await PhotoManager.getAssetPathList(onlyAll: true, type: RequestType.image, filterOption: _newestFirst);
       if (paths.isEmpty) return false;
       _all = paths.first;
       _gallery = true;
@@ -191,7 +197,7 @@ class DeviceAttachSource implements AttachSource {
   @override
   Future<List<GalleryAlbum>> albums() async {
     try {
-      final paths = await PhotoManager.getAssetPathList(type: RequestType.image);
+      final paths = await PhotoManager.getAssetPathList(type: RequestType.image, filterOption: _newestFirst);
       final out = <GalleryAlbum>[];
       for (final p in paths) {
         final n = await p.assetCountAsync;
@@ -212,7 +218,7 @@ class DeviceAttachSource implements AttachSource {
     final p = (album?.handle as AssetPathEntity?) ?? _all;
     if (p == null) return const [];
     final assets = await p.getAssetListPaged(page: page, size: size);
-    return [for (final a in assets) GalleryItem(a.id, a)];
+    return [for (final a in assets) GalleryItem(a.id, a, a.createDateTime)];
   }
 
   @override

@@ -1534,6 +1534,11 @@ class DemoBackend implements FinderBackend {
   Future<void> touchPresence() async {}
 
   @override
+  Stream<PeerPresence?> watchPeerPresence(String peerId) async* {
+    yield await peerPresence(peerId);
+  }
+
+  @override
   Future<void> presenceOffline() async {}
 
   @override

@@ -51,4 +51,8 @@ select pg_temp.as_user('01');
 select pg_temp.expect(public.peer_presence('00000000-0000-0000-0000-000000000004') is not null, 'connected before blocking');
 select public.block_user('00000000-0000-0000-0000-000000000004');
 select pg_temp.expect(public.peer_presence('00000000-0000-0000-0000-000000000004') is null, 'a blocked person is hidden');
-select pg_temp.expect_fail($$select * from public.user_presence$$, 'table is not readable directly');
+-- Direct reads are limited by row policy (migration 20261211): never a blocked person, never a stranger.
+select pg_temp.expect((select count(*) from public.user_presence where user_id = '00000000-0000-0000-0000-000000000004') = 0, 'a blocked person''s row is not readable');
+select pg_temp.as_user('03');
+select pg_temp.expect((select count(*) from public.user_presence where user_id <> '00000000-0000-0000-0000-000000000003') = 0, 'a stranger reads no one else''s row');
+select pg_temp.expect_fail($$update public.user_presence set last_active_at = now()$$, 'presence rows cannot be written directly');

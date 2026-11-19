@@ -337,7 +337,18 @@ class _ChatScreenState extends ConsumerState<ChatScreen> with WidgetsBindingObse
       if (mounted) _openChat.open(widget.peer.id);
     });
     _refreshPresence();
-    _presenceTimer = Timer.periodic(const Duration(seconds: 30), (_) => _refreshPresence());
+    // Instant: the server pushes every change of their online / last seen while this chat is open.
+    _presenceSub = _backend.watchPeerPresence(widget.peer.id).listen((p) {
+      if (!mounted) return;
+      if (p?.lastActive != _lastActive || (p?.online ?? false) != _online) {
+        setState(() {
+          _lastActive = p?.lastActive;
+          _online = p?.online ?? false;
+        });
+      }
+    }, onError: (_) {});
+    // Safety net (e.g. an app that was killed without saying goodbye stops being online after 90 s).
+    _presenceTimer = Timer.periodic(const Duration(seconds: 10), (_) => _refreshPresence());
     _refreshDisappearing();
     _syncScheduled();
     _disTimer = Timer.periodic(const Duration(seconds: 20), (_) {
@@ -347,6 +358,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> with WidgetsBindingObse
   }
 
   bool _online = false;
+  StreamSubscription<PeerPresence?>? _presenceSub;
 
   Future<void> _refreshPresence() async {
     final p = await _backend.peerPresence(widget.peer.id);
@@ -448,6 +460,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> with WidgetsBindingObse
     _heartbeat?.cancel();
     _typingIdle?.cancel();
     _presenceTimer?.cancel();
+    _presenceSub?.cancel();
     _disTimer?.cancel();
     _highlightTimer?.cancel();
     // _mine only leaves idle while sharing is on (see _setMine), so no provider read is needed here.
@@ -1560,7 +1573,13 @@ class _PhotoContentState extends ConsumerState<_PhotoContent> {
 }
 
 /// Opens a photo full screen with a quick fade.
-Route<void> chatPhotoRoute(Uint8List bytes, {bool once = false}) => PageRouteBuilder<void>(
+Route<void> chatPhotoRoute(Uint8List bytes, {bool once = false}) {
+  // No keyboard coming back when the photo closes (it would resize the chat under it).
+  FocusManager.instance.primaryFocus?.unfocus();
+  return _chatPhotoRoute(bytes, once: once);
+}
+
+Route<void> _chatPhotoRoute(Uint8List bytes, {bool once = false}) => PageRouteBuilder<void>(
   opaque: false,
   barrierColor: Colors.transparent,
   transitionDuration: const Duration(milliseconds: 140),
@@ -1597,14 +1616,7 @@ class _ChatPhotoViewerState extends State<ChatPhotoViewer> with SingleTickerProv
   Size _size = Size.zero;
 
   @override
-  void initState() {
-    super.initState();
-    SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersive);
-  }
-
-  @override
   void dispose() {
-    SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     _a.dispose();
     super.dispose();
   }
@@ -1693,40 +1705,48 @@ class _ChatPhotoViewerState extends State<ChatPhotoViewer> with SingleTickerProv
   Widget build(BuildContext context) => LayoutBuilder(
     builder: (context, box) {
       _size = box.biggest;
-      return GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: () {
-          if (_scale <= 1.01) _close(1);
-        },
-        onScaleStart: _start,
-        onScaleUpdate: _update,
-        onScaleEnd: _end,
-        child: Stack(
-          fit: StackFit.expand,
-          children: [
-            ColoredBox(color: Colors.black.withValues(alpha: _bg)),
-            Transform.translate(
-              offset: _off + Offset(0, _dy),
-              child: Transform.scale(
-                scale: _scale * (1 - (_dy.abs() / 320).clamp(0.0, 1.0) * 0.16),
-                child: Image.memory(widget.bytes, fit: BoxFit.contain, gaplessPlayback: true),
-              ),
-            ),
-            if (widget.once)
-              Positioned(
-                left: 0,
-                right: 0,
-                bottom: 28,
-                child: Opacity(
-                  opacity: _bg,
-                  child: const Text(
-                    'This photo disappears when you close it.',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(color: Colors.white70, decoration: TextDecoration.none, fontSize: 14),
-                  ),
+      return AnnotatedRegion<SystemUiOverlayStyle>(
+        value: const SystemUiOverlayStyle(
+          statusBarColor: Colors.transparent,
+          systemNavigationBarColor: Colors.transparent,
+          statusBarIconBrightness: Brightness.light,
+          systemNavigationBarIconBrightness: Brightness.light,
+        ),
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: () {
+            if (_scale <= 1.01) _close(1);
+          },
+          onScaleStart: _start,
+          onScaleUpdate: _update,
+          onScaleEnd: _end,
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              ColoredBox(color: Colors.black.withValues(alpha: _bg)),
+              Transform.translate(
+                offset: _off + Offset(0, _dy),
+                child: Transform.scale(
+                  scale: _scale * (1 - (_dy.abs() / 320).clamp(0.0, 1.0) * 0.16),
+                  child: Image.memory(widget.bytes, fit: BoxFit.contain, gaplessPlayback: true),
                 ),
               ),
-          ],
+              if (widget.once)
+                Positioned(
+                  left: 0,
+                  right: 0,
+                  bottom: 28,
+                  child: Opacity(
+                    opacity: _bg,
+                    child: const Text(
+                      'This photo disappears when you close it.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(color: Colors.white70, decoration: TextDecoration.none, fontSize: 14),
+                    ),
+                  ),
+                ),
+            ],
+          ),
         ),
       );
     },

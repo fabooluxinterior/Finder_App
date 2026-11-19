@@ -57,7 +57,10 @@ class FakeAttachSource implements AttachSource {
   @override
   Future<List<GalleryItem>> recent(int page, int size, {GalleryAlbum? album}) async {
     final n = album?.id == 'shots' ? 4 : count;
-    return [for (var i = page * size; i < n && i < (page + 1) * size; i++) GalleryItem('${album?.id ?? 'g'}$i')];
+    return [
+      for (var i = page * size; i < n && i < (page + 1) * size; i++)
+        GalleryItem('${album?.id ?? 'g'}$i', null, DateTime.now().subtract(Duration(days: i ~/ 3))),
+    ];
   }
 
   @override
@@ -106,10 +109,12 @@ void main() {
     await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 100)));
     await t.pump(const Duration(milliseconds: 100));
     expect(find.text('Recent'), findsOneWidget);
+    expect(find.text('Today'), findsOneWidget, reason: 'the gallery is grouped by day, newest first');
+    expect(find.text('Yesterday'), findsOneWidget);
     expect(find.bySemanticsLabel('Take photo'), findsOneWidget);
 
     // Pick three, in order; the circles are numbered.
-    final tiles = find.descendant(of: find.byType(GridView), matching: find.byType(Image));
+    final tiles = find.descendant(of: find.byType(CustomScrollView), matching: find.byType(Image));
     expect(tiles, findsWidgets);
     for (var k = 0; k < 3; k++) {
       await t.tap(tiles.at(k));
@@ -149,7 +154,7 @@ void main() {
     await t.pump(const Duration(milliseconds: 100));
     await t.pump(const Duration(milliseconds: 500));
     expect(find.text('Screenshots'), findsOneWidget, reason: 'the title now shows the folder');
-    final tiles = find.descendant(of: find.byType(GridView), matching: find.byType(Image));
+    final tiles = find.descendant(of: find.byType(CustomScrollView), matching: find.byType(Image));
     expect(tiles, findsNWidgets(4));
   });
 

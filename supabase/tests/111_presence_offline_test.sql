@@ -49,4 +49,6 @@ select pg_temp.expect((select not online from public.peer_presence_v2('00000000-
 -- strangers see nothing
 select pg_temp.as_user('03');
 select pg_temp.expect((select count(*) = 0 from public.peer_presence_v2('00000000-0000-0000-0000-000000000002')), 'a stranger sees no presence');
-do $$ begin perform 1 from public.user_presence; raise exception 'CHECK FAILED: user_presence readable'; exception when insufficient_privilege then null; end $$;
+select pg_temp.expect((select count(*) = 0 from public.user_presence), 'a stranger cannot read presence rows directly either');
+select pg_temp.as_user('01');
+select pg_temp.expect((select count(*) = 1 from public.user_presence), 'a connected person can read the peer row (for live updates)');

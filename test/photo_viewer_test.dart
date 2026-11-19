@@ -1,8 +1,8 @@
-import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:finder_app/features/chat/chat_screen.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 Future<Uint8List> _png() async {
@@ -43,6 +43,21 @@ void main() {
     expect(shouldDismissPhoto(30, 900), isTrue);
     expect(shouldDismissPhoto(-30, -900), isTrue);
     expect(shouldDismissPhoto(40, 100), isFalse);
+  });
+
+  testWidgets('opening and closing never switches the system bars (that re-lays out the page underneath)', (t) async {
+    final calls = <String>[];
+    t.binding.defaultBinaryMessenger.setMockMethodCallHandler(SystemChannels.platform, (c) async {
+      calls.add(c.method);
+      return null;
+    });
+    addTearDown(() => t.binding.defaultBinaryMessenger.setMockMethodCallHandler(SystemChannels.platform, null));
+    final png = (await t.runAsync(_png))!;
+    await _open(t, png);
+    await t.tap(find.byType(ChatPhotoViewer));
+    await _settle(t);
+    expect(find.byType(ChatPhotoViewer), findsNothing);
+    expect(calls.where((m) => m.contains('SystemUIMode') || m.contains('SystemUiMode')), isEmpty);
   });
 
   testWidgets('full screen: no app bar or back arrow; a tap closes it quickly', (t) async {

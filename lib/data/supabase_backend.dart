@@ -1357,6 +1357,46 @@ class SupabaseBackend implements FinderBackend {
   }
 
   @override
+  Stream<PeerPresence?> watchPeerPresence(String peerId) {
+    late StreamController<PeerPresence?> out;
+    RealtimeChannel? ch;
+    PeerPresence? fromRow(Map<String, dynamic> r) {
+      final at = r['last_active_at'];
+      if (at is! String) return null;
+      final last = DateTime.parse(at).toLocal();
+      final off = r['offline_at'] is String ? DateTime.parse(r['offline_at'] as String).toLocal() : null;
+      final online = (off == null || last.isAfter(off)) && DateTime.now().difference(last).inSeconds < 90;
+      return PeerPresence(last, online);
+    }
+
+    out = StreamController<PeerPresence?>(
+      onListen: () async {
+        out.add(await peerPresence(peerId));
+        try {
+          ch = _db.channel('presence:$peerId:${_uuid.v4()}');
+          ch!
+              .onPostgresChanges(
+                event: PostgresChangeEvent.all,
+                schema: 'public',
+                table: 'user_presence',
+                filter: PostgresChangeFilter(type: PostgresChangeFilterType.eq, column: 'user_id', value: peerId),
+                callback: (p) {
+                  final row = p.newRecord;
+                  if (row.isNotEmpty && !out.isClosed) out.add(fromRow(row));
+                },
+              )
+              .subscribe();
+        } catch (_) {} // the periodic refresh in the chat still keeps it right
+      },
+      onCancel: () async {
+        final c = ch;
+        if (c != null) await _db.removeChannel(c);
+      },
+    );
+    return out.stream;
+  }
+
+  @override
   Future<void> presenceOffline() async {
     try {
       await _db.rpc('presence_offline');

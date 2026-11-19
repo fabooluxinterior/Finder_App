@@ -3,6 +3,7 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:intl/intl.dart';
 
 import '../../core/widgets.dart';
 import 'attach_source.dart';
@@ -496,18 +497,57 @@ class _AttachScreenState extends ConsumerState<AttachScreen> with SingleTickerPr
     );
   }
 
-  Widget _gridView() => GridView.builder(
-    controller: _grid,
-    padding: EdgeInsets.only(bottom: _picked.isEmpty ? 12 : 96),
-    gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: 3, mainAxisSpacing: 2, crossAxisSpacing: 2),
-    itemCount: _items.length,
-    itemBuilder: (_, i) => _Tile(
-      thumb: _thumb(_items[i]),
-      order: _picked.indexOf(_items[i].id) + 1,
-      selecting: true,
-      onTap: () => _toggle(_items[i]),
-    ),
-  );
+  /// The pictures in day groups, newest day first, each with a date heading (Today, Yesterday, Monday, 3 Nov, 3 Nov 2025).
+  Widget _gridView() {
+    final groups = <(String, List<GalleryItem>)>[];
+    for (final i in _items) {
+      final label = _dayLabel(i.takenAt);
+      if (groups.isEmpty || groups.last.$1 != label) groups.add((label, []));
+      groups.last.$2.add(i);
+    }
+    final dated = _items.any((i) => i.takenAt != null);
+    return CustomScrollView(
+      controller: _grid,
+      slivers: [
+        for (final g in groups) ...[
+          if (dated)
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(14, 12, 14, 6),
+                child: Text(
+                  g.$1,
+                  style: const TextStyle(color: Colors.white70, fontSize: 13, fontWeight: FontWeight.w600),
+                ),
+              ),
+            ),
+          SliverGrid(
+            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: 3,
+              mainAxisSpacing: 2,
+              crossAxisSpacing: 2,
+            ),
+            delegate: SliverChildBuilderDelegate((_, k) {
+              final it = g.$2[k];
+              return _Tile(thumb: _thumb(it), order: _picked.indexOf(it.id) + 1, selecting: true, onTap: () => _toggle(it));
+            }, childCount: g.$2.length),
+          ),
+        ],
+        SliverToBoxAdapter(child: SizedBox(height: _picked.isEmpty ? 12 : 96)),
+      ],
+    );
+  }
+
+  static String _dayLabel(DateTime? t) {
+    if (t == null) return '';
+    final now = DateTime.now();
+    final day = DateTime(t.year, t.month, t.day);
+    final today = DateTime(now.year, now.month, now.day);
+    final diff = today.difference(day).inDays;
+    if (diff == 0) return 'Today';
+    if (diff == 1) return 'Yesterday';
+    if (diff < 7) return DateFormat('EEEE').format(t);
+    return DateFormat(t.year == now.year ? 'd MMM' : 'd MMM yyyy').format(t);
+  }
 
   Widget _sendBar(MediaQueryData mq) => Container(
     padding: EdgeInsets.fromLTRB(16, 12, 16, 16 + mq.padding.bottom),

@@ -198,6 +198,9 @@ abstract class FinderBackend {
   /// Last seen plus whether they are in the app right now; null when unknown or not allowed.
   Future<PeerPresence?> peerPresence(String peerId);
 
+  /// Live online / last seen for one person: the current value first, then every change as it happens.
+  Stream<PeerPresence?> watchPeerPresence(String peerId);
+
   /// Tells the server this phone left the app (screen locked or app closed), so "online" ends at once.
   Future<void> presenceOffline();
 
