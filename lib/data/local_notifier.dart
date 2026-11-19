@@ -16,6 +16,10 @@ abstract class LocalNotifier {
   /// Shows (or replaces) one notification per chat. The text of a message is
   /// never put on the lock screen.
   Future<void> showMessage({required String peerId, required String name});
+
+  /// The phone's normal notification popup for something that is not a chat message (verified, call open,
+  /// request, dashboard announcement…).
+  Future<void> showNotice({required int id, required String title, required String body, String kind = ''});
 }
 
 class NoopLocalNotifier implements LocalNotifier {
@@ -26,6 +30,8 @@ class NoopLocalNotifier implements LocalNotifier {
   Future<bool> requestPermission() async => false;
   @override
   Future<void> showMessage({required String peerId, required String name}) async {}
+  @override
+  Future<void> showNotice({required int id, required String title, required String body, String kind = ''}) async {}
 }
 
 class AndroidLocalNotifier implements LocalNotifier {
@@ -85,6 +91,29 @@ class AndroidLocalNotifier implements LocalNotifier {
             color: Color(0xFFFF5A3D),
             category: AndroidNotificationCategory.message,
             visibility: NotificationVisibility.private,
+          ),
+        ),
+      );
+    } catch (_) {}
+  }
+
+  @override
+  Future<void> showNotice({required int id, required String title, required String body, String kind = ''}) async {
+    try {
+      final channel = kind == 'announcement' ? ('announcements', 'Announcements') : ('updates', 'Requests and updates');
+      await _plugin.show(
+        id: id & 0x7fffffff,
+        title: title,
+        body: body,
+        notificationDetails: NotificationDetails(
+          android: AndroidNotificationDetails(
+            channel.$1,
+            channel.$2,
+            importance: Importance.high,
+            priority: Priority.high,
+            icon: 'ic_notification',
+            color: const Color(0xFFFF5A3D),
+            styleInformation: BigTextStyleInformation(body),
           ),
         ),
       );

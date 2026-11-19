@@ -32,6 +32,8 @@ import '../profile/profile_detail_screen.dart';
 import '../safety/safety_actions.dart';
 import '../security/safety_number_screen.dart';
 import '../../core/view_once_icon.dart';
+import '../../models/fun_lines.dart';
+import '../calls/call_gate.dart';
 import 'attach_screen.dart';
 import 'emoji_panel.dart';
 import 'media_editor_screen.dart';
@@ -221,6 +223,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> with WidgetsBindingObse
 
   // ------------------------------------------------ disappearing messages ----
   Disappearing _dis = Disappearing.off;
+  bool _disLoaded = false;
   Timer? _disTimer;
 
   Future<void> _refreshDisappearing() async {
@@ -228,7 +231,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> with WidgetsBindingObse
       final d = await _backend.disappearing(widget.peer.id);
       if (!mounted) return;
       final me = _backend.currentUserId;
-      if (d != _dis && d.setBy != null && d.setBy != me) {
+      // Only a change made while the chat is open is announced; opening a chat says nothing.
+      if (_disLoaded && d != _dis && d.setBy != null && d.setBy != me) {
         showSnack(
           context,
           d.on
@@ -238,6 +242,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> with WidgetsBindingObse
         );
       }
       if (d.on) await _backend.purgeExpired(widget.peer.id);
+      _disLoaded = true;
       if (mounted) setState(() => _dis = d);
     } catch (_) {
       if (mounted) setState(() {}); // still hide anything that has expired
@@ -955,6 +960,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> with WidgetsBindingObse
                     ),
                   ),
                 ),
+                CallButton(peer: widget.peer, connectedAt: conn?.connectedAt),
                 PopupMenuButton<String>(
                   icon: VIcon(VIcons.more, size: 24, color: c.ink),
                   color: c.surface,
@@ -993,6 +999,40 @@ class _ChatScreenState extends ConsumerState<ChatScreen> with WidgetsBindingObse
       ),
       body: Column(
         children: [
+          // Only when disappearing messages are on: a thin bar pinned under the title.
+          AnimatedSize(
+            duration: Motion.of(context, Motion.fast),
+            curve: Motion.easeOut,
+            child: !_dis.on
+                ? const SizedBox(width: double.infinity)
+                : Material(
+                    color: c.surface,
+                    child: InkWell(
+                      onTap: _chooseDisappearing,
+                      child: Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 7),
+                        decoration: BoxDecoration(
+                          border: Border(bottom: BorderSide(color: c.hair)),
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(Icons.timer_outlined, size: 15, color: c.accent),
+                            const SizedBox(width: 6),
+                            Flexible(
+                              child: Text(
+                                'Messages disappear after ${Disappearing.label(_dis.seconds)}',
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(fontSize: 12.5, color: c.ink2),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+          ),
           Expanded(
             child: Stack(
               children: [
@@ -1076,27 +1116,6 @@ class _ChatScreenState extends ConsumerState<ChatScreen> with WidgetsBindingObse
               ],
             ),
           ),
-          if (_dis.on)
-            GestureDetector(
-              onTap: _chooseDisappearing,
-              child: Padding(
-                padding: const EdgeInsets.only(bottom: 6),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(Icons.timer_outlined, size: 14, color: c.muted),
-                    const SizedBox(width: 6),
-                    Flexible(
-                      child: Text(
-                        'Messages disappear after ${Disappearing.label(_dis.seconds)}',
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(fontSize: 12.5, color: c.muted),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
           PeerStateLine(state: theirState),
           SafeArea(
             top: false,
@@ -1846,13 +1865,14 @@ class _PrivacyPill extends StatelessWidget {
   }
 }
 
-class _ThreadIntro extends StatelessWidget {
+class _ThreadIntro extends ConsumerWidget {
   const _ThreadIntro({required this.peer, required this.encrypted});
   final PublicProfile peer;
   final bool encrypted;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final fun = (ref.watch(funLinesProvider).value ?? FunLines.defaults).pick('empty_chat', name: peer.firstName);
     final c = context.fc;
     final t = Theme.of(context).textTheme;
     return Center(
@@ -1872,6 +1892,14 @@ class _ThreadIntro extends StatelessWidget {
               textAlign: TextAlign.center,
               style: t.bodyMedium?.copyWith(color: c.muted),
             ),
+            if (fun.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              Text(
+                fun,
+                textAlign: TextAlign.center,
+                style: t.bodyMedium?.copyWith(color: c.ink2),
+              ),
+            ],
           ],
         ),
       ),

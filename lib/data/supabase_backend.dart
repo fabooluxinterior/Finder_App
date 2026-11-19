@@ -14,6 +14,7 @@ import '../models/access.dart';
 import '../models/follow_request.dart';
 import '../models/message.dart';
 import '../models/scheduled_message.dart';
+import '../models/fun_lines.dart';
 import '../models/presence.dart';
 import '../models/moderation.dart';
 import '../models/profile.dart';
@@ -908,6 +909,14 @@ class SupabaseBackend implements FinderBackend {
         callback: (_) => controller.add(null),
       );
     }
+    // Anything new in my notifications (verified, call opened, request…) refreshes the app at once.
+    channel.onPostgresChanges(
+      event: PostgresChangeEvent.insert,
+      schema: 'public',
+      table: 'user_notifications',
+      filter: PostgresChangeFilter(type: PostgresChangeFilterType.eq, column: 'user_id', value: me),
+      callback: (_) => controller.add(null),
+    );
     channel.subscribe();
     final sub = _social.stream.listen(controller.add);
     unawaited(_ready().catchError((_) {}));
@@ -954,6 +963,36 @@ class SupabaseBackend implements FinderBackend {
     final rows = await _db.from('user_notifications').select().order('created_at', ascending: false).limit(50);
     return [for (final r in rows) AppNotification.fromJson(r)];
   });
+
+  @override
+  Stream<AppNotification> newNotifications() {
+    late StreamController<AppNotification> out;
+    RealtimeChannel? ch;
+    out = StreamController<AppNotification>(
+      onListen: () {
+        final me = currentUserId;
+        if (me == null) return;
+        ch = _db.channel('notices:$me:${_uuid.v4()}')
+          ..onPostgresChanges(
+            event: PostgresChangeEvent.insert,
+            schema: 'public',
+            table: 'user_notifications',
+            filter: PostgresChangeFilter(type: PostgresChangeFilterType.eq, column: 'user_id', value: me),
+            callback: (p) {
+              try {
+                out.add(AppNotification.fromJson(p.newRecord));
+              } catch (_) {}
+            },
+          )
+          ..subscribe();
+      },
+      onCancel: () async {
+        final c = ch;
+        if (c != null) await _db.removeChannel(c);
+      },
+    );
+    return out.stream;
+  }
 
   @override
   Future<void> markNotificationsRead() => _guard(() async => await _db.rpc('mark_notifications_read'));
@@ -1395,6 +1434,29 @@ class SupabaseBackend implements FinderBackend {
     );
     return out.stream;
   }
+
+  @override
+  Future<FunLines> funLines() async {
+    try {
+      return FunLines.fromRows(await _db.rpc('fun_lines_list') as List);
+    } catch (_) {
+      return FunLines.defaults;
+    }
+  }
+
+  @override
+  Future<int> callUnlockDays() async {
+    try {
+      return (await _db.rpc('call_unlock_days') as num?)?.toInt() ?? 4;
+    } catch (_) {
+      return 4;
+    }
+  }
+
+  @override
+  Future<void> startDemoCall(String peerId) => _guard(() async {
+    await _db.rpc('start_demo_call', params: {'p_peer': peerId});
+  });
 
   @override
   Future<void> presenceOffline() async {

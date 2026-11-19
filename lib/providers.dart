@@ -6,6 +6,7 @@ import 'data/media_service.dart';
 import 'data/local_notifier.dart';
 import 'data/purchases_service.dart';
 import 'data/push_service.dart';
+import 'models/fun_lines.dart';
 import 'models/access.dart';
 import 'models/follow_request.dart';
 import 'models/message.dart';
@@ -273,3 +274,9 @@ final notificationsProvider = FutureProvider<List<AppNotification>>((ref) async 
     return const [];
   }
 });
+
+/// Fun Malayalam lines from the dashboard (the built-in ones until the server answers).
+final funLinesProvider = FutureProvider<FunLines>((ref) => ref.watch(backendProvider).funLines());
+
+/// Days a connection must wait before calling opens.
+final callUnlockDaysProvider = FutureProvider<int>((ref) => ref.watch(backendProvider).callUnlockDays());

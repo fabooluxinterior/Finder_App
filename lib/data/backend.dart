@@ -4,6 +4,7 @@ import '../models/access.dart';
 import '../models/follow_request.dart';
 import '../models/message.dart';
 import '../models/scheduled_message.dart';
+import '../models/fun_lines.dart';
 import '../models/presence.dart';
 import '../models/moderation.dart';
 import '../models/profile.dart';
@@ -201,6 +202,15 @@ abstract class FinderBackend {
   /// Live online / last seen for one person: the current value first, then every change as it happens.
   Stream<PeerPresence?> watchPeerPresence(String peerId);
 
+  /// The fun lines (Malayalam) for new users and the call lock, edited from the dashboard.
+  Future<FunLines> funLines();
+
+  /// How many days two people must be connected before calling opens (editable by an admin).
+  Future<int> callUnlockDays();
+
+  /// Starts a (demo) call: the server checks the waiting time and rings the other phone with a notification.
+  Future<void> startDemoCall(String peerId);
+
   /// Tells the server this phone left the app (screen locked or app closed), so "online" ends at once.
   Future<void> presenceOffline();
 
@@ -255,6 +265,9 @@ abstract class FinderBackend {
   Future<AccessStatus> accessStatus();
   Future<void> markAccessNoticeSeen(String kind);
   Future<List<AppNotification>> notifications();
+
+  /// Every new notification for this account, the moment it is created (for the phone's notification popup).
+  Stream<AppNotification> newNotifications();
   Future<void> markNotificationsRead();
 
   /// Phone popups: this device's push token (a token follows whoever signed in last).

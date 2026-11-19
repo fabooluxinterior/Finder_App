@@ -12,9 +12,12 @@ import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/push_service.dart';
 import '../notifications/push_prompt.dart';
+import '../../models/access.dart';
 import '../../models/follow_request.dart';
+import '../../models/security.dart';
 import '../../providers.dart';
 import '../chats/chats_screen.dart';
+import 'fun_welcome.dart';
 import 'social_refresher.dart';
 import '../deck/deck_screen.dart';
 import '../match/match_screen.dart';
@@ -22,6 +25,8 @@ import '../profile/my_profile_screen.dart';
 import '../profile_builder/profile_update_banner.dart';
 import '../subscription/trial_banner.dart';
 import '../update/update_banner.dart';
+import '../verification/verification_screen.dart';
+import '../verification/verified_celebration.dart';
 import '../requests/requests_screen.dart';
 import '../suggestions/suggestions_screen.dart';
 
@@ -37,6 +42,7 @@ class _HomeShellState extends ConsumerState<HomeShell> with WidgetsBindingObserv
   Timer? _presenceTimer;
   StreamSubscription<PushNotice>? _pushSub;
   StreamSubscription<String>? _tokenSub;
+  StreamSubscription<AppNotification>? _noteSub;
 
   /// "Online" / "last seen" for people in your chats: a quiet ping while the app is open, only when
   /// "Show when I'm typing" (activity sharing) is on.
@@ -62,6 +68,16 @@ class _HomeShellState extends ConsumerState<HomeShell> with WidgetsBindingObserv
     WidgetsBinding.instance.addObserver(this);
     _beat();
     _presenceTimer = Timer.periodic(const Duration(seconds: 45), (_) => _beat());
+    // The phone's normal notification popup for every new notification, also while the app is open.
+    // (In the background the server's push shows it; without push configured the app raises it itself.)
+    _noteSub = ref.read(backendProvider).newNotifications().listen((n) async {
+      if (!mounted) return;
+      ref.invalidate(notificationsProvider);
+      final foreground = WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed;
+      if (!foreground && ref.read(pushServiceProvider).available) return;
+      if (!await ref.read(pushEnabledProvider.future)) return;
+      await ref.read(localNotifierProvider).showNotice(id: n.id, title: n.title, body: n.body, kind: n.kind);
+    }, onError: (_) {});
     final push = ref.read(pushServiceProvider);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
@@ -87,10 +103,10 @@ class _HomeShellState extends ConsumerState<HomeShell> with WidgetsBindingObserv
     final enabled = await ref.read(pushEnabledProvider.future);
     for (final c in now) {
       if (c.unread <= (unreadBefore[c.profile.id] ?? 0) || c.profile.id == open) continue;
-      // App in front: no banner (the unread badge and sound are enough). In the background the
-      // notification bar is used; with Firebase the server sends it, otherwise the app raises it.
-      if (WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed) continue;
-      if (enabled && !ref.read(pushServiceProvider).available) {
+      // Always the phone's popup (never for the chat that is open). In the background with Firebase the
+      // server already sends it; in front, or without Firebase, the app raises it.
+      final foreground = WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed;
+      if (enabled && (foreground || !ref.read(pushServiceProvider).available)) {
         await ref.read(localNotifierProvider).showMessage(peerId: c.profile.id, name: c.profile.firstName);
       }
     }
@@ -102,6 +118,7 @@ class _HomeShellState extends ConsumerState<HomeShell> with WidgetsBindingObserv
     _presenceTimer?.cancel();
     _pushSub?.cancel();
     _tokenSub?.cancel();
+    _noteSub?.cancel();
     super.dispose();
   }
 
@@ -128,6 +145,16 @@ class _HomeShellState extends ConsumerState<HomeShell> with WidgetsBindingObserv
       final unreadBefore = before.fold<int>(0, (s, c) => s + c.unread);
       final unreadNow = now.fold<int>(0, (s, c) => s + c.unread);
       if (unreadNow > unreadBefore) Fx.instance.received();
+    });
+
+    // Verification approved: every screen refreshes together, with a short celebration.
+    ref.listen(verificationStatusProvider, (prev, next) {
+      final was = prev?.value;
+      if (next.value == VerificationStatus.approved && was != null && was != VerificationStatus.approved) {
+        ref.invalidate(myProfileProvider);
+        ref.invalidate(connectionsProvider);
+        showVerifiedCelebration(context);
+      }
     });
 
     final pending = ref.watch(incomingRequestsProvider).value?.count ?? 0;
@@ -164,6 +191,8 @@ class _HomeShellState extends ConsumerState<HomeShell> with WidgetsBindingObserv
                 child: const Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
+                    FunWelcome(),
+                    SizedBox(height: 8),
                     UpdateBanner(),
                     SizedBox(height: 8),
                     TrialNoticeBanner(),

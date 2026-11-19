@@ -16,6 +16,7 @@ import '../models/follow_request.dart';
 import '../models/message.dart';
 import '../features/help/faq_content.dart';
 import '../models/scheduled_message.dart';
+import '../models/fun_lines.dart';
 import '../models/presence.dart';
 import '../models/moderation.dart';
 import '../models/profile.dart';
@@ -1166,6 +1167,9 @@ class DemoBackend implements FinderBackend {
   Future<List<AppNotification>> notifications() async => List.unmodifiable(_notes);
 
   @override
+  Stream<AppNotification> newNotifications() => const Stream.empty();
+
+  @override
   Future<void> registerPushToken(String token) async {}
 
   @override
@@ -1537,6 +1541,19 @@ class DemoBackend implements FinderBackend {
   Stream<PeerPresence?> watchPeerPresence(String peerId) async* {
     yield await peerPresence(peerId);
   }
+
+  @override
+  Future<FunLines> funLines() async => FunLines.defaults;
+
+  int demoCallDays = 4;
+
+  @override
+  Future<int> callUnlockDays() async => demoCallDays;
+
+  final startedCalls = <String>[];
+
+  @override
+  Future<void> startDemoCall(String peerId) async => startedCalls.add(peerId);
 
   @override
   Future<void> presenceOffline() async {}
