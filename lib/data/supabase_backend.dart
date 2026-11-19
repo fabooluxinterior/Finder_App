@@ -1348,8 +1348,34 @@ class SupabaseBackend implements FinderBackend {
   @override
   Future<void> touchPresence() async {
     try {
-      await _db.rpc('touch_presence');
+      await _db.rpc('presence_ping');
+    } catch (_) {
+      try {
+        await _db.rpc('touch_presence');
+      } catch (_) {}
+    }
+  }
+
+  @override
+  Future<void> presenceOffline() async {
+    try {
+      await _db.rpc('presence_offline');
     } catch (_) {}
+  }
+
+  @override
+  Future<PeerPresence?> peerPresence(String peerId) async {
+    try {
+      final r = await _db.rpc('peer_presence_v2', params: {'p_peer': peerId});
+      final rows = r is List ? r : (r == null ? const [] : [r]);
+      if (rows.isEmpty) return null;
+      final m = (rows.first as Map).cast<String, dynamic>();
+      return PeerPresence(DateTime.parse(m['last_active_at'] as String).toLocal(), m['online'] as bool? ?? false);
+    } catch (_) {
+      // Older server: the 2-minute rule on the last active time.
+      final t = await peerLastActive(peerId);
+      return t == null ? null : PeerPresence(t, DateTime.now().difference(t).inSeconds < 120);
+    }
   }
 
   @override

@@ -221,6 +221,34 @@ void main() {
     expect(find.textContaining('Messages disappear after 7 days'), findsWidgets);
   });
 
+  testWidgets('Chat: a message that arrives while the phone is locked stays unread until the app is back', (t) async {
+    await t.binding.setSurfaceSize(const Size(400, 900));
+    addTearDown(() => t.binding.setSurfaceSize(null));
+    final (b, all) = (await t.runAsync(_world))!;
+    final peer = all.firstWhere((c) => c.hasChat).profile;
+    await t.pumpWidget(_app(b, ChatScreen(peer: peer)));
+    await _settle(t, 800);
+    Future<bool> unread() async =>
+        (await t.runAsync(() => b.watchMessages(peer.id).first))!.any((m) => m.receiverId == b.currentUserId && !m.isRead);
+    expect(await unread(), isFalse, reason: 'the open chat is read');
+
+    // The screen locks: the chat is still open, but nothing may be read by a sleeping phone.
+    for (final st in [AppLifecycleState.inactive, AppLifecycleState.hidden, AppLifecycleState.paused]) {
+      t.binding.handleAppLifecycleStateChanged(st);
+    }
+    await t.pump();
+    b.receiveForTest(peer.id, 'Are you there?');
+    await _settle(t, 800);
+    expect(await unread(), isTrue, reason: 'arrived while locked: unread');
+
+    // Unlocking reads it.
+    for (final st in [AppLifecycleState.hidden, AppLifecycleState.inactive, AppLifecycleState.resumed]) {
+      t.binding.handleAppLifecycleStateChanged(st);
+    }
+    await _settle(t, 800);
+    expect(await unread(), isFalse, reason: 'read once the app is back in front');
+  });
+
   testWidgets('Chat: reply from the message menu shows a preview bar, the quote in the sent bubble, and Message info', (t) async {
     await t.binding.setSurfaceSize(const Size(400, 900));
     addTearDown(() => t.binding.setSurfaceSize(null));

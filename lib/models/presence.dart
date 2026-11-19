@@ -59,3 +59,10 @@ Stream<PeerState> withDecay(Stream<PeerState> source) {
   );
   return out.stream;
 }
+
+/// When the other person was last active and whether they are in the app right now (not locked, not closed).
+class PeerPresence {
+  const PeerPresence(this.lastActive, this.online);
+  final DateTime lastActive;
+  final bool online;
+}

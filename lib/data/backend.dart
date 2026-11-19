@@ -195,6 +195,12 @@ abstract class FinderBackend {
   /// When the other person was last active; null when unknown or not allowed.
   Future<DateTime?> peerLastActive(String peerId);
 
+  /// Last seen plus whether they are in the app right now; null when unknown or not allowed.
+  Future<PeerPresence?> peerPresence(String peerId);
+
+  /// Tells the server this phone left the app (screen locked or app closed), so "online" ends at once.
+  Future<void> presenceOffline();
+
   /// Sends a photo, end-to-end encrypted on this device (already compressed
   /// to WebP by the image optimizer). Needs chat access (Fast-Track or trial).
   Future<void> sendImage(

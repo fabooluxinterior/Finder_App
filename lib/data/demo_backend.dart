@@ -1340,6 +1340,10 @@ class DemoBackend implements FinderBackend {
   }
 
   /// Test only: the team moves a ticket to another status.
+  /// Tests: a message arrives from [peerId] (unread until the chat is read).
+  @visibleForTesting
+  void receiveForTest(String peerId, String text) => _push(peerId, _msg(peerId, meId, content: text));
+
   @visibleForTesting
   void setTicketStatusForTest(String ticketId, TicketStatus status) {
     final i = _tickets.indexWhere((t) => t.id == ticketId);
@@ -1528,6 +1532,15 @@ class DemoBackend implements FinderBackend {
 
   @override
   Future<void> touchPresence() async {}
+
+  @override
+  Future<void> presenceOffline() async {}
+
+  @override
+  Future<PeerPresence?> peerPresence(String peerId) async {
+    final t = await peerLastActive(peerId);
+    return t == null ? null : PeerPresence(t, DateTime.now().difference(t).inSeconds < 120);
+  }
 
   @override
   Future<DateTime?> peerLastActive(String peerId) async =>

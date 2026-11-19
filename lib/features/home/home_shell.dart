@@ -48,7 +48,12 @@ class _HomeShellState extends ConsumerState<HomeShell> with WidgetsBindingObserv
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed) _beat();
+    if (state == AppLifecycleState.resumed) {
+      _beat();
+    } else {
+      // Screen locked, another app in front or app closed: no longer online, like WhatsApp.
+      ref.read(backendProvider).presenceOffline();
+    }
   }
 
   @override

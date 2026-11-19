@@ -49,7 +49,7 @@ class ChatScreen extends ConsumerStatefulWidget {
   ConsumerState<ChatScreen> createState() => _ChatScreenState();
 }
 
-class _ChatScreenState extends ConsumerState<ChatScreen> {
+class _ChatScreenState extends ConsumerState<ChatScreen> with WidgetsBindingObserver {
   bool _emojiOpen = false;
 
   // ------------------------------------------------------------ replies ----
@@ -328,6 +328,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   void initState() {
     super.initState();
     // No alert for messages in the chat that is already open.
+    WidgetsBinding.instance.addObserver(this);
     _openChat = ref.read(openChatProvider.notifier);
     _backend = ref.read(backendProvider);
     _text.addListener(_onTextChanged);
@@ -345,17 +346,44 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     });
   }
 
+  bool _online = false;
+
   Future<void> _refreshPresence() async {
-    final t = await _backend.peerLastActive(widget.peer.id);
-    if (mounted && t != _lastActive) setState(() => _lastActive = t);
+    final p = await _backend.peerPresence(widget.peer.id);
+    if (!mounted) return;
+    if (p?.lastActive != _lastActive || (p?.online ?? false) != _online) {
+      setState(() {
+        _lastActive = p?.lastActive;
+        _online = p?.online ?? false;
+      });
+    }
   }
 
-  /// "online" when active in the last 2 minutes, otherwise "last seen …".
+  /// True only while the app is in front. A locked screen or another app counts as away: nothing is read then.
+  bool get _foreground =>
+      WidgetsBinding.instance.lifecycleState == null || WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed;
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (!mounted) return;
+    if (state == AppLifecycleState.resumed) {
+      // Back in front: this chat is open again, and what arrived meanwhile is read now.
+      _openChat.open(widget.peer.id);
+      _refreshPresence();
+      _markReadIfNeeded(_shown, _backend.currentUserId);
+    } else {
+      // Away: alerts for this chat must work again, and the other person stops seeing "typing…".
+      _openChat.closeIf(widget.peer.id);
+      _typingIdle?.cancel();
+      if (_mine != PeerState.idle) _setMine(PeerState.idle);
+    }
+  }
+
+  /// "online" while the other person is in the app, otherwise "last seen …".
   String? get _presenceText {
     final t = _lastActive;
     if (t == null) return null;
-    final ago = DateTime.now().difference(t);
-    if (ago.inSeconds < 120) return 'online';
+    if (_online) return 'online';
     final time = DateFormat('h:mm a').format(t);
     if (DateUtils.isSameDay(t, DateTime.now())) return 'last seen today at $time';
     if (DateUtils.isSameDay(t, DateTime.now().subtract(const Duration(days: 1)))) return 'last seen yesterday at $time';
@@ -364,7 +392,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
 
   /// Opening a chat marks everything in it as read (once per change; never loops).
   void _markReadIfNeeded(List<ChatMessage> list, String? me) {
-    if (_markingRead || !list.any((m) => m.receiverId == me && !m.isRead)) return;
+    if (!_foreground || _markingRead || !list.any((m) => m.receiverId == me && !m.isRead)) return;
     _markingRead = true;
     _backend.markThreadRead(widget.peer.id).catchError((_) {}).whenComplete(() => _markingRead = false);
   }
@@ -413,6 +441,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     final open = _openChat;
     final id = widget.peer.id;
     Future.microtask(() => open.closeIf(id));
@@ -819,7 +848,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       final list = next.value ?? const <ChatMessage>[];
       _markReadIfNeeded(list, me);
       final before = prev?.value ?? const <ChatMessage>[];
-      if (before.isNotEmpty && list.length > before.length && list.last.senderId != me) Fx.instance.received();
+      if (before.isNotEmpty && list.length > before.length && list.last.senderId != me && _foreground) Fx.instance.received();
       if (before.length < list.length) WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToLatest());
     });
 
