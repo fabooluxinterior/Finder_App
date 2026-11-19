@@ -41,6 +41,8 @@ class _AttachScreenState extends ConsumerState<AttachScreen> with SingleTickerPr
   bool _loading = false;
   bool _loaded = false;
   final _grid = ScrollController();
+  List<GalleryAlbum> _albums = const [];
+  GalleryAlbum? _album; // null = Recent (everything)
 
   @override
   void initState() {
@@ -73,7 +75,7 @@ class _AttachScreenState extends ConsumerState<AttachScreen> with SingleTickerPr
     if (_loading || !_more || !_src.hasGallery) return;
     _loading = true;
     try {
-      final next = await _src.recent(_page, 60);
+      final next = await _src.recent(_page, 60, album: _album);
       if (!mounted) return;
       setState(() {
         _items.addAll(next);
@@ -87,6 +89,49 @@ class _AttachScreenState extends ConsumerState<AttachScreen> with SingleTickerPr
     } finally {
       _loading = false;
     }
+  }
+
+  Future<void> _pickAlbum() async {
+    if (_albums.isEmpty) _albums = await _src.albums();
+    if (!mounted || _albums.isEmpty) return;
+    final chosen = await showModalBottomSheet<GalleryAlbum>(
+      context: context,
+      backgroundColor: const Color(0xFF17171A),
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (c) => SafeArea(
+        child: ConstrainedBox(
+          constraints: BoxConstraints(maxHeight: MediaQuery.sizeOf(c).height * 0.7),
+          child: ListView(
+            shrinkWrap: true,
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            children: [
+              for (final a in _albums)
+                ListTile(
+                  title: Text(
+                    a.name,
+                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+                  ),
+                  subtitle: Text('${a.count}', style: const TextStyle(color: Colors.white60)),
+                  trailing: (_album?.id ?? _albums.first.id) == a.id ? const Icon(Icons.check, color: _accent) : null,
+                  onTap: () => Navigator.pop(c, a),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+    if (chosen == null || !mounted) return;
+    setState(() {
+      _album = chosen == _albums.first ? null : chosen;
+      _items.clear();
+      _page = 0;
+      _more = true;
+      _loaded = false;
+      _picked.clear();
+    });
+    if (_grid.hasClients) _grid.jumpTo(0);
+    await _loadMore();
   }
 
   Future<void> _allowPhotos() async {
@@ -368,10 +413,29 @@ class _AttachScreenState extends ConsumerState<AttachScreen> with SingleTickerPr
                       children: [
                         _Round(icon: Icons.arrow_back_rounded, label: 'Back', onTap: () => _snap(0)),
                         const SizedBox(width: 10),
-                        const Expanded(
-                          child: Text(
-                            'Recent',
-                            style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
+                        Expanded(
+                          child: Align(
+                            alignment: Alignment.centerLeft,
+                            child: InkWell(
+                              borderRadius: BorderRadius.circular(8),
+                              onTap: _pickAlbum,
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Flexible(
+                                      child: Text(
+                                        _album?.name ?? 'Recent',
+                                        overflow: TextOverflow.ellipsis,
+                                        style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
+                                      ),
+                                    ),
+                                    const Icon(Icons.keyboard_arrow_down_rounded, color: Colors.white),
+                                  ],
+                                ),
+                              ),
+                            ),
                           ),
                         ),
                         Text(

@@ -61,7 +61,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
 
   static String _previewOf(ChatMessage m) {
     if (m.deleted) return 'Message deleted';
-    if (m.isImage) return 'Photo';
+    if (m.isImage) return (m.content ?? '').trim().isEmpty || m.viewOnce ? 'Photo' : 'Photo · ${m.content!.trim()}';
     if (m.isVoice) return 'Voice message';
     final t = (m.content ?? '').replaceAll(RegExp(r'\s+'), ' ').trim();
     return t.length > 120 ? '${t.substring(0, 117)}...' : t;
@@ -657,7 +657,14 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         _setMine(PeerState.photo);
         await ref
             .read(backendProvider)
-            .sendImage(widget.peer.id, img.bytes, width: img.width, height: img.height, once: edited.once);
+            .sendImage(
+              widget.peer.id,
+              img.bytes,
+              width: img.width,
+              height: img.height,
+              once: edited.once,
+              caption: edited.caption,
+            );
         Fx.instance.sent();
         _scrollToLatest();
       }
@@ -1404,9 +1411,20 @@ class _Bubble extends StatelessWidget {
                   color: fg,
                   openable: !selecting,
                 )
-              else if (message.isImage)
-                _PhotoContent(message: message, openable: !selecting)
-              else if (message.isVoice)
+              else if (message.isImage) ...[
+                _PhotoContent(message: message, openable: !selecting),
+                if ((message.content ?? '').trim().isNotEmpty)
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(8, 6, 2, 0),
+                      child: Text(
+                        message.content!.trim(),
+                        style: TextStyle(fontFamily: 'Geist', color: fg, fontSize: 16, height: 22 / 16),
+                      ),
+                    ),
+                  ),
+              ] else if (message.isVoice)
                 VoiceBubble(message: message, color: fg)
               else
                 Align(

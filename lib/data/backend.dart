@@ -197,7 +197,14 @@ abstract class FinderBackend {
 
   /// Sends a photo, end-to-end encrypted on this device (already compressed
   /// to WebP by the image optimizer). Needs chat access (Fast-Track or trial).
-  Future<void> sendImage(String peerId, Uint8List webp, {required int width, required int height, bool once = false});
+  Future<void> sendImage(
+    String peerId,
+    Uint8List webp, {
+    required int width,
+    required int height,
+    bool once = false,
+    String? caption,
+  });
 
   /// A "view once" photo was opened: it is wiped from this phone and the sender sees "Opened".
   Future<void> markPhotoViewed(String peerId, String messageId);

@@ -50,9 +50,16 @@ class FakeAttachSource implements AttachSource {
   @override
   Future<bool> requestGallery() async => allowed;
   @override
-  Future<List<GalleryItem>> recent(int page, int size) async => [
-    for (var i = page * size; i < count && i < (page + 1) * size; i++) GalleryItem('g$i'),
+  Future<List<GalleryAlbum>> albums() async => [
+    const GalleryAlbum('all', 'Recent', 30),
+    const GalleryAlbum('shots', 'Screenshots', 4),
   ];
+  @override
+  Future<List<GalleryItem>> recent(int page, int size, {GalleryAlbum? album}) async {
+    final n = album?.id == 'shots' ? 4 : count;
+    return [for (var i = page * size; i < n && i < (page + 1) * size; i++) GalleryItem('${album?.id ?? 'g'}$i')];
+  }
+
   @override
   Future<Uint8List?> thumbnail(GalleryItem item, int px) async => png;
   @override
@@ -115,6 +122,35 @@ void main() {
     await t.pump(const Duration(milliseconds: 500));
     expect(result!.photos, hasLength(3));
     expect(result!.useSystemPicker, isFalse);
+  });
+
+  testWidgets('the gallery title is a drop-down of folders; choosing one shows its pictures', (t) async {
+    await t.binding.setSurfaceSize(const Size(400, 800));
+    addTearDown(() => t.binding.setSurfaceSize(null));
+    final png = (await t.runAsync(() => _png(40, 40, Colors.teal)))!;
+    await t.pumpWidget(_host(FakeAttachSource(png: png), (_) {}));
+    await t.tap(find.text('open'));
+    await t.pump();
+    await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 100)));
+    await t.pump(const Duration(milliseconds: 500));
+    await t.fling(find.byType(ListView).first, const Offset(0, -300), 1200);
+    await t.pump(const Duration(milliseconds: 100));
+    await t.pump(const Duration(milliseconds: 600));
+    await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 100)));
+    await t.pump(const Duration(milliseconds: 100));
+    expect(find.text('Recent'), findsOneWidget);
+    await t.tap(find.text('Recent'));
+    await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
+    await t.pump(const Duration(milliseconds: 100));
+    await t.pump(const Duration(milliseconds: 500));
+    expect(find.text('Screenshots'), findsOneWidget);
+    await t.tap(find.text('Screenshots'));
+    await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 100)));
+    await t.pump(const Duration(milliseconds: 100));
+    await t.pump(const Duration(milliseconds: 500));
+    expect(find.text('Screenshots'), findsOneWidget, reason: 'the title now shows the folder');
+    final tiles = find.descendant(of: find.byType(GridView), matching: find.byType(Image));
+    expect(tiles, findsNWidgets(4));
   });
 
   testWidgets('tap a picture in the row to use it; the round button takes a picture', (t) async {

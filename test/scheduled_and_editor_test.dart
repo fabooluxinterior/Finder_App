@@ -122,7 +122,8 @@ void main() {
     await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 300)));
     await t.pump(const Duration(milliseconds: 400));
     expect(find.byTooltip('Pencil'), findsOneWidget);
-    expect(find.byTooltip('Text'), findsOneWidget);
+    expect(find.byTooltip('Text'), findsNothing, reason: 'no text tool any more');
+    expect(find.text('Add a caption…'), findsOneWidget);
     expect(find.byTooltip('Crop'), findsOneWidget);
 
     // Draw a stroke.
@@ -140,6 +141,10 @@ void main() {
     await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 300)));
     await t.pump(const Duration(milliseconds: 400));
 
+    // Caption: typed under the picture, handed back with it.
+    await t.enterText(find.byType(TextField), '  Sunset at Kovalam  ');
+    await t.pump();
+
     // Send once.
     await t.tap(find.byTooltip('Send (hold to send later)'));
     await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 500)));
@@ -147,5 +152,34 @@ void main() {
     expect(result, isNotNull);
     expect(result!.sendAt, isNull);
     expect(result!.bytes.length, greaterThan(100));
+    expect(result!.caption, 'Sunset at Kovalam');
+  });
+
+  testWidgets('crop box follows the finger straight away, without rebuilding the whole editor', (t) async {
+    await t.binding.setSurfaceSize(const Size(420, 900));
+    addTearDown(() => t.binding.setSurfaceSize(null));
+    final png = (await t.runAsync(() => _png(400, 300)))!;
+    await t.pumpWidget(MaterialApp(home: MediaEditorScreen(bytes: png)));
+    await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 300)));
+    await t.pump(const Duration(milliseconds: 400));
+    await t.tap(find.byTooltip('Crop'));
+    await t.pump();
+    final box = find
+        .byType(CustomPaint)
+        .evaluate()
+        .map((e) => e.widget)
+        .whereType<CustomPaint>()
+        .where((c) => c.painter.toString().contains('_DimPainter'));
+    expect(box, isNotEmpty);
+    final before = t.getRect(find.byType(RawImage));
+    // Drag the top-left handle: the picture does not move or re-layout, and one pump is enough to see the change.
+    final tl = Offset(before.left + before.width * 0.05, before.top + before.height * 0.05);
+    final g = await t.startGesture(tl);
+    await g.moveBy(const Offset(30, 20));
+    await t.pump();
+    await g.up();
+    await t.pump();
+    expect(t.getRect(find.byType(RawImage)), before);
+    expect(find.text('Apply crop'), findsOneWidget);
   });
 }

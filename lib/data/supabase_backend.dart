@@ -811,7 +811,7 @@ class SupabaseBackend implements FinderBackend {
           lastMessage: last == null
               ? null
               : (last.isImage
-                    ? '📷 Photo'
+                    ? ((last.content ?? '').trim().isEmpty || last.viewOnce ? '📷 Photo' : '📷 ${last.content!.trim()}')
                     : last.isVoice
                     ? '🎤 Voice note'
                     : last.deleted
@@ -1407,32 +1407,39 @@ class SupabaseBackend implements FinderBackend {
   });
 
   @override
-  Future<void> sendImage(String peerId, Uint8List webp, {required int width, required int height, bool once = false}) =>
-      _guard(() async {
-        final me = _me;
-        final clientId = _uuid.v4();
-        final path = '${_pairKey(me, peerId)}/$clientId.bin';
-        final sealed = await E2eeEngine.sealAttachment(webp, 'image:$path');
-        await _db.storage
-            .from('chat_images')
-            .uploadBinary(path, sealed.ciphertext, fileOptions: const FileOptions(contentType: 'application/octet-stream'));
-        await _sendPayload(
-          peerId,
-          SecurePayload(
-            clientId: clientId,
-            sentAt: DateTime.now(),
-            image: ImageRef(
-              path: path,
-              key: sealed.key,
-              nonce: sealed.nonce,
-              sha256: sealed.sha256,
-              width: width,
-              height: height,
-              once: once,
-            ),
-          ),
-        );
-      });
+  Future<void> sendImage(
+    String peerId,
+    Uint8List webp, {
+    required int width,
+    required int height,
+    bool once = false,
+    String? caption,
+  }) => _guard(() async {
+    final me = _me;
+    final clientId = _uuid.v4();
+    final path = '${_pairKey(me, peerId)}/$clientId.bin';
+    final sealed = await E2eeEngine.sealAttachment(webp, 'image:$path');
+    await _db.storage
+        .from('chat_images')
+        .uploadBinary(path, sealed.ciphertext, fileOptions: const FileOptions(contentType: 'application/octet-stream'));
+    await _sendPayload(
+      peerId,
+      SecurePayload(
+        clientId: clientId,
+        sentAt: DateTime.now(),
+        text: caption,
+        image: ImageRef(
+          path: path,
+          key: sealed.key,
+          nonce: sealed.nonce,
+          sha256: sealed.sha256,
+          width: width,
+          height: height,
+          once: once,
+        ),
+      ),
+    );
+  });
 
   final _imageCache = <String, Uint8List>{};
 

@@ -1569,7 +1569,14 @@ class DemoBackend implements FinderBackend {
   }
 
   @override
-  Future<void> sendImage(String peerId, Uint8List webp, {required int width, required int height, bool once = false}) async {
+  Future<void> sendImage(
+    String peerId,
+    Uint8List webp, {
+    required int width,
+    required int height,
+    bool once = false,
+    String? caption,
+  }) async {
     if (!_hasAccess) throw const AppException(AppErrorCode.subscriptionRequired, 'Messaging is part of Fast-Track');
     if (!_connected(meId, peerId)) {
       throw const AppException(AppErrorCode.notConnected, 'Chat unlocks once the follow request is accepted.');
@@ -1581,7 +1588,7 @@ class DemoBackend implements FinderBackend {
         id: _uuid.v4(),
         senderId: meId,
         receiverId: peerId,
-        content: null,
+        content: caption,
         localImageUrl: MemoryImages.put(webp),
         isRead: false,
         createdAt: DateTime.now(),

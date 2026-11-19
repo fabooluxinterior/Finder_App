@@ -13,6 +13,15 @@ class GalleryItem {
   final Object? handle;
 }
 
+/// A folder in the phone's gallery (Camera, Screenshots, WhatsApp Images…). The first one is "Recent": everything.
+class GalleryAlbum {
+  const GalleryAlbum(this.id, this.name, this.count, [this.handle]);
+  final String id;
+  final String name;
+  final int count;
+  final Object? handle;
+}
+
 /// What the attach screen needs from the phone: a live camera and the gallery. A fake replaces it in tests, and
 /// when permission is refused [init] reports false so the chat falls back to the system picker.
 abstract class AttachSource {
@@ -31,7 +40,11 @@ abstract class AttachSource {
   /// Asks for gallery access again (or opens the phone's settings when it was refused for good). True when usable.
   Future<bool> requestGallery();
 
-  Future<List<GalleryItem>> recent(int page, int size);
+  /// The gallery folders, "Recent" first.
+  Future<List<GalleryAlbum>> albums();
+
+  /// One page of pictures, newest first, from [album] (or all pictures when null).
+  Future<List<GalleryItem>> recent(int page, int size, {GalleryAlbum? album});
   Future<Uint8List?> thumbnail(GalleryItem item, int px);
   Future<Uint8List?> original(GalleryItem item);
 
@@ -176,8 +189,27 @@ class DeviceAttachSource implements AttachSource {
   }
 
   @override
-  Future<List<GalleryItem>> recent(int page, int size) async {
-    final p = _all;
+  Future<List<GalleryAlbum>> albums() async {
+    try {
+      final paths = await PhotoManager.getAssetPathList(type: RequestType.image);
+      final out = <GalleryAlbum>[];
+      for (final p in paths) {
+        final n = await p.assetCountAsync;
+        if (n == 0) continue;
+        out.add(GalleryAlbum(p.id, p.isAll ? 'Recent' : p.name, n, p));
+      }
+      out.sort(
+        (a, b) => a.name == 'Recent' ? -1 : (b.name == 'Recent' ? 1 : a.name.toLowerCase().compareTo(b.name.toLowerCase())),
+      );
+      return out;
+    } catch (_) {
+      return const [];
+    }
+  }
+
+  @override
+  Future<List<GalleryItem>> recent(int page, int size, {GalleryAlbum? album}) async {
+    final p = (album?.handle as AssetPathEntity?) ?? _all;
     if (p == null) return const [];
     final assets = await p.getAssetListPaged(page: page, size: size);
     return [for (final a in assets) GalleryItem(a.id, a)];

@@ -250,6 +250,19 @@ void main() {
       expect((opened.viewOnce, opened.viewed, opened.image, opened.content), (true, true, null, null));
     });
 
+    test('a caption travels with the picture and survives the encrypted payload', () async {
+      final ref = ImageRef(path: 'p', key: Uint8List(32), nonce: Uint8List(12), sha256: Uint8List(32), width: 10, height: 10);
+      final p = SecurePayload.decode(SecurePayload(clientId: 'c', sentAt: DateTime(2026), text: 'Sunset', image: ref).encode());
+      expect((p.text, p.image != null), ('Sunset', true));
+      final plain = SecurePayload.decode(SecurePayload(clientId: 'c2', sentAt: DateTime(2026), image: ref).encode());
+      expect((plain.text, plain.image != null), (null, true), reason: 'no caption: nothing extra to show');
+      final (b, peer) = await _chat();
+      await b.sendImage(peer, _bytes(500), width: 10, height: 10, caption: 'Sunset');
+      final list = await b.watchMessages(peer).first;
+      final sent = list.lastWhere((m) => m.isImage);
+      expect(sent.content, 'Sunset');
+    });
+
     test('demo: send once, then opening wipes it', () async {
       final (b, peer) = await _chat();
       await b.sendImage(peer, _bytes(500), width: 10, height: 10, once: true);

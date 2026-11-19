@@ -2,6 +2,7 @@ import 'dart:math' as math;
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 
+import 'package:flutter/gestures.dart' show DragStartBehavior;
 import 'package:flutter/material.dart';
 
 import '../../core/phosphor.dart';
@@ -10,8 +11,11 @@ import 'schedule_picker.dart';
 
 /// What the editor hands back: the finished picture and, when "send later" was used, when to send it.
 class EditedMedia {
-  const EditedMedia(this.bytes, {this.sendAt, this.once = false});
+  const EditedMedia(this.bytes, {this.sendAt, this.once = false, this.caption});
   final Uint8List bytes;
+
+  /// The line typed under the picture (null when empty).
+  final String? caption;
   final DateTime? sendAt;
 
   /// "View once": the other person can open it a single time.
@@ -25,14 +29,7 @@ class _Stroke {
   final List<Offset> points; // fractions of the picture size
 }
 
-class _Label {
-  _Label(this.text, this.color, this.pos);
-  String text;
-  Color color;
-  Offset pos; // centre, as a fraction of the picture size
-}
-
-enum _Tool { none, draw, text, crop }
+enum _Tool { none, draw, crop }
 
 const _palette = [
   Colors.white,
@@ -44,7 +41,7 @@ const _palette = [
   Color(0xFFB45CFF),
 ];
 
-/// A full-screen preview of the chosen picture before it is sent: draw with a pencil, add text, crop, then send once.
+/// A full-screen preview of the chosen picture before it is sent: draw with a pencil, crop, add a caption, then send.
 class MediaEditorScreen extends StatefulWidget {
   const MediaEditorScreen({super.key, required this.bytes, this.allowSchedule = true, this.allowOnce = true, this.positionLabel});
   final Uint8List bytes;
@@ -65,9 +62,10 @@ class _MediaEditorScreenState extends State<MediaEditorScreen> {
   var _tool = _Tool.none;
   Color _color = Colors.white;
   final _strokes = <_Stroke>[];
-  final _labels = <_Label>[];
+  final _caption = TextEditingController();
   _Stroke? _current;
-  Rect _crop = const Rect.fromLTWH(0.05, 0.05, 0.9, 0.9);
+  // Only the crop box listens to this, so dragging it never rebuilds the whole editor.
+  final _crop = ValueNotifier<Rect>(const Rect.fromLTWH(0.05, 0.05, 0.9, 0.9));
   bool _busy = false;
   bool _once = false;
   String? _error;
@@ -91,45 +89,21 @@ class _MediaEditorScreenState extends State<MediaEditorScreen> {
 
   // ------------------------------------------------------------- drawing ----
   void _undo() => setState(() {
-    if (_labels.isNotEmpty && (_strokes.isEmpty || _lastWasLabel)) {
-      _labels.removeLast();
-    } else if (_strokes.isNotEmpty) {
-      _strokes.removeLast();
-    }
+    if (_strokes.isNotEmpty) _strokes.removeLast();
   });
 
-  bool _lastWasLabel = false;
-
-  Future<String?> _askText(String initial) {
-    final ctl = TextEditingController(text: initial);
-    return showDialog<String>(
-      context: context,
-      builder: (c) => AlertDialog(
-        title: const Text('Add text'),
-        content: TextField(controller: ctl, autofocus: true, maxLength: 80, minLines: 1, maxLines: 3),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(c), child: const Text('Cancel')),
-          FilledButton(onPressed: () => Navigator.pop(c, ctl.text.trim()), child: const Text('Done')),
-        ],
-      ),
-    );
-  }
-
-  Future<void> _addText() async {
-    final t = await _askText('');
-    if (t == null || t.isEmpty || !mounted) return;
-    setState(() {
-      _labels.add(_Label(t, _color, const Offset(0.5, 0.5)));
-      _lastWasLabel = true;
-      _tool = _Tool.none;
-    });
+  @override
+  void dispose() {
+    _caption.dispose();
+    _crop.dispose();
+    super.dispose();
   }
 
   // ---------------------------------------------------------------- crop ----
   Future<void> _applyCrop() async {
     final img = _image;
     if (img == null) return;
-    final r = _crop;
+    final r = _crop.value;
     final w = (img.width * r.width).round().clamp(16, img.width);
     final h = (img.height * r.height).round().clamp(16, img.height);
     final rec = ui.PictureRecorder();
@@ -143,17 +117,14 @@ class _MediaEditorScreenState extends State<MediaEditorScreen> {
     final cropped = await rec.endRecording().toImage(w, h);
     Offset map(Offset p) => Offset((p.dx - r.left) / r.width, (p.dy - r.top) / r.height);
     setState(() {
-      // Drawings and text keep their place on the picture.
+      // Drawings keep their place on the picture.
       for (final s in _strokes) {
         for (var i = 0; i < s.points.length; i++) {
           s.points[i] = map(s.points[i]);
         }
       }
-      for (final l in _labels) {
-        l.pos = map(l.pos);
-      }
       _image = cropped;
-      _crop = const Rect.fromLTWH(0.05, 0.05, 0.9, 0.9);
+      _crop.value = const Rect.fromLTWH(0.05, 0.05, 0.9, 0.9);
       _tool = _Tool.none;
     });
   }
@@ -200,22 +171,6 @@ class _MediaEditorScreenState extends State<MediaEditorScreen> {
       }
       canvas.drawPath(path, paint);
     }
-    for (final l in _labels) {
-      final tp = TextPainter(
-        text: TextSpan(
-          text: l.text,
-          style: TextStyle(
-            color: l.color,
-            fontSize: size.width * 0.07,
-            fontWeight: FontWeight.w700,
-            shadows: const [Shadow(blurRadius: 6, color: Colors.black87)],
-          ),
-        ),
-        textDirection: TextDirection.ltr,
-        textAlign: TextAlign.center,
-      )..layout(maxWidth: size.width * 0.9);
-      tp.paint(canvas, Offset(l.pos.dx * size.width - tp.width / 2, l.pos.dy * size.height - tp.height / 2));
-    }
   }
 
   Future<void> _send({bool later = false}) async {
@@ -228,7 +183,17 @@ class _MediaEditorScreenState extends State<MediaEditorScreen> {
     setState(() => _busy = true);
     try {
       final bytes = await _render();
-      if (mounted) Navigator.pop(context, EditedMedia(bytes, sendAt: at, once: widget.allowOnce && _once));
+      if (mounted) {
+        Navigator.pop(
+          context,
+          EditedMedia(
+            bytes,
+            sendAt: at,
+            once: widget.allowOnce && _once,
+            caption: _caption.text.trim().isEmpty ? null : _caption.text.trim(),
+          ),
+        );
+      }
     } catch (_) {
       if (mounted) setState(() => _busy = false);
     }
@@ -268,7 +233,6 @@ class _MediaEditorScreenState extends State<MediaEditorScreen> {
                     on: _tool == _Tool.crop,
                     onTap: () => setState(() => _tool = _tool == _Tool.crop ? _Tool.none : _Tool.crop),
                   ),
-                  _ToolButton(icon: Icons.text_fields, label: 'Text', on: _tool == _Tool.text, onTap: _addText),
                   _ToolButton(
                     icon: Icons.edit,
                     label: 'Pencil',
@@ -276,9 +240,9 @@ class _MediaEditorScreenState extends State<MediaEditorScreen> {
                     onTap: () => setState(() => _tool = _tool == _Tool.draw ? _Tool.none : _Tool.draw),
                   ),
                   IconButton(
-                    onPressed: _strokes.isEmpty && _labels.isEmpty ? null : _undo,
+                    onPressed: _strokes.isEmpty ? null : _undo,
                     tooltip: 'Undo',
-                    icon: Icon(Icons.undo, color: _strokes.isEmpty && _labels.isEmpty ? Colors.white30 : Colors.white),
+                    icon: Icon(Icons.undo, color: _strokes.isEmpty ? Colors.white30 : Colors.white),
                   ),
                 ],
               ),
@@ -305,7 +269,6 @@ class _MediaEditorScreenState extends State<MediaEditorScreen> {
                                   ? (d) => setState(() {
                                       _current = _Stroke(_color, 0.012)..points.add(_frac(d.localPosition, size));
                                       _strokes.add(_current!);
-                                      _lastWasLabel = false;
                                     })
                                   : null,
                               onPanUpdate: _tool == _Tool.draw
@@ -315,32 +278,20 @@ class _MediaEditorScreenState extends State<MediaEditorScreen> {
                               child: Stack(
                                 fit: StackFit.expand,
                                 children: [
-                                  RawImage(image: _image, fit: BoxFit.fill),
-                                  CustomPaint(painter: _OverlayPainter(this)),
-                                  if (_tool != _Tool.crop)
-                                    for (final l in _labels)
-                                      Positioned(
-                                        left: l.pos.dx * w - 80,
-                                        top: l.pos.dy * h - 20,
-                                        width: 160,
-                                        height: 40,
-                                        child: GestureDetector(
-                                          onPanUpdate: (d) => setState(
-                                            () => l.pos = Offset(
-                                              (l.pos.dx + d.delta.dx / w).clamp(0.0, 1.0),
-                                              (l.pos.dy + d.delta.dy / h).clamp(0.0, 1.0),
-                                            ),
-                                          ),
-                                          onTap: () async {
-                                            final t = await _askText(l.text);
-                                            if (t != null && t.isNotEmpty) setState(() => l.text = t);
-                                          },
-                                          onLongPress: () => setState(() => _labels.remove(l)),
-                                          child: const SizedBox.expand(),
-                                        ),
-                                      ),
+                                  RepaintBoundary(
+                                    child: Stack(
+                                      fit: StackFit.expand,
+                                      children: [
+                                        RawImage(image: _image, fit: BoxFit.fill),
+                                        CustomPaint(painter: _OverlayPainter(this)),
+                                      ],
+                                    ),
+                                  ),
                                   if (_tool == _Tool.crop)
-                                    _CropOverlay(rect: _crop, size: size, onChanged: (r) => setState(() => _crop = r)),
+                                    ValueListenableBuilder<Rect>(
+                                      valueListenable: _crop,
+                                      builder: (_, r, _) => _CropOverlay(rect: r, size: size, onChanged: (n) => _crop.value = n),
+                                    ),
                                 ],
                               ),
                             ),
@@ -349,7 +300,7 @@ class _MediaEditorScreenState extends State<MediaEditorScreen> {
                       },
                     ),
             ),
-            if (_tool == _Tool.draw || _tool == _Tool.text)
+            if (_tool == _Tool.draw)
               SizedBox(
                 height: 44,
                 child: Row(
@@ -373,6 +324,28 @@ class _MediaEditorScreenState extends State<MediaEditorScreen> {
                         ),
                       ),
                   ],
+                ),
+              ),
+            if (_tool != _Tool.crop)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
+                child: TextField(
+                  controller: _caption,
+                  minLines: 1,
+                  maxLines: 3,
+                  maxLength: 700,
+                  textCapitalization: TextCapitalization.sentences,
+                  style: const TextStyle(color: Colors.white),
+                  cursorColor: Colors.white,
+                  decoration: InputDecoration(
+                    hintText: 'Add a caption…',
+                    hintStyle: const TextStyle(color: Colors.white54),
+                    counterText: '',
+                    filled: true,
+                    fillColor: Colors.white12,
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(24), borderSide: BorderSide.none),
+                  ),
                 ),
               ),
             Padding(
@@ -508,11 +481,12 @@ class _CropOverlay extends StatelessWidget {
   Widget build(BuildContext context) {
     final px = Rect.fromLTRB(rect.left * size.width, rect.top * size.height, rect.right * size.width, rect.bottom * size.height);
     Widget handle(Alignment a, void Function(Offset d) move) => Positioned(
-      left: px.left + (a.x + 1) / 2 * px.width - 22,
-      top: px.top + (a.y + 1) / 2 * px.height - 22,
-      width: 44,
-      height: 44,
+      left: px.left + (a.x + 1) / 2 * px.width - 26,
+      top: px.top + (a.y + 1) / 2 * px.height - 26,
+      width: 52,
+      height: 52,
       child: GestureDetector(
+        dragStartBehavior: DragStartBehavior.down,
         onPanUpdate: (d) => move(Offset(d.delta.dx / size.width, d.delta.dy / size.height)),
         child: Center(
           child: Container(
@@ -534,6 +508,7 @@ class _CropOverlay extends StatelessWidget {
         Positioned.fromRect(
           rect: px,
           child: GestureDetector(
+            dragStartBehavior: DragStartBehavior.down,
             onPanUpdate: (d) {
               final dx = d.delta.dx / size.width, dy = d.delta.dy / size.height;
               final moved = rect.shift(Offset(dx, dy));
