@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
+  <meta name="description" content="Vouby: a private social connection network for Kerala.">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Vouby">
+  <link rel="icon" type="image/png" href="favicon.png">
+  <title>Vouby</title>
+  <style>
+    html, body { margin: 0; height: 100%; background: #0B0B0C; }
+    #boot { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; }
+    #boot svg { width: 96px; height: 96px; animation: b 1.6s ease-in-out infinite; transform-origin: 50% 52%; }
+    @keyframes b { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.06); } }
+    @media (prefers-reduced-motion: reduce) { #boot svg { animation: none; } }
+  </style>
+</head>
+<body>
+  <div id="boot" role="img" aria-label="Loading Vouby"><svg viewBox="0 0 64 64"><defs><mask id="m" maskUnits="userSpaceOnUse" x="0" y="0" width="64" height="64"><rect width="64" height="64" fill="#fff"/><path d="M19.5 22c2 7 6 15.5 10 16.5c4 0 9.5-9 11-16c1-5-3.5-7-5.5-3.8c-2.4 3.8 2.6 7.3 9 4.8c4-1.5 7.5-4 12-5" fill="none" stroke="#000" stroke-width="3.8" stroke-linecap="round" stroke-linejoin="round"/></mask></defs><path fill="#FF5A3D" mask="url(#m)" d="M32 5a24 24 0 0 1 9.6 46L30.2 61.4a1.6 1.6 0 0 1-2.7-.7L25.6 52A24 24 0 0 1 32 5z"/></svg></div>
+  <script>
+    window.addEventListener('flutter-first-frame', function () { var b = document.getElementById('boot'); if (b) b.remove(); });
+  </script>
+  <script src="flutter_bootstrap.js" async></script>
+</body>
+</html>
