@@ -47,7 +47,7 @@ class _LoginPageState extends State<LoginPage> {
   Widget build(BuildContext context) => _AuthCard(
     title: 'Vouby admin',
     subtitle: _sent
-        ? 'Enter the 6-digit code sent to +91 ${_phone.text.trim()}.'
+        ? 'Step 1 of 2: enter the 6-digit code sent by text message to +91 ${_phone.text.trim()}. The authenticator app code comes next.'
         : 'Staff only. Sign in with your mobile number.',
     demo: widget.api.isDemo,
     error: _error,
@@ -67,7 +67,7 @@ class _LoginPageState extends State<LoginPage> {
           autofocus: true,
           keyboardType: TextInputType.number,
           autofillHints: const [AutofillHints.oneTimeCode],
-          decoration: const InputDecoration(labelText: 'Code'),
+          decoration: const InputDecoration(labelText: 'Code from the text message'),
           onSubmitted: (_) => _verify(),
         ),
       const SizedBox(height: 16),
@@ -125,7 +125,7 @@ class _MfaPageState extends State<MfaPage> {
       }
       return _AuthCard(
         title: 'Two-step verification',
-        subtitle: 'Enter the 6-digit code from your authenticator app.',
+        subtitle: 'Step 2 of 2: enter the 6-digit code from your authenticator app (Google Authenticator or similar).',
         demo: widget.api.isDemo,
         error: _error,
         children: [

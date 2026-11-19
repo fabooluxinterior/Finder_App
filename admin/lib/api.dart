@@ -122,6 +122,19 @@ String? formatIdentity(String? phone, String? email) {
   return (email ?? '').isEmpty ? null : email;
 }
 
+/// Plain words for the sign-in errors people actually hit ("expired" usually means the wrong kind of code).
+String friendlyAuthMessage(String? code, String fallback) => switch (code) {
+  'otp_expired' =>
+    'That code is wrong or has expired. Step 1 needs the code from the text message, not the authenticator app code. '
+        'Tap “Use another number” and send a new code if it was more than a minute ago.',
+  'mfa_verification_failed' =>
+    'That authenticator code isn’t right. Use the current 6-digit code (it changes every 30 seconds) '
+        'and make sure your phone’s date and time are set to automatic.',
+  'mfa_challenge_expired' => 'That took too long. Enter the current code from your authenticator app and try again.',
+  'over_sms_send_rate_limit' || 'over_request_rate_limit' => 'Too many tries. Wait a minute, then send a new code.',
+  _ => fallback,
+};
+
 class AdminException implements Exception {
   const AdminException(this.message);
   final String message;
@@ -140,7 +153,7 @@ class SupabaseAdminApi extends AdminApi {
     } on PostgrestException catch (e) {
       throw AdminException(e.code == '42501' ? 'Not allowed. Admins need two-step verification.' : e.message);
     } on AuthException catch (e) {
-      throw AdminException(e.message);
+      throw AdminException(friendlyAuthMessage(e.code, e.message));
     } on FunctionException catch (e) {
       final d = e.details;
       throw AdminException(d is Map && d['message'] is String ? d['message'] as String : 'Request failed (${e.status}).');

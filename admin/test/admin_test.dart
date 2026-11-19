@@ -241,4 +241,10 @@ void main() {
     await api.setCallDays(3);
     expect(await api.callDays(), 3);
   });
+
+  test('sign-in errors are explained in plain words', () {
+    expect(friendlyAuthMessage('otp_expired', 'x'), contains('text message'));
+    expect(friendlyAuthMessage('mfa_verification_failed', 'x'), contains('30 seconds'));
+    expect(friendlyAuthMessage('something_else', 'Original'), 'Original');
+  });
 }
