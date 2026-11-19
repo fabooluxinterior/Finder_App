@@ -28,6 +28,9 @@ abstract class AttachSource {
   Future<void> toggleFlash();
   Future<void> flip();
 
+  /// Asks for gallery access again (or opens the phone's settings when it was refused for good). True when usable.
+  Future<bool> requestGallery();
+
   Future<List<GalleryItem>> recent(int page, int size);
   Future<Uint8List?> thumbnail(GalleryItem item, int px);
   Future<Uint8List?> original(GalleryItem item);
@@ -61,8 +64,10 @@ class DeviceAttachSource implements AttachSource {
 
   @override
   Future<bool> init() async {
-    final results = await Future.wait([_initCamera(), _initGallery()]);
-    return results.any((ok) => ok);
+    // One permission prompt at a time: Android drops a prompt that opens while another is still showing.
+    final cam = await _initCamera();
+    final gal = await _initGallery();
+    return cam || gal;
   }
 
   Future<bool> _initCamera() async {
@@ -146,9 +151,28 @@ class DeviceAttachSource implements AttachSource {
 
   @override
   Future<void> flip() async {
-    if (_cams.length < 2) return;
-    _camIndex = (_camIndex + 1) % _cams.length;
-    await _open(_cams[_camIndex]);
+    final c = _cam;
+    if (c == null || _cams.length < 2) return;
+    final wantFront = _cams[_camIndex].lensDirection == CameraLensDirection.back;
+    var next = _cams.indexWhere((d) => d.lensDirection == (wantFront ? CameraLensDirection.front : CameraLensDirection.back));
+    if (next < 0) next = (_camIndex + 1) % _cams.length;
+    if (next == _camIndex) return;
+    try {
+      // Switch on the same controller: no preview is torn down while it is still on screen.
+      await c.setDescription(_cams[next]);
+      _camIndex = next;
+      await c.setFlashMode(_flash ? FlashMode.always : FlashMode.off).catchError((_) {});
+    } catch (_) {
+      // Keep the camera that works.
+    }
+  }
+
+  @override
+  Future<bool> requestGallery() async {
+    if (_gallery) return true;
+    final ok = await _initGallery();
+    if (!ok) await PhotoManager.openSetting();
+    return ok;
   }
 
   @override

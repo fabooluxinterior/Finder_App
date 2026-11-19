@@ -20,6 +20,7 @@ import 'package:finder_app/providers.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 Uint8List _bytes(int n) => Uint8List.fromList(List.filled(n, 7));
 
@@ -191,6 +192,7 @@ void main() {
     final peer = all.firstWhere((c) => c.hasChat).profile;
     await t.pumpWidget(_app(b, ChatScreen(peer: peer)));
     await _settle(t, 800);
+    SharedPreferences.setMockInitialValues({}); // the emoji keyboard keeps your recent emoji
     final emoji = find.byTooltip('Emoji');
     final photo = find.byTooltip('Attach');
     expect(emoji, findsOneWidget);
@@ -199,7 +201,10 @@ void main() {
     expect(t.getCenter(photo).dx, greaterThan(t.getCenter(find.byType(TextField)).dx), reason: 'photo icon on the right');
     await t.tap(emoji);
     await _settle(t);
-    await t.tap(find.text('😂'));
+    await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 400))); // the emoji library loads
+    await t.pump(const Duration(milliseconds: 300));
+    await t.pump(const Duration(milliseconds: 300));
+    await t.tap(find.text('😂').first);
     await t.pump();
     expect(t.widget<TextField>(find.byType(TextField)).controller!.text, '😂');
     await t.tap(find.byTooltip('Show menu'));

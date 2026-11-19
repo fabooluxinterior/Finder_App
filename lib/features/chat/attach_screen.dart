@@ -27,10 +27,11 @@ class AttachScreen extends ConsumerStatefulWidget {
   ConsumerState<AttachScreen> createState() => _AttachScreenState();
 }
 
-class _AttachScreenState extends ConsumerState<AttachScreen> {
+class _AttachScreenState extends ConsumerState<AttachScreen> with SingleTickerProviderStateMixin {
   late final AttachSource _src = ref.read(attachSourceProvider);
+  // 0 = camera with a row of pictures, 1 = the whole gallery. Follows the finger while dragging, then settles.
+  late final AnimationController _t = AnimationController(vsync: this, duration: const Duration(milliseconds: 300));
   bool _ready = false;
-  bool _full = false;
   bool _busy = false;
   final _items = <GalleryItem>[];
   final _picked = <String>[];
@@ -38,6 +39,7 @@ class _AttachScreenState extends ConsumerState<AttachScreen> {
   int _page = 0;
   bool _more = true;
   bool _loading = false;
+  bool _loaded = false;
   final _grid = ScrollController();
 
   @override
@@ -51,6 +53,7 @@ class _AttachScreenState extends ConsumerState<AttachScreen> {
 
   @override
   void dispose() {
+    _t.dispose();
     _grid.dispose();
     super.dispose();
   }
@@ -76,12 +79,21 @@ class _AttachScreenState extends ConsumerState<AttachScreen> {
         _items.addAll(next);
         _page++;
         _more = next.length == 60;
+        _loaded = true;
       });
     } catch (_) {
       _more = false;
+      if (mounted) setState(() => _loaded = true);
     } finally {
       _loading = false;
     }
+  }
+
+  Future<void> _allowPhotos() async {
+    final ok = await _src.requestGallery();
+    if (!mounted) return;
+    setState(() {});
+    if (ok) await _loadMore();
   }
 
   Future<Uint8List?> _thumb(GalleryItem i) => _thumbs.putIfAbsent(i.id, () => _src.thumbnail(i, 240));
@@ -127,244 +139,349 @@ class _AttachScreenState extends ConsumerState<AttachScreen> {
     }
   });
 
+  // ---- tray motion -------------------------------------------------------------------------------------------------
+  double _range = 1;
+
+  void _snap(double to, {double velocity = 0}) {
+    _t.animateTo(
+      to,
+      curve: Curves.easeOutCubic,
+      duration: Duration(milliseconds: 240 + (velocity.abs() > 1200 ? 0 : 60)),
+    );
+  }
+
+  void _dragUpdate(DragUpdateDetails d) => _t.value = (_t.value - d.delta.dy / _range).clamp(0.0, 1.0);
+
+  void _dragEnd(DragEndDetails d) {
+    final v = d.primaryVelocity ?? 0;
+    _snap(v < -300 ? 1 : (v > 300 ? 0 : (_t.value > 0.5 ? 1 : 0)), velocity: v);
+  }
+
+  /// Pulling the grid down while it is at the top folds the tray back to the camera.
+  bool _gridScroll(ScrollNotification n) {
+    if (n is OverscrollNotification && n.overscroll < 0) {
+      _t.value = (_t.value + n.overscroll / _range).clamp(0.0, 1.0);
+    } else if (n is ScrollEndNotification && _t.value > 0 && _t.value < 1) {
+      _snap(_t.value > 0.5 ? 1 : 0);
+    }
+    return false;
+  }
+
   @override
   Widget build(BuildContext context) {
     final mq = MediaQuery.of(context);
-    final trayH = _full ? mq.size.height : 112.0 + mq.padding.bottom;
+    final collapsed = 124.0 + mq.padding.bottom;
+    _range = (mq.size.height - collapsed).clamp(1.0, 4000.0);
     return Scaffold(
       backgroundColor: Colors.black,
       body: !_ready
           ? const Center(child: CircularProgressIndicator())
-          : Stack(
-              fit: StackFit.expand,
-              children: [
-                // Camera
-                Positioned.fill(
-                  child: _src.hasCamera
-                      ? _src.cameraPreview(context)
-                      : const Center(
-                          child: Text('Camera isn’t available', style: TextStyle(color: Colors.white54)),
-                        ),
-                ),
-                SafeArea(
-                  child: Padding(
-                    padding: const EdgeInsets.all(12),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        _Round(icon: Icons.close_rounded, label: 'Close', onTap: () => Navigator.pop(context)),
-                        if (_src.hasCamera)
-                          Row(
+          : AnimatedBuilder(
+              animation: _t,
+              builder: (context, _) {
+                final t = Curves.easeOut.transform(_t.value);
+                final trayH = collapsed + (mq.size.height - collapsed) * _t.value;
+                final camFade = (1 - _t.value * 2.4).clamp(0.0, 1.0);
+                return Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    // Camera
+                    Positioned.fill(
+                      child: _src.hasCamera
+                          ? _src.cameraPreview(context)
+                          : const Center(
+                              child: Text('Camera isn’t available', style: TextStyle(color: Colors.white54)),
+                            ),
+                    ),
+                    // Top bar: close on the left, flash on the right, clear of the status bar.
+                    Positioned(
+                      left: 16,
+                      right: 16,
+                      top: mq.padding.top + 14,
+                      child: Opacity(
+                        opacity: camFade,
+                        child: IgnorePointer(
+                          ignoring: camFade < 0.5,
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
-                              _Round(
-                                icon: _src.flashOn ? Icons.flash_on_rounded : Icons.flash_off_rounded,
-                                label: 'Flash',
-                                onTap: () async {
-                                  await _src.toggleFlash();
-                                  if (mounted) setState(() {});
-                                },
-                              ),
-                              if (_src.canFlip) ...[
-                                const SizedBox(width: 8),
+                              _Round(icon: Icons.close_rounded, label: 'Close', onTap: () => Navigator.pop(context)),
+                              if (_src.hasCamera)
                                 _Round(
-                                  icon: Icons.flip_camera_android_rounded,
-                                  label: 'Flip camera',
+                                  icon: _src.flashOn ? Icons.flash_on_rounded : Icons.flash_off_rounded,
+                                  label: 'Flash',
                                   onTap: () async {
-                                    await _src.flip();
+                                    await _src.toggleFlash();
                                     if (mounted) setState(() {});
                                   },
                                 ),
-                              ],
                             ],
                           ),
+                        ),
+                      ),
+                    ),
+                    // Shutter in the middle; the camera switch at the right of it, just above the pictures.
+                    if (_src.hasCamera)
+                      Positioned(
+                        left: 0,
+                        right: 0,
+                        bottom: trayH + 22,
+                        child: Opacity(
+                          opacity: camFade,
+                          child: IgnorePointer(
+                            ignoring: camFade < 0.5,
+                            child: SizedBox(
+                              height: 76,
+                              child: Stack(
+                                alignment: Alignment.center,
+                                children: [
+                                  Semantics(
+                                    button: true,
+                                    label: 'Take photo',
+                                    child: GestureDetector(
+                                      onTap: _shoot,
+                                      child: Container(
+                                        width: 76,
+                                        height: 76,
+                                        decoration: BoxDecoration(
+                                          shape: BoxShape.circle,
+                                          border: Border.all(color: Colors.white, width: 4),
+                                        ),
+                                        padding: const EdgeInsets.all(5),
+                                        child: AnimatedContainer(
+                                          duration: const Duration(milliseconds: 150),
+                                          decoration: BoxDecoration(
+                                            shape: BoxShape.circle,
+                                            color: _busy ? Colors.white54 : Colors.white,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                  if (_src.canFlip)
+                                    Positioned(
+                                      right: 28,
+                                      child: _Round(
+                                        icon: Icons.flip_camera_android_rounded,
+                                        label: 'Flip camera',
+                                        size: 48,
+                                        onTap: () async {
+                                          await _src.flip();
+                                          if (mounted) setState(() {});
+                                        },
+                                      ),
+                                    ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    // Tray: a row of recent pictures; drag it up for the gallery.
+                    if (_src.hasGallery) _tray(mq, collapsed, trayH, t) else _allowTray(mq),
+                    if (_picked.isNotEmpty)
+                      Positioned(
+                        left: 0,
+                        right: 0,
+                        bottom: 0,
+                        child: IgnorePointer(
+                          ignoring: _t.value < 0.9,
+                          child: Opacity(opacity: ((_t.value - 0.6) / 0.4).clamp(0.0, 1.0), child: _sendBar(mq)),
+                        ),
+                      ),
+                  ],
+                );
+              },
+            ),
+    );
+  }
+
+  Widget _allowTray(MediaQueryData mq) => Positioned(
+    left: 0,
+    right: 0,
+    bottom: 0,
+    child: Container(
+      padding: EdgeInsets.fromLTRB(20, 14, 20, 14 + mq.padding.bottom),
+      decoration: const BoxDecoration(
+        color: Color(0xF20B0B0C),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.photo_library_outlined, color: Colors.white70),
+          const SizedBox(width: 12),
+          const Expanded(
+            child: Text('Allow photo access to see your pictures here.', style: TextStyle(color: Colors.white70)),
+          ),
+          TextButton(onPressed: _allowPhotos, child: const Text('Allow')),
+        ],
+      ),
+    ),
+  );
+
+  Widget _tray(MediaQueryData mq, double collapsed, double trayH, double t) {
+    final stripOpacity = (1 - _t.value * 2.2).clamp(0.0, 1.0);
+    final gridOpacity = ((_t.value - 0.25) / 0.6).clamp(0.0, 1.0);
+    return Positioned(
+      left: 0,
+      right: 0,
+      bottom: 0,
+      height: trayH,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: const Color(0xF20B0B0C),
+          borderRadius: BorderRadius.vertical(top: Radius.circular(22 * (1 - t))),
+        ),
+        child: Column(
+          children: [
+            GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onVerticalDragUpdate: _dragUpdate,
+              onVerticalDragEnd: _dragEnd,
+              onTap: () => _snap(_t.value > 0.5 ? 0 : 1),
+              child: Semantics(
+                button: true,
+                label: _t.value > 0.5 ? 'Show camera' : 'Show all photos',
+                child: SizedBox(
+                  height: 30,
+                  width: double.infinity,
+                  child: Center(
+                    child: Container(
+                      width: 40,
+                      height: 4,
+                      decoration: BoxDecoration(color: Colors.white38, borderRadius: BorderRadius.circular(2)),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            if (_t.value > 0.02)
+              Opacity(
+                opacity: gridOpacity,
+                child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onVerticalDragUpdate: _dragUpdate,
+                  onVerticalDragEnd: _dragEnd,
+                  child: Padding(
+                    padding: EdgeInsets.fromLTRB(8, mq.padding.top * _t.value, 14, 8),
+                    child: Row(
+                      children: [
+                        _Round(icon: Icons.arrow_back_rounded, label: 'Back', onTap: () => _snap(0)),
+                        const SizedBox(width: 10),
+                        const Expanded(
+                          child: Text(
+                            'Recent',
+                            style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
+                          ),
+                        ),
+                        Text(
+                          _picked.isEmpty ? 'Select' : '${_picked.length} selected',
+                          style: const TextStyle(color: Colors.white70),
+                        ),
                       ],
                     ),
                   ),
                 ),
-                if (_src.hasCamera)
-                  Positioned(
-                    left: 0,
-                    right: 0,
-                    bottom: trayH + 26,
-                    child: Center(
-                      child: Semantics(
-                        button: true,
-                        label: 'Take photo',
-                        child: GestureDetector(
-                          onTap: _shoot,
-                          child: Container(
-                            width: 76,
-                            height: 76,
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              border: Border.all(color: Colors.white, width: 4),
-                            ),
-                            padding: const EdgeInsets.all(5),
-                            child: DecoratedBox(
-                              decoration: BoxDecoration(shape: BoxShape.circle, color: _busy ? Colors.white54 : Colors.white),
-                            ),
-                          ),
-                        ),
+              ),
+            Expanded(
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  if (_t.value < 0.6)
+                    Opacity(
+                      opacity: stripOpacity,
+                      child: IgnorePointer(
+                        ignoring: _t.value > 0.1,
+                        child: GestureDetector(onVerticalDragUpdate: _dragUpdate, onVerticalDragEnd: _dragEnd, child: _strip()),
                       ),
                     ),
-                  ),
-                // Tray: a row of recent pictures; swipe up for the gallery.
-                if (_src.hasGallery)
-                  Positioned(
-                    left: 0,
-                    right: 0,
-                    bottom: 0,
-                    child: AnimatedContainer(
-                      duration: const Duration(milliseconds: 260),
-                      curve: Curves.easeOutCubic,
-                      height: trayH,
-                      decoration: BoxDecoration(
-                        color: const Color(0xF20B0B0C),
-                        borderRadius: BorderRadius.vertical(top: Radius.circular(_full ? 0 : 22)),
-                      ),
-                      child: GestureDetector(
-                        // Swipe up anywhere on the row of pictures to open the whole gallery.
-                        behavior: HitTestBehavior.translucent,
-                        onVerticalDragEnd: _full
-                            ? null
-                            : (d) {
-                                if ((d.primaryVelocity ?? 0) < -150) setState(() => _full = true);
-                              },
-                        child: Column(
-                          children: [
-                            GestureDetector(
-                              behavior: HitTestBehavior.opaque,
-                              onVerticalDragEnd: (d) {
-                                final v = d.primaryVelocity ?? 0;
-                                if (v < -150) setState(() => _full = true);
-                                if (v > 150) setState(() => _full = false);
-                              },
-                              onTap: () => setState(() => _full = !_full),
-                              child: Semantics(
-                                button: true,
-                                label: _full ? 'Show camera' : 'Show all photos',
-                                child: SizedBox(
-                                  height: 28,
-                                  width: double.infinity,
-                                  child: Center(
-                                    child: Container(
-                                      width: 38,
-                                      height: 4,
-                                      decoration: BoxDecoration(color: Colors.white38, borderRadius: BorderRadius.circular(2)),
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ),
-                            if (_full)
-                              SafeArea(
-                                bottom: false,
-                                child: Padding(
-                                  padding: const EdgeInsets.fromLTRB(8, 0, 14, 8),
-                                  child: Row(
-                                    children: [
-                                      _Round(
-                                        icon: Icons.arrow_back_rounded,
-                                        label: 'Back',
-                                        onTap: () => setState(() => _full = false),
-                                      ),
-                                      const SizedBox(width: 10),
-                                      const Expanded(
-                                        child: Text(
-                                          'Recent',
-                                          style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
-                                        ),
-                                      ),
-                                      Text(
-                                        _picked.isEmpty ? 'Select' : '${_picked.length} selected',
-                                        style: const TextStyle(color: Colors.white70),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                            Expanded(
-                              child: _full
-                                  ? GridView.builder(
-                                      controller: _grid,
-                                      padding: EdgeInsets.only(bottom: _picked.isEmpty ? 12 : 90),
-                                      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                                        crossAxisCount: 3,
-                                        mainAxisSpacing: 2,
-                                        crossAxisSpacing: 2,
-                                      ),
-                                      itemCount: _items.length,
-                                      itemBuilder: (_, i) => _Tile(
-                                        thumb: _thumb(_items[i]),
-                                        order: _picked.indexOf(_items[i].id) + 1,
-                                        selecting: true,
-                                        onTap: () => _toggle(_items[i]),
-                                      ),
-                                    )
-                                  : ListView.separated(
-                                      scrollDirection: Axis.horizontal,
-                                      padding: const EdgeInsets.fromLTRB(10, 0, 10, 10),
-                                      itemCount: _items.length,
-                                      separatorBuilder: (_, _) => const SizedBox(width: 6),
-                                      itemBuilder: (_, i) => SizedBox(
-                                        width: 76,
-                                        child: _Tile(thumb: _thumb(_items[i]), rounded: true, onTap: () => _finish([_items[i]])),
-                                      ),
-                                    ),
-                            ),
-                          ],
-                        ),
+                  if (_t.value > 0.02)
+                    Opacity(
+                      opacity: gridOpacity,
+                      child: IgnorePointer(
+                        ignoring: _t.value < 0.9,
+                        child: NotificationListener<ScrollNotification>(onNotification: _gridScroll, child: _gridView()),
                       ),
                     ),
-                  ),
-                if (_full && _picked.isNotEmpty)
-                  Positioned(
-                    left: 0,
-                    right: 0,
-                    bottom: 0,
-                    child: Container(
-                      padding: EdgeInsets.fromLTRB(16, 12, 16, 16 + mq.padding.bottom),
-                      decoration: const BoxDecoration(
-                        gradient: LinearGradient(
-                          begin: Alignment.topCenter,
-                          end: Alignment.bottomCenter,
-                          colors: [Color(0x000B0B0C), Color(0xFF0B0B0C)],
-                        ),
-                      ),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
-                            decoration: BoxDecoration(color: Colors.white12, borderRadius: BorderRadius.circular(99)),
-                            child: Text('${_picked.length} selected', style: const TextStyle(color: Colors.white)),
-                          ),
-                          FilledButton(
-                            style: FilledButton.styleFrom(
-                              backgroundColor: _accent,
-                              foregroundColor: const Color(0xFF0B0B0C),
-                              minimumSize: const Size(0, 48),
-                              padding: const EdgeInsets.symmetric(horizontal: 26, vertical: 14),
-                            ),
-                            onPressed: _busy
-                                ? null
-                                : () => _finish([for (final id in _picked) _items.firstWhere((x) => x.id == id)]),
-                            child: _busy
-                                ? const SizedBox.square(dimension: 18, child: CircularProgressIndicator(strokeWidth: 2))
-                                : const Text('Send', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-              ],
+                ],
+              ),
             ),
+          ],
+        ),
+      ),
     );
   }
+
+  Widget _strip() {
+    if (_items.isEmpty) {
+      return Center(
+        child: _loaded
+            ? const Text('No pictures yet', style: TextStyle(color: Colors.white54))
+            : const SizedBox.square(dimension: 22, child: CircularProgressIndicator(strokeWidth: 2)),
+      );
+    }
+    return ListView.separated(
+      scrollDirection: Axis.horizontal,
+      padding: const EdgeInsets.fromLTRB(12, 2, 12, 14),
+      itemCount: _items.length,
+      separatorBuilder: (_, _) => const SizedBox(width: 6),
+      itemBuilder: (_, i) => SizedBox(
+        width: 78,
+        child: _Tile(thumb: _thumb(_items[i]), rounded: true, onTap: () => _finish([_items[i]])),
+      ),
+    );
+  }
+
+  Widget _gridView() => GridView.builder(
+    controller: _grid,
+    padding: EdgeInsets.only(bottom: _picked.isEmpty ? 12 : 96),
+    gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: 3, mainAxisSpacing: 2, crossAxisSpacing: 2),
+    itemCount: _items.length,
+    itemBuilder: (_, i) => _Tile(
+      thumb: _thumb(_items[i]),
+      order: _picked.indexOf(_items[i].id) + 1,
+      selecting: true,
+      onTap: () => _toggle(_items[i]),
+    ),
+  );
+
+  Widget _sendBar(MediaQueryData mq) => Container(
+    padding: EdgeInsets.fromLTRB(16, 12, 16, 16 + mq.padding.bottom),
+    decoration: const BoxDecoration(
+      gradient: LinearGradient(
+        begin: Alignment.topCenter,
+        end: Alignment.bottomCenter,
+        colors: [Color(0x000B0B0C), Color(0xFF0B0B0C)],
+      ),
+    ),
+    child: Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+          decoration: BoxDecoration(color: Colors.white12, borderRadius: BorderRadius.circular(99)),
+          child: Text('${_picked.length} selected', style: const TextStyle(color: Colors.white)),
+        ),
+        FilledButton(
+          style: FilledButton.styleFrom(
+            backgroundColor: _accent,
+            foregroundColor: const Color(0xFF0B0B0C),
+            minimumSize: const Size(0, 48),
+            padding: const EdgeInsets.symmetric(horizontal: 26, vertical: 14),
+          ),
+          onPressed: _busy ? null : () => _finish([for (final id in _picked) _items.firstWhere((x) => x.id == id)]),
+          child: _busy
+              ? const SizedBox.square(dimension: 18, child: CircularProgressIndicator(strokeWidth: 2))
+              : const Text('Send', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
+        ),
+      ],
+    ),
+  );
 }
 
 class _Round extends StatelessWidget {
-  const _Round({required this.icon, required this.label, required this.onTap});
+  const _Round({required this.icon, required this.label, required this.onTap, this.size = 44});
+  final double size;
   final IconData icon;
   final String label;
   final VoidCallback onTap;
@@ -378,7 +495,11 @@ class _Round extends StatelessWidget {
       child: InkWell(
         customBorder: const CircleBorder(),
         onTap: onTap,
-        child: SizedBox(width: 40, height: 40, child: Icon(icon, color: Colors.white, size: 22)),
+        child: SizedBox(
+          width: size,
+          height: size,
+          child: Icon(icon, color: Colors.white, size: 24),
+        ),
       ),
     ),
   );
@@ -404,7 +525,16 @@ class _Tile extends StatelessWidget {
             future: thumb,
             builder: (_, s) => s.data == null
                 ? const ColoredBox(color: Color(0xFF1C1C1F))
-                : Image.memory(s.data!, fit: BoxFit.cover, gaplessPlayback: true),
+                : Image.memory(
+                    s.data!,
+                    fit: BoxFit.cover,
+                    gaplessPlayback: true,
+                    frameBuilder: (_, child, frame, sync) => AnimatedOpacity(
+                      opacity: frame == null && !sync ? 0 : 1,
+                      duration: const Duration(milliseconds: 180),
+                      child: child,
+                    ),
+                  ),
           ),
           if (selecting)
             Positioned(

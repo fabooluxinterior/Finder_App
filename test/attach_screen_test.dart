@@ -48,6 +48,8 @@ class FakeAttachSource implements AttachSource {
   @override
   Future<void> flip() async {}
   @override
+  Future<bool> requestGallery() async => allowed;
+  @override
   Future<List<GalleryItem>> recent(int page, int size) async => [
     for (var i = page * size; i < count && i < (page + 1) * size; i++) GalleryItem('g$i'),
   ];
