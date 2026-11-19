@@ -5,6 +5,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 
 import '../../core/phosphor.dart';
+import '../../core/view_once_icon.dart';
 import 'schedule_picker.dart';
 
 /// What the editor hands back: the finished picture and, when "send later" was used, when to send it.
@@ -45,9 +46,15 @@ const _palette = [
 
 /// A full-screen preview of the chosen picture before it is sent: draw with a pencil, add text, crop, then send once.
 class MediaEditorScreen extends StatefulWidget {
-  const MediaEditorScreen({super.key, required this.bytes, this.allowSchedule = true});
+  const MediaEditorScreen({super.key, required this.bytes, this.allowSchedule = true, this.allowOnce = true, this.positionLabel});
   final Uint8List bytes;
   final bool allowSchedule;
+
+  /// "View once" is only offered for a single photo.
+  final bool allowOnce;
+
+  /// "2 of 3" when several photos are being sent.
+  final String? positionLabel;
 
   @override
   State<MediaEditorScreen> createState() => _MediaEditorScreenState();
@@ -221,7 +228,7 @@ class _MediaEditorScreenState extends State<MediaEditorScreen> {
     setState(() => _busy = true);
     try {
       final bytes = await _render();
-      if (mounted) Navigator.pop(context, EditedMedia(bytes, sendAt: at, once: _once));
+      if (mounted) Navigator.pop(context, EditedMedia(bytes, sendAt: at, once: widget.allowOnce && _once));
     } catch (_) {
       if (mounted) setState(() => _busy = false);
     }
@@ -386,19 +393,37 @@ class _MediaEditorScreenState extends State<MediaEditorScreen> {
                         Expanded(
                           child: Align(
                             alignment: Alignment.centerLeft,
-                            child: FilterChip(
-                              avatar: Icon(Icons.filter_1_rounded, size: 18, color: _once ? Colors.white : Colors.white70),
-                              label: const Text('View once'),
-                              selected: _once,
-                              showCheckmark: false,
-                              selectedColor: const Color(0xFF3A3A40),
-                              backgroundColor: Colors.white12,
-                              labelStyle: const TextStyle(color: Colors.white),
-                              side: BorderSide.none,
-                              onSelected: (v) => setState(() => _once = v),
-                            ),
+                            child: widget.positionLabel == null
+                                ? null
+                                : Text(widget.positionLabel!, style: const TextStyle(color: Colors.white70, fontSize: 14)),
                           ),
                         ),
+                        if (widget.allowOnce)
+                          Padding(
+                            padding: const EdgeInsets.only(right: 10),
+                            child: Semantics(
+                              button: true,
+                              toggled: _once,
+                              label: 'View once',
+                              child: Tooltip(
+                                message: 'View once',
+                                child: InkResponse(
+                                  onTap: () => setState(() => _once = !_once),
+                                  radius: 26,
+                                  child: Container(
+                                    width: 44,
+                                    height: 44,
+                                    alignment: Alignment.center,
+                                    decoration: BoxDecoration(
+                                      shape: BoxShape.circle,
+                                      color: _once ? Colors.white24 : Colors.transparent,
+                                    ),
+                                    child: ViewOnceIcon(size: 28, color: Colors.white, filled: _once),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
                         GestureDetector(
                           onLongPress: widget.allowSchedule ? () => _send(later: true) : null,
                           child: Tooltip(

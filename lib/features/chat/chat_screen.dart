@@ -31,6 +31,8 @@ import '../paywall/paywall_sheet.dart';
 import '../profile/profile_detail_screen.dart';
 import '../safety/safety_actions.dart';
 import '../security/safety_number_screen.dart';
+import '../../core/view_once_icon.dart';
+import 'attach_screen.dart';
 import 'emoji_panel.dart';
 import 'media_editor_screen.dart';
 import 'schedule_picker.dart';
@@ -620,23 +622,45 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       return;
     }
     try {
-      final raw = await ref.read(mediaProvider).pickOriginalPhoto();
-      if (raw == null || !mounted) return;
-      // Preview first: draw, add text or crop, then send once (hold the send button to send later).
-      final edited = await Navigator.push<EditedMedia>(
+      // The camera with your latest pictures underneath (swipe up for the whole gallery).
+      final picked = await Navigator.push<AttachResult>(
         context,
-        MaterialPageRoute(fullscreenDialog: true, builder: (_) => MediaEditorScreen(bytes: raw, allowSchedule: false)),
+        MaterialPageRoute(fullscreenDialog: true, builder: (_) => const AttachScreen()),
       );
-      if (edited == null || !mounted) return;
-      setState(() => _sending = true);
-      // Any image type: resized and compressed on the device, then encrypted.
-      final img = await ImageOptimizer.optimizeForChat(edited.bytes);
-      _setMine(PeerState.photo);
-      await ref
-          .read(backendProvider)
-          .sendImage(widget.peer.id, img.bytes, width: img.width, height: img.height, once: edited.once);
-      Fx.instance.sent();
-      _scrollToLatest();
+      if (picked == null || !mounted) return;
+      var photos = picked.photos;
+      if (picked.useSystemPicker) {
+        // Camera or gallery access was refused: the phone's own picker still works.
+        final raw = await ref.read(mediaProvider).pickOriginalPhoto();
+        if (raw == null || !mounted) return;
+        photos = [raw];
+      }
+      for (var i = 0; i < photos.length; i++) {
+        if (!mounted) return;
+        // Preview first: crop, add text or draw, then send (View once only for a single photo).
+        final edited = await Navigator.push<EditedMedia>(
+          context,
+          MaterialPageRoute(
+            fullscreenDialog: true,
+            builder: (_) => MediaEditorScreen(
+              bytes: photos[i],
+              allowSchedule: false,
+              allowOnce: photos.length == 1,
+              positionLabel: photos.length > 1 ? '${i + 1} of ${photos.length}' : null,
+            ),
+          ),
+        );
+        if (edited == null || !mounted) return; // cancelled: stop here
+        setState(() => _sending = true);
+        // Any image type: resized and compressed on the device, then encrypted.
+        final img = await ImageOptimizer.optimizeForChat(edited.bytes);
+        _setMine(PeerState.photo);
+        await ref
+            .read(backendProvider)
+            .sendImage(widget.peer.id, img.bytes, width: img.width, height: img.height, once: edited.once);
+        Fx.instance.sent();
+        _scrollToLatest();
+      }
     } catch (e) {
       await _handleError(e);
     } finally {
@@ -1865,19 +1889,19 @@ class _OnceTileState extends ConsumerState<_OnceTile> {
     final color = widget.color;
     final String title;
     final String sub;
-    final IconData icon;
+    final bool opened;
     if (m.viewed) {
       title = 'Photo';
       sub = 'Opened';
-      icon = Icons.check_circle_outline_rounded;
+      opened = true;
     } else if (widget.mine) {
       title = 'Photo · View once';
       sub = m.listenedAt != null ? 'Opened' : 'Not opened yet';
-      icon = Icons.filter_1_rounded;
+      opened = m.listenedAt != null;
     } else {
       title = 'Photo · View once';
       sub = _opening ? 'Opening…' : 'Tap to view';
-      icon = Icons.filter_1_rounded;
+      opened = false;
     }
     return Semantics(
       button: !widget.mine && !m.viewed,
@@ -1889,7 +1913,8 @@ class _OnceTileState extends ConsumerState<_OnceTile> {
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(icon, size: 26, color: color),
+              // The minimal view-once icon: dotted while waiting, solid once it has been opened.
+              ViewOnceIcon(size: 26, color: color, filled: opened),
               const SizedBox(width: 10),
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
